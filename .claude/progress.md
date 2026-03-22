@@ -20,7 +20,7 @@
 | 1 | Docker + DB setup | ✅ DONE |
 | 2 | Backend: Tools (BaseTool, WebSearchTool, WeatherTool) | ✅ DONE |
 | 3 | Backend: Agent core (TravelAgent, ReAct loop) | ✅ DONE |
-| 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ⬜ TODO |
+| 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ✅ DONE |
 | 5 | Backend: Repositories + Routes (chat SSE, memory) | ⬜ TODO |
 | 6 | Unit tests | ⬜ TODO |
 | 7 | Integration tests | ⬜ TODO |
@@ -340,7 +340,7 @@ data: {"type":"done"}
 
 ## TASK 4 — Backend: Services
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Tasks 1–3 ✅ DONE
 
 **Files to create:**
