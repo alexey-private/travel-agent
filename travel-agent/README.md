@@ -58,7 +58,7 @@ travel-agent/
 │       │   ├── ConversationService.ts
 │       │   ├── MemoryService.ts    # Preference extraction + persistence
 │       │   ├── RAGService.ts       # Agentic retrieval-augmented generation
-│       │   └── EmbeddingService.ts # text-embedding-3-small via Anthropic
+│       │   └── EmbeddingService.ts # voyage-3-lite via Voyage AI (random vectors fallback in dev)
 │       ├── repositories/
 │       │   ├── BaseRepository.ts
 │       │   ├── ConversationRepository.ts
@@ -92,7 +92,7 @@ Fastify (Node.js)
     ├── ChatRoute
     │     ├── ConversationService  ──► PostgreSQL
     │     ├── MemoryService        ──► PostgreSQL (user_memories)
-    │     ├── RAGService           ──► EmbeddingService ──► Anthropic API
+    │     ├── RAGService           ──► EmbeddingService ──► Voyage AI API
     │     │                        ──► KnowledgeRepository ──► pgvector
     │     └── TravelAgent (ReAct loop)
     │           ├── Claude claude-sonnet-4-6  (reasoning + tool calls)
@@ -176,6 +176,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `ANTHROPIC_API_KEY` | Yes | Claude API key (`sk-ant-…`) |
 | `TAVILY_API_KEY` | Yes | Tavily web search API key (`tvly-…`) |
 | `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key |
+| `VOYAGE_API_KEY` | No | Voyage AI key for semantic embeddings (random vectors used in dev if absent) |
 | `PORT` | No | Backend port (default `3001`) |
 | `NODE_ENV` | No | `development` / `production` / `test` |
 | `NEXT_PUBLIC_API_URL` | Yes (frontend) | Backend URL seen by the browser |
@@ -265,7 +266,7 @@ Before invoking the agent, the chat route runs a **two-step retrieval pipeline**
 ### Step 2 — Semantic search
 
 If retrieval is warranted:
-1. `EmbeddingService.embed(query)` converts the query to a 1 536-dimension vector via the Anthropic embedding API.
+1. `EmbeddingService.embed(query)` converts the query to a 1 536-dimension vector via Voyage AI (`voyage-3-lite`). In development without a `VOYAGE_API_KEY`, random unit vectors are used as a fallback.
 2. `KnowledgeRepository.findSimilar()` runs a **cosine similarity** search against the `knowledge_base` table using pgvector:
    ```sql
    SELECT topic, content, 1 - (embedding <=> $1) AS similarity

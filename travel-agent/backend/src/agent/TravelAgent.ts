@@ -5,6 +5,8 @@ import { buildSystemPrompt } from './prompts';
 import { AgentEvent } from '../types/agent';
 
 const MAX_ITERATIONS = 10;
+/** Keep only the most recent N history entries to avoid context overflow. */
+const MAX_HISTORY = 20;
 const MODEL = 'claude-sonnet-4-6';
 
 export class TravelAgent {
@@ -17,8 +19,11 @@ export class TravelAgent {
     const tools = this.toolRegistry.getAll().map(t => t.toAnthropicTool());
     const systemPrompt = buildSystemPrompt(context.memories);
 
+    // Truncate history to avoid context overflow on long conversations
+    const recentHistory = context.history.slice(-MAX_HISTORY);
+
     // Build message history
-    const messages: Anthropic.MessageParam[] = context.history.map(m => ({
+    const messages: Anthropic.MessageParam[] = recentHistory.map(m => ({
       role: m.role,
       content: m.content,
     }));
@@ -31,7 +36,8 @@ export class TravelAgent {
     messages.push({ role: 'user', content: userContent });
 
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      const response = await this.anthropic.messages.create({
+      // Stream text tokens in real time while waiting for the full response
+      const stream = this.anthropic.messages.stream({
         model: MODEL,
         max_tokens: 4096,
         system: systemPrompt,
@@ -39,12 +45,17 @@ export class TravelAgent {
         messages,
       });
 
-      // Emit any text content from this response turn
-      for (const block of response.content) {
-        if (block.type === 'text' && block.text) {
-          yield { type: 'text', content: block.text };
+      for await (const chunk of stream) {
+        if (
+          chunk.type === 'content_block_delta' &&
+          chunk.delta.type === 'text_delta' &&
+          chunk.delta.text
+        ) {
+          yield { type: 'text', content: chunk.delta.text };
         }
       }
+
+      const response = await stream.finalMessage();
 
       if (response.stop_reason === 'end_turn') {
         break;
