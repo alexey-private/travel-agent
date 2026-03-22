@@ -23,7 +23,7 @@
 | 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ✅ DONE |
 | 5 | Backend: Repositories + Routes (chat SSE, memory) | ✅ DONE |
 | 6 | Unit tests | ✅ DONE |
-| 7 | Integration tests | ⬜ TODO |
+| 7 | Integration tests | ✅ DONE |
 | 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ⬜ TODO |
 | 9 | README + Knowledge base seed | ⬜ TODO |
 
