@@ -22,7 +22,7 @@
 | 3 | Backend: Agent core (TravelAgent, ReAct loop) | ✅ DONE |
 | 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ✅ DONE |
 | 5 | Backend: Repositories + Routes (chat SSE, memory) | ✅ DONE |
-| 6 | Unit tests | ⬜ TODO |
+| 6 | Unit tests | ✅ DONE |
 | 7 | Integration tests | ⬜ TODO |
 | 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ⬜ TODO |
 | 9 | README + Knowledge base seed | ⬜ TODO |
@@ -435,7 +435,7 @@ export abstract class BaseRepository {
 
 ## TASK 6 — Unit Tests
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Tasks 1–5 ✅ DONE
 
 **Files to create:**
