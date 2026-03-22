@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2 } from "lucide-react";
 import MessageBubble, { type Message } from "./MessageBubble";
-import { streamChat, type AgentEvent } from "@/lib/api";
+import { streamChat, fetchMessages, type AgentEvent } from "@/lib/api";
 import { type ToolStep } from "./AgentThoughts";
 
 interface ChatWindowProps {
@@ -39,6 +39,21 @@ export default function ChatWindow({
   );
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Load history when opening an existing conversation
+  useEffect(() => {
+    if (!initialConversationId) return;
+    fetchMessages(userId, initialConversationId)
+      .then((history) => {
+        setMessages(
+          history.map((m) => ({ id: newId(), role: m.role, content: m.content })),
+        );
+      })
+      .catch(() => {
+        // silently ignore — user can still send new messages
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll to bottom on new content
   useEffect(() => {

@@ -118,10 +118,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         raw.end();
       }
 
-      // Persist conversation and extract memories after the stream is closed
+      // Persist conversation — user message first to ensure correct ordering by created_at
       const conversationText = `User: ${message}\n\nAssistant: ${assistantText}`;
+      await conversationService.saveMessage(conversationId, 'user', message);
       await Promise.allSettled([
-        conversationService.saveMessage(conversationId, 'user', message),
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
         memoryService.extractAndSaveMemories(internalUserId, conversationText),
       ]);

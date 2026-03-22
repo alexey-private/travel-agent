@@ -84,6 +84,24 @@ export async function deleteMemory(userId: string, key: string): Promise<void> {
   });
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** Fetch messages for a specific conversation. */
+export async function fetchMessages(
+  userId: string,
+  conversationId: string,
+): Promise<ChatMessage[]> {
+  const response = await fetch(
+    `${API_URL}/api/conversations/${userId}/${conversationId}/messages`,
+  );
+  if (!response.ok) throw new Error(`Failed to fetch messages: ${response.status}`);
+  const data = (await response.json()) as { messages: ChatMessage[] };
+  return data.messages;
+}
+
 /** Fetch all conversations for a user, newest first. */
 export async function fetchConversations(userId: string): Promise<Conversation[]> {
   const response = await fetch(`${API_URL}/api/conversations/${userId}`);
