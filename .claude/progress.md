@@ -18,7 +18,7 @@
 | # | Task | Status |
 |---|------|--------|
 | 1 | Docker + DB setup | ✅ DONE |
-| 2 | Backend: Tools (BaseTool, WebSearchTool, WeatherTool) | ⬜ TODO |
+| 2 | Backend: Tools (BaseTool, WebSearchTool, WeatherTool) | ✅ DONE |
 | 3 | Backend: Agent core (TravelAgent, ReAct loop) | ⬜ TODO |
 | 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ⬜ TODO |
 | 5 | Backend: Repositories + Routes (chat SSE, memory) | ⬜ TODO |
@@ -197,7 +197,7 @@ CREATE INDEX knowledge_embedding_idx ON knowledge_base
 
 ## TASK 2 — Backend: Tools
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Task 1 ✅ DONE
 
 **Files to create:**
