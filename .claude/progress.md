@@ -7,9 +7,6 @@
 > After completion, update its status to ✅ DONE.
 > ```
 
-> **Global rules:**
-> - All code, comments, JSDoc, README, and documentation must be in **English**
-> - Conversation with the user is in Russian
 
 ---
 
