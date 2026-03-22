@@ -44,9 +44,13 @@ Thumbs.db
 
 # IDE
 .vscode/
+.cursor/
 .idea/
 *.swp
 *.swo
 
 # Test
 .jest-cache/
+
+# Agents
+.claude
