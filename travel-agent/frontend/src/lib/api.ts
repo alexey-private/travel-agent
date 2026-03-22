@@ -1,10 +1,17 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export type AgentEvent =
+  | { type: "conversation_id"; conversationId: string }
   | { type: "text"; content: string }
   | { type: "tool_start"; tool: string; input: unknown }
   | { type: "tool_end"; tool: string; output: unknown; error?: string }
   | { type: "done" };
+
+export interface Conversation {
+  id: string;
+  created_at: string;
+  title: string | null;
+}
 
 export interface UserMemory {
   key: string;
@@ -75,6 +82,14 @@ export async function deleteMemory(userId: string, key: string): Promise<void> {
   await fetch(`${API_URL}/api/memory/${userId}/${encodeURIComponent(key)}`, {
     method: "DELETE",
   });
+}
+
+/** Fetch all conversations for a user, newest first. */
+export async function fetchConversations(userId: string): Promise<Conversation[]> {
+  const response = await fetch(`${API_URL}/api/conversations/${userId}`);
+  if (!response.ok) throw new Error(`Failed to fetch conversations: ${response.status}`);
+  const data = (await response.json()) as { conversations: Conversation[] };
+  return data.conversations;
 }
 
 /** Generate or retrieve a persistent userId from localStorage. */

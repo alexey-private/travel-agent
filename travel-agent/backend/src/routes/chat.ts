@@ -84,14 +84,21 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
       const agent = new TravelAgent(toolRegistry, anthropic);
 
-      // Hijack the connection so Fastify does not finalise the response
+      // Hijack the connection so Fastify does not finalise the response.
+      // CORS headers must be set manually here because reply.hijack() bypasses
+      // the @fastify/cors onSend hook.
       reply.hijack();
       const raw = reply.raw;
       raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
+        'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+        'Access-Control-Allow-Credentials': 'true',
       });
+
+      // Send conversationId immediately so the client can track the session
+      raw.write(`data: ${JSON.stringify({ type: 'conversation_id', conversationId })}\n\n`);
 
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';

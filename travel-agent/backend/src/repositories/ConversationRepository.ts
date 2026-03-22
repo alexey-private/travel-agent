@@ -14,6 +14,12 @@ interface MessageRow {
   content: string;
 }
 
+interface ConversationListRow {
+  id: string;
+  created_at: string;
+  title: string | null;
+}
+
 /**
  * Repository for users, conversations, and messages.
  */
@@ -67,6 +73,29 @@ export class ConversationRepository extends BaseRepository {
     return this.query<MessageRow>(
       'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
       [conversationId],
+    );
+  }
+
+  /**
+   * Lists all conversations for a user, newest first.
+   * Returns the first user message as the conversation title.
+   */
+  async listConversations(
+    userId: string,
+  ): Promise<Array<{ id: string; created_at: string; title: string | null }>> {
+    return this.query<ConversationListRow>(
+      `SELECT
+        c.id,
+        c.created_at,
+        (
+          SELECT content FROM messages
+          WHERE conversation_id = c.id AND role = 'user'
+          ORDER BY created_at ASC LIMIT 1
+        ) AS title
+       FROM conversations c
+       WHERE c.user_id = $1
+       ORDER BY c.created_at DESC`,
+      [userId],
     );
   }
 

@@ -1,23 +1,46 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plane, SquarePen } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Plane } from "lucide-react";
 import ChatWindow from "@/components/ChatWindow";
 import MemoryPanel from "@/components/MemoryPanel";
+import ConversationList from "@/components/ConversationList";
 import { getOrCreateUserId } from "@/lib/api";
 
 /**
- * Root page — full-height layout with header, chat window, and memory panel.
+ * Root page — full-height layout with conversation sidebar, chat window, and memory panel.
  */
 export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [memoryRefresh, setMemoryRefresh] = useState(0);
+  const [conversationListRefresh, setConversationListRefresh] = useState(0);
+  /** Currently open conversation. null = new (unsaved) chat. */
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   /** Incrementing this key unmounts/remounts ChatWindow, resetting all conversation state. */
   const [chatKey, setChatKey] = useState(0);
 
-  // Initialise userId client-side only (localStorage is not available during SSR)
   useEffect(() => {
     setUserId(getOrCreateUserId());
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    setSelectedConversationId(null);
+    setChatKey((k) => k + 1);
+  }, []);
+
+  const handleSelectConversation = useCallback((id: string) => {
+    setSelectedConversationId(id);
+    setChatKey((k) => k + 1);
+  }, []);
+
+  const handleConversationCreated = useCallback((id: string) => {
+    setSelectedConversationId(id);
+    setConversationListRefresh((n) => n + 1);
+  }, []);
+
+  const handleReplyComplete = useCallback(() => {
+    setMemoryRefresh((n) => n + 1);
+    setConversationListRefresh((n) => n + 1);
   }, []);
 
   if (!userId) {
@@ -36,27 +59,28 @@ export default function Home() {
           <Plane size={20} className="text-blue-600" />
           <span className="font-semibold text-gray-800">Travel Planning Agent</span>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setChatKey((k) => k + 1)}
-            title="New conversation"
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors px-2 py-1 rounded-lg hover:bg-blue-50"
-          >
-            <SquarePen size={14} />
-            New chat
-          </button>
-          <span className="text-xs text-gray-400 font-mono">{userId.slice(0, 8)}…</span>
-        </div>
+        <span className="text-xs text-gray-400 font-mono">{userId.slice(0, 8)}…</span>
       </header>
 
       {/* ── Body ───────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
+        {/* Conversation sidebar */}
+        <ConversationList
+          userId={userId}
+          selectedId={selectedConversationId}
+          refreshTrigger={conversationListRefresh}
+          onSelect={handleSelectConversation}
+          onNewChat={handleNewChat}
+        />
+
         {/* Chat area */}
         <main className="flex flex-col flex-1 min-w-0 min-h-0">
           <ChatWindow
             key={chatKey}
             userId={userId}
-            onReplyComplete={() => setMemoryRefresh((n) => n + 1)}
+            initialConversationId={selectedConversationId}
+            onConversationCreated={handleConversationCreated}
+            onReplyComplete={handleReplyComplete}
           />
         </main>
 

@@ -8,6 +8,10 @@ import { type ToolStep } from "./AgentThoughts";
 
 interface ChatWindowProps {
   userId: string;
+  /** Pre-selected conversation to load/continue */
+  initialConversationId?: string | null;
+  /** Called when the backend assigns a conversationId (first message of new chat) */
+  onConversationCreated?: (conversationId: string) => void;
   /** Called after each completed assistant reply so the memory panel can refresh */
   onReplyComplete?: () => void;
 }
@@ -21,11 +25,18 @@ function newId() {
  * Main chat window: renders message list + input bar.
  * Manages SSE streaming and incremental AgentThoughts updates.
  */
-export default function ChatWindow({ userId, onReplyComplete }: ChatWindowProps) {
+export default function ChatWindow({
+  userId,
+  initialConversationId,
+  onConversationCreated,
+  onReplyComplete,
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId ?? null,
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -70,6 +81,12 @@ export default function ChatWindow({ userId, onReplyComplete }: ChatWindowProps)
         conversationId,
         (event: AgentEvent) => {
           switch (event.type) {
+            case "conversation_id": {
+              setConversationId(event.conversationId);
+              onConversationCreated?.(event.conversationId);
+              break;
+            }
+
             case "text": {
               textAccum += event.content;
               setMessages((prev) =>
@@ -151,7 +168,7 @@ export default function ChatWindow({ userId, onReplyComplete }: ChatWindowProps)
       setLoading(false);
       onReplyComplete?.();
     }
-  }, [input, loading, userId, conversationId, onReplyComplete]);
+  }, [input, loading, userId, conversationId, onConversationCreated, onReplyComplete]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

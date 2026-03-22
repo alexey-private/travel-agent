@@ -39,6 +39,15 @@ export class ConversationService {
   }
 
   /**
+   * Lists all conversations for a user, newest first.
+   */
+  async listConversations(
+    userId: string,
+  ): Promise<Array<{ id: string; created_at: string; title: string | null }>> {
+    return this.repo.listConversations(userId);
+  }
+
+  /**
    * Persists a user or assistant message to the database.
    */
   async saveMessage(

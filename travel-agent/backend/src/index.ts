@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { getPool, closePool } from './db/client';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
+import { conversationRoutes } from './routes/conversations';
 
 const fastify = Fastify({
   logger: {
@@ -25,6 +26,7 @@ async function bootstrap(): Promise<void> {
   // Routes
   await fastify.register(chatRoutes);
   await fastify.register(memoryRoutes);
+  await fastify.register(conversationRoutes);
 
   // Health check
   fastify.get('/health', async () => ({ status: 'ok' }));
