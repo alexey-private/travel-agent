@@ -24,7 +24,7 @@
 | 5 | Backend: Repositories + Routes (chat SSE, memory) | ✅ DONE |
 | 6 | Unit tests | ✅ DONE |
 | 7 | Integration tests | ✅ DONE |
-| 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ⬜ TODO |
+| 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ✅ DONE |
 | 9 | README + Knowledge base seed | ⬜ TODO |
 
 ---
@@ -480,7 +480,7 @@ export abstract class BaseRepository {
 
 ## TASK 8 — Frontend (Next.js)
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Task 5 ✅ DONE
 
 **Files to create:**
