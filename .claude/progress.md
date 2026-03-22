@@ -22,7 +22,7 @@
 | 6 | Unit tests | ✅ DONE |
 | 7 | Integration tests | ✅ DONE |
 | 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ✅ DONE |
-| 9 | README + Knowledge base seed | ⬜ TODO |
+| 9 | README + Knowledge base seed | ✅ DONE |
 
 ---
 
@@ -527,7 +527,7 @@ npx create-next-app@latest frontend --typescript --tailwind --app --no-src-dir -
 
 ## TASK 9 — README + Knowledge base seed
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Tasks 1–8 ✅ DONE
 
 **Files to create:**
