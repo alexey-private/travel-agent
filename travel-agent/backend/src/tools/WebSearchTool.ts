@@ -48,11 +48,11 @@ export class WebSearchTool extends BaseTool {
         return { success: false, error: `Tavily API error ${response.status}: ${errorText}` };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { results?: Array<{ title: string; url: string; content: string }> };
       return {
         success: true,
         data: {
-          results: (data.results || []).map((r: { title: string; url: string; content: string }) => ({
+          results: (data.results || []).map((r) => ({
             title: r.title,
             url: r.url,
             content: r.content,

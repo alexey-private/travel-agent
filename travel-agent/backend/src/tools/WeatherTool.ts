@@ -51,11 +51,11 @@ export class WeatherTool extends BaseTool {
         return { success: false, error: `OpenWeatherMap API error ${response.status}: ${errorText}` };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { list: ForecastItem[]; city: { name: string; country: string } };
 
       // Group by date and aggregate
       const byDate = new Map<string, ForecastItem[]>();
-      for (const item of data.list as ForecastItem[]) {
+      for (const item of data.list) {
         const date = item.dt_txt.split(' ')[0];
         if (!byDate.has(date)) byDate.set(date, []);
         byDate.get(date)!.push(item);

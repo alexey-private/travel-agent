@@ -19,7 +19,7 @@
 |---|------|--------|
 | 1 | Docker + DB setup | ✅ DONE |
 | 2 | Backend: Tools (BaseTool, WebSearchTool, WeatherTool) | ✅ DONE |
-| 3 | Backend: Agent core (TravelAgent, ReAct loop) | ⬜ TODO |
+| 3 | Backend: Agent core (TravelAgent, ReAct loop) | ✅ DONE |
 | 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ⬜ TODO |
 | 5 | Backend: Repositories + Routes (chat SSE, memory) | ⬜ TODO |
 | 6 | Unit tests | ⬜ TODO |
@@ -263,7 +263,7 @@ export abstract class BaseTool {
 
 ## TASK 3 — Backend: Agent Core (ReAct loop)
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Tasks 1, 2 ✅ DONE
 
 **Files to create:**
