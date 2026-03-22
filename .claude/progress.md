@@ -21,7 +21,7 @@
 | 2 | Backend: Tools (BaseTool, WebSearchTool, WeatherTool) | ✅ DONE |
 | 3 | Backend: Agent core (TravelAgent, ReAct loop) | ✅ DONE |
 | 4 | Backend: Services (MemoryService, RAGService, EmbeddingService) | ✅ DONE |
-| 5 | Backend: Repositories + Routes (chat SSE, memory) | ⬜ TODO |
+| 5 | Backend: Repositories + Routes (chat SSE, memory) | ✅ DONE |
 | 6 | Unit tests | ⬜ TODO |
 | 7 | Integration tests | ⬜ TODO |
 | 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ⬜ TODO |
@@ -397,7 +397,7 @@ export abstract class BaseRepository {
 
 ## TASK 5 — Backend: Routes + index.ts
 
-**Status:** ⬜ TODO
+**Status:** ✅ DONE
 **Depends on:** Tasks 1–4 ✅ DONE
 
 **Files to create:**
