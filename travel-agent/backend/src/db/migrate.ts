@@ -8,7 +8,10 @@
 import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const DATABASE_URL = process.env.DATABASE_URL;
 

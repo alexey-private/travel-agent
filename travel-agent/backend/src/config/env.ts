@@ -1,4 +1,9 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Support running as an npm workspace (cwd = backend/) or from the project root
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 import { z } from 'zod';
 
 /**
