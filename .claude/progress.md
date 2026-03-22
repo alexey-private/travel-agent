@@ -23,6 +23,7 @@
 | 7 | Integration tests | ✅ DONE |
 | 8 | Frontend (Next.js chat UI + AgentThoughts + MemoryPanel) | ✅ DONE |
 | 9 | README + Knowledge base seed | ✅ DONE |
+| 10 | Extra tools: CountryInfoTool + CurrencyTool | ✅ DONE |
 
 ---
 
@@ -46,6 +47,8 @@ travel-agent/
 │   │   │   ├── BaseTool.ts         # abstract class
 │   │   │   ├── WebSearchTool.ts    # Tavily API
 │   │   │   ├── WeatherTool.ts      # OpenWeatherMap API
+│   │   │   ├── CountryInfoTool.ts  # RestCountries API (free, no key)
+│   │   │   ├── CurrencyTool.ts     # Frankfurter API (free, no key)
 │   │   │   └── ToolRegistry.ts
 │   │   ├── agent/
 │   │   │   ├── TravelAgent.ts      # ReAct loop (AsyncGenerator + SSE)
@@ -81,7 +84,7 @@ travel-agent/
             └── MemoryPanel.tsx
 ```
 
-**Tech Stack:** Node.js + TypeScript + Fastify + PostgreSQL + pgvector | Next.js 14 + Tailwind + shadcn/ui | Claude API (claude-sonnet-4-6) | Tavily Search + OpenWeatherMap | Jest
+**Tech Stack:** Node.js + TypeScript + Fastify + PostgreSQL + pgvector | Next.js 14 + Tailwind + shadcn/ui | Claude API (claude-sonnet-4-6) | Tavily Search + OpenWeatherMap + RestCountries + Frankfurter | Jest
 
 ---
 
@@ -567,6 +570,25 @@ NODE_ENV=development
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
+
+---
+
+---
+
+## TASK 10 — Extra tools: CountryInfoTool + CurrencyTool
+
+**Status:** ✅ DONE
+**Depends on:** Task 2 ✅ DONE
+
+**Files created:**
+- `backend/src/tools/CountryInfoTool.ts` — RestCountries API (free, no key)
+- `backend/src/tools/CurrencyTool.ts` — Frankfurter API (free, no key)
+
+**Registered in:** `backend/src/routes/chat.ts`
+
+**Details:**
+- `get_country_info`: capital, languages, currencies, timezones, region for any country
+- `convert_currency`: live ECB exchange rates, any ISO currency pair
 
 ---
 

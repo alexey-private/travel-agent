@@ -97,11 +97,13 @@ Fastify (Node.js)
     │     └── TravelAgent (ReAct loop)
     │           ├── Claude claude-sonnet-4-6  (reasoning + tool calls)
     │           ├── WebSearchTool    ──► Tavily API
-    │           └── WeatherTool      ──► OpenWeatherMap API
+    │           ├── WeatherTool      ──► OpenWeatherMap API
+    │           ├── CountryInfoTool  ──► RestCountries API (free, no key)
+    │           └── CurrencyTool     ──► Frankfurter API (free, no key)
     └── MemoryRoute ──► MemoryRepository ──► PostgreSQL
 ```
 
-**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · shadcn/ui · Claude `claude-sonnet-4-6` · Tavily Search · OpenWeatherMap · Jest
+**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · shadcn/ui · Claude `claude-sonnet-4-6` · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
 
 ---
 
@@ -177,6 +179,8 @@ Open [http://localhost:3000](http://localhost:3000).
 | `TAVILY_API_KEY` | Yes | Tavily web search API key (`tvly-…`) |
 | `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key |
 | `VOYAGE_API_KEY` | No | Voyage AI key for semantic embeddings (random vectors used in dev if absent) |
+
+> **RestCountries** and **Frankfurter** are fully free public APIs — no key or registration required.
 | `PORT` | No | Backend port (default `3001`) |
 | `NODE_ENV` | No | `development` / `production` / `test` |
 | `NEXT_PUBLIC_API_URL` | Yes (frontend) | Backend URL seen by the browser |

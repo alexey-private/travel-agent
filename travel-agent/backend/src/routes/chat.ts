@@ -11,6 +11,8 @@ import { AgentContext } from '../agent/AgentContext';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { WebSearchTool } from '../tools/WebSearchTool';
 import { WeatherTool } from '../tools/WeatherTool';
+import { CountryInfoTool } from '../tools/CountryInfoTool';
+import { CurrencyTool } from '../tools/CurrencyTool';
 import { AgentEvent } from '../types/agent';
 
 interface ChatBody {
@@ -81,6 +83,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       const toolRegistry = new ToolRegistry();
       toolRegistry.register(new WebSearchTool());
       toolRegistry.register(new WeatherTool());
+      toolRegistry.register(new CountryInfoTool());
+      toolRegistry.register(new CurrencyTool());
 
       const agent = new TravelAgent(toolRegistry, anthropic);
 
