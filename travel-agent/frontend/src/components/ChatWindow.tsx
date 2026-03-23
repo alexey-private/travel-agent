@@ -233,6 +233,14 @@ export default function ChatWindow({
     setInput(text);
   }, []);
 
+  const STARTER_SUGGESTIONS = [
+    "Plan a 7-day trip to Tokyo in April",
+    "Best time to visit Bali — weather & crowds?",
+    "Do I need a visa for Thailand from the US?",
+    "Convert 1000 USD to EUR",
+    "Top vegetarian-friendly cities in Europe",
+  ];
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -261,6 +269,20 @@ export default function ChatWindow({
 
       {/* Input bar */}
       <div className="border-t border-gray-200 bg-white px-4 py-3">
+        {/* Starter suggestions — shown only in an empty chat */}
+        {messages.length === 0 && !loading && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {STARTER_SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleSuggestionClick(s)}
+                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-3 max-w-full">
           <textarea
             className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
