@@ -59,15 +59,15 @@ export class TravelAgent {
 
       for (const toolCall of stopEvent.toolCalls) {
         yield { type: 'tool_start', tool: toolCall.name, input: toolCall.input };
+      }
 
-        const { result, output, error } = await this.handleToolCall(
-          toolCall.id,
-          toolCall.name,
-          toolCall.input,
-        );
+      const results = await Promise.all(
+        stopEvent.toolCalls.map(tc => this.handleToolCall(tc.id, tc.name, tc.input)),
+      );
 
-        yield { type: 'tool_end', tool: toolCall.name, output, error };
-
+      for (let i = 0; i < stopEvent.toolCalls.length; i++) {
+        const { result, output, error } = results[i];
+        yield { type: 'tool_end', tool: stopEvent.toolCalls[i].name, output, error };
         toolResults.push(result);
       }
 
