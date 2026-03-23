@@ -13,27 +13,12 @@ export class ConversationService {
   }
 
   /**
-   * Finds or creates a user record identified by their session cookie / localStorage id.
-   * @returns The internal user UUID
-   */
-  async findOrCreateUser(sessionId: string): Promise<string> {
-    return this.repo.findOrCreateUser(sessionId);
-  }
-
-  /**
    * Finds or creates a conversation for the user.
    * Pass an existing conversationId to continue a prior session.
    * @returns The conversation UUID (new or existing)
    */
   async findOrCreateConversation(userId: string, conversationId?: string): Promise<string> {
     return this.repo.findOrCreateConversation(userId, conversationId);
-  }
-
-  /**
-   * Returns true if the conversation belongs to the given user.
-   */
-  async verifyOwnership(userId: string, conversationId: string): Promise<boolean> {
-    return this.repo.verifyOwnership(userId, conversationId);
   }
 
   /**

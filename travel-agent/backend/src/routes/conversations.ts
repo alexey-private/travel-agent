@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getPool } from '../db/client';
+import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 
 export async function conversationRoutes(fastify: FastifyInstance): Promise<void> {
@@ -8,9 +9,10 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
     async (request: FastifyRequest<{ Params: { userId: string } }>, reply: FastifyReply) => {
       const { userId: sessionId } = request.params;
       const pool = getPool();
+      const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
 
-      const internalUserId = await conversationService.findOrCreateUser(sessionId);
+      const internalUserId = await userService.findOrCreateUser(sessionId);
       const conversations = await conversationService.listConversations(internalUserId);
 
       return reply.send({ conversations });
@@ -25,12 +27,13 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
     ) => {
       const { userId: sessionId, conversationId } = request.params;
       const pool = getPool();
+      const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
 
-      const internalUserId = await conversationService.findOrCreateUser(sessionId);
+      const internalUserId = await userService.findOrCreateUser(sessionId);
 
       // Verify ownership before reading messages
-      const owned = await conversationService.verifyOwnership(internalUserId, conversationId);
+      const owned = await userService.verifyOwnership(internalUserId, conversationId);
       if (!owned) return reply.status(403).send({ error: 'Forbidden' });
 
       const history = await conversationService.getHistory(conversationId);

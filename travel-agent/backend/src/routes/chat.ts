@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import Anthropic from '@anthropic-ai/sdk';
 import { getPool } from '../db/client';
 import { env } from '../config/env';
+import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
 import { RAGService } from '../services/RAGService';
@@ -58,13 +59,14 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       const pool = getPool();
       const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
+      const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
       const memoryService = new MemoryService(pool, anthropic);
       const embeddingService = new EmbeddingService();
       const ragService = new RAGService(pool, anthropic, embeddingService);
 
       // Resolve/create user and conversation
-      const internalUserId = await conversationService.findOrCreateUser(sessionId);
+      const internalUserId = await userService.findOrCreateUser(sessionId);
       const conversationId = await conversationService.findOrCreateConversation(
         internalUserId,
         existingConvId,
