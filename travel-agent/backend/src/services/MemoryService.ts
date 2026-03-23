@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { Pool } from 'pg';
 import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
+import { LLMClient } from '../llm/LLMClient';
 
 const EXTRACT_MEMORIES_PROMPT = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent preferences as a JSON object.
@@ -24,11 +24,11 @@ Example output:
  */
 export class MemoryService {
   private repo: MemoryRepository;
-  private anthropic: Anthropic | null;
+  private llmClient: LLMClient | null;
 
-  constructor(pool: Pool, anthropic: Anthropic | null = null) {
+  constructor(pool: Pool, llmClient: LLMClient | null = null) {
     this.repo = new MemoryRepository(pool);
-    this.anthropic = anthropic;
+    this.llmClient = llmClient;
   }
 
   /**
@@ -46,39 +46,34 @@ export class MemoryService {
   }
 
   /**
-   * Uses Claude to extract user preferences from the user's message,
+   * Uses the LLM to extract user preferences from the user's message,
    * then persists each extracted key-value pair via upsert.
    *
    * Existing memories are passed as context so the extractor avoids
    * overwriting known facts with weaker/inferred signals.
    *
-   * Silently skips extraction if the message is empty or Claude returns
+   * Silently skips extraction if the message is empty or the LLM returns
    * an unparseable response.
    *
    * @param userId - The internal user UUID
    * @param userMessage - The raw user message from the last exchange
    */
   async extractAndSaveMemories(userId: string, userMessage: string): Promise<void> {
-    if (!userMessage.trim() || !this.anthropic) return;
+    if (!userMessage.trim() || !this.llmClient) return;
 
     const existing = await this.repo.getMemories(userId);
-    const existingSection = existing.length > 0
-      ? `\nExisting memories:\n${existing.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
-      : '';
+    const existingSection =
+      existing.length > 0
+        ? `\nExisting memories:\n${existing.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
+        : '';
 
     let extracted: Record<string, string>;
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001', // Cheaper model; extraction is simple
-        max_tokens: 512,
+      const text = await this.llmClient.complete({
         system: EXTRACT_MEMORIES_PROMPT,
         messages: [{ role: 'user', content: `${existingSection}User message:\n${userMessage}` }],
+        maxTokens: 512,
       });
-
-      const text = response.content
-        .filter(b => b.type === 'text')
-        .map(b => (b as Anthropic.TextBlock).text)
-        .join('');
 
       // Extract the JSON object from the response (may have surrounding text)
       const match = text.match(/\{[\s\S]*\}/);

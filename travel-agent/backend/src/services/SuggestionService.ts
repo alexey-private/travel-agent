@@ -1,17 +1,15 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { LLMClient } from '../llm/LLMClient';
 
 /**
  * Generates contextual follow-up question suggestions after an agent response.
  */
 export class SuggestionService {
-  constructor(private anthropic: Anthropic) {}
+  constructor(private llmClient: LLMClient) {}
 
   async getSuggestions(userMessage: string, assistantReply: string): Promise<string[]> {
     if (!assistantReply.trim()) return [];
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 150,
+      const raw = await this.llmClient.complete({
         messages: [
           {
             role: 'user',
@@ -28,8 +26,8 @@ Assistant answer (summary): ${assistantReply.slice(0, 800)}
 Output (JSON array only):`,
           },
         ],
+        maxTokens: 150,
       });
-      const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '';
       const match = raw.match(/\[[\s\S]*\]/);
       if (!match) return [];
       const parsed: unknown = JSON.parse(match[0]);

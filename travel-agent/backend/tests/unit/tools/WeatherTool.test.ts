@@ -127,9 +127,9 @@ describe('WeatherTool', () => {
     expect(data.forecast.length).toBeLessThanOrEqual(2);
   });
 
-  it('exposes the correct Anthropic tool schema', () => {
-    const schema = tool.toAnthropicTool();
-    expect(schema.name).toBe('get_weather');
-    expect(schema.input_schema.required).toContain('city');
+  it('exposes the correct tool definition', () => {
+    const def = tool.toToolDefinition();
+    expect(def.name).toBe('get_weather');
+    expect((def.inputSchema as { required: string[] }).required).toContain('city');
   });
 });

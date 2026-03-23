@@ -15,6 +15,7 @@ import { setupTestDb, clearTestDb, teardownTestDb, getTestPool } from '../helper
 
 jest.mock('@/config/env', () => ({
   env: {
+    LLM_PROVIDER: 'anthropic',
     ANTHROPIC_API_KEY: 'test-key',
     TAVILY_API_KEY: 'test-tavily',
     OPENWEATHER_API_KEY: 'test-weather',

@@ -293,38 +293,36 @@ The seeded knowledge base contains curated documents on visa requirements, healt
 
 ## Replacing the LLM Provider
 
-The codebase is coupled to the **Anthropic SDK** in five files. Replacing Claude with another provider (OpenAI, Gemini, etc.) requires changes in those places only — the rest of the stack (database, tools, RAG, streaming) is provider-agnostic.
+The codebase uses a **provider-agnostic `LLMClient` interface** backed by a Factory pattern. Switching providers requires no changes to business logic — only a new implementation class needs to be written.
 
-### What needs to change
-
-| File | What to update |
-|------|----------------|
-| `agent/TravelAgent.ts` | Replace `anthropic.messages.stream()` call and Anthropic-specific types (`MessageParam`, `ToolUseBlock`, `ToolResultBlockParam`) with the new provider's streaming API and message format |
-| `tools/BaseTool.ts` | Replace `toAnthropicTool()` with the new provider's tool definition schema (e.g. OpenAI uses `"type": "function"` with `parameters`, Anthropic uses `input_schema`) |
-| `services/MemoryService.ts` | Replace `anthropic.messages.create()` call and response parsing |
-| `services/RAGService.ts` | Same — replace `messages.create()` call |
-| `services/SuggestionService.ts` | Same — replace `messages.create()` call |
-
-### What does NOT need to change
-
-- All tools (`WebSearchTool`, `WeatherTool`, etc.) — they return plain objects
-- `EmbeddingService` — uses Voyage AI independently
-- Database schema and repositories
-- SSE streaming infrastructure
-- Frontend
-
-### Making it provider-agnostic
-
-If multi-provider support is needed, introduce an `LLMClient` interface:
-
-```typescript
-interface LLMClient {
-  chat(params: { messages: Message[]; tools: ToolDef[]; system: string }): AsyncIterable<LLMEvent>;
-  complete(params: { messages: Message[]; system: string }): Promise<string>;
-}
+```
+src/llm/
+├── LLMClient.ts          # interface: stream() + complete()
+├── types.ts              # shared types: LLMMessage, LLMToolCall, LLMStreamEvent, …
+├── LLMClientFactory.ts   # Factory — reads LLM_PROVIDER from env
+├── AnthropicLLMClient.ts # production implementation
+└── OpenAILLMClient.ts    # stub — ready to implement
 ```
 
-Implement it for each provider and inject into `TravelAgent`, `MemoryService`, `RAGService`, and `SuggestionService`. For a single-provider demo this abstraction is unnecessary.
+### Adding a new provider
+
+1. Create `src/llm/<Provider>LLMClient.ts` implementing `LLMClient`
+2. Add the provider name to the `LLMProvider` union in `LLMClientFactory.ts`
+3. Add a `case` in `LLMClientFactory.create()`
+4. Add the API key to `.env` and `src/config/env.ts`
+5. Set `LLM_PROVIDER=<provider>` in the environment
+
+Nothing else needs to change — `TravelAgent`, `MemoryService`, `RAGService`, `SuggestionService`, all tools, the database, the SSE infrastructure, and the frontend are all provider-agnostic.
+
+### Key mapping from Anthropic to OpenAI
+
+| Concept | Anthropic | OpenAI |
+|---------|-----------|--------|
+| Streaming | `messages.stream()` | `chat.completions.create({ stream: true })` |
+| Tool schema | `input_schema` (JSON Schema) | `function.parameters` (JSON Schema) |
+| Tool call in response | `content[]` block of type `tool_use` | `choices[0].message.tool_calls[]` |
+| Tool result | `user` turn with `tool_result` content | `{ role: "tool", tool_call_id, content }` message |
+| Simple completion | `messages.create()` | `chat.completions.create({ stream: false })` |
 
 ---
 

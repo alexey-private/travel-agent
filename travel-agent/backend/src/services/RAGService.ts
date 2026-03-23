@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { Pool } from 'pg';
 import { KnowledgeRepository } from '../repositories/KnowledgeRepository';
 import { EmbeddingService } from './EmbeddingService';
 import { KnowledgeChunk } from '../types/memory';
+import { LLMClient } from '../llm/LLMClient';
 
 const SHOULD_QUERY_PROMPT = `You decide whether a travel-planning query needs factual destination knowledge
 from a knowledge base (visa rules, health tips, cultural guides, etc.).
@@ -13,42 +13,34 @@ Answer with a single word: yes or no.`;
  * Service for Retrieval-Augmented Generation over the knowledge base.
  *
  * Responsibilities:
- * - Deciding (via Claude) whether a query warrants a KB lookup
+ * - Deciding (via LLM) whether a query warrants a KB lookup
  * - Embedding queries and retrieving similar chunks
  * - Ingesting new documents into the knowledge base
  */
 export class RAGService {
   private knowledgeRepo: KnowledgeRepository;
   private embeddingService: EmbeddingService;
-  private anthropic: Anthropic;
+  private llmClient: LLMClient;
 
-  constructor(pool: Pool, anthropic: Anthropic, embeddingService: EmbeddingService) {
+  constructor(pool: Pool, llmClient: LLMClient, embeddingService: EmbeddingService) {
     this.knowledgeRepo = new KnowledgeRepository(pool);
     this.embeddingService = embeddingService;
-    this.anthropic = anthropic;
+    this.llmClient = llmClient;
   }
 
   /**
-   * Asks Claude whether the given user query needs a knowledge base lookup.
-   * Returns true when Claude responds with "yes".
+   * Asks the LLM whether the given user query needs a knowledge base lookup.
+   * Returns true when the model responds with "yes".
    */
   async shouldQueryKnowledgeBase(query: string): Promise<boolean> {
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 10,
+      const text = await this.llmClient.complete({
         system: SHOULD_QUERY_PROMPT,
         messages: [{ role: 'user', content: query }],
+        maxTokens: 10,
       });
 
-      const text = response.content
-        .filter(b => b.type === 'text')
-        .map(b => (b as Anthropic.TextBlock).text)
-        .join('')
-        .toLowerCase()
-        .trim();
-
-      return text.startsWith('yes');
+      return text.toLowerCase().trim().startsWith('yes');
     } catch {
       // Default to true on error so RAG is not silently skipped
       return true;

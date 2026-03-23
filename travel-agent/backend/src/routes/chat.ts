@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import Anthropic from '@anthropic-ai/sdk';
 import { getPool } from '../db/client';
 import { env } from '../config/env';
+import { LLMClientFactory } from '../llm/LLMClientFactory';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
@@ -57,13 +57,16 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       const pool = getPool();
-      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+      const llmClient = LLMClientFactory.create({
+        provider: env.LLM_PROVIDER,
+        apiKey: env.ANTHROPIC_API_KEY,
+      });
 
       const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
-      const memoryService = new MemoryService(pool, anthropic);
+      const memoryService = new MemoryService(pool, llmClient);
       const embeddingService = new EmbeddingService();
-      const ragService = new RAGService(pool, anthropic, embeddingService);
+      const ragService = new RAGService(pool, llmClient, embeddingService);
 
       // Resolve/create user and conversation
       const internalUserId = await userService.findOrCreateUser(sessionId);
@@ -96,8 +99,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       toolRegistry.register(new CurrencyTool());
       toolRegistry.register(new FlightSearchTool());
 
-      const agent = new TravelAgent(toolRegistry, anthropic);
-      const suggestionService = new SuggestionService(anthropic);
+      const agent = new TravelAgent(toolRegistry, llmClient);
+      const suggestionService = new SuggestionService(llmClient);
 
       // Hijack the connection so Fastify does not finalise the response.
       // CORS headers must be set manually here because reply.hijack() bypasses

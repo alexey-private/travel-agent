@@ -1,8 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { TravelAgent } from '@/agent/TravelAgent';
 import { AgentContext } from '@/agent/AgentContext';
 import { ToolRegistry } from '@/tools/ToolRegistry';
 import { AgentEvent } from '@/types/agent';
+import { LLMClient } from '@/llm/LLMClient';
+import { LLMStreamEvent, LLMToolCall } from '@/llm/types';
 
 /** Drain an AsyncGenerator into an array. */
 async function collectEvents(gen: AsyncGenerator<AgentEvent>): Promise<AgentEvent[]> {
@@ -24,49 +25,41 @@ function buildContext(): AgentContext {
   );
 }
 
-type FakeResponse = {
-  stop_reason: string;
-  content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
-};
-
-/** Build a fake stream object that TravelAgent can iterate over and call finalMessage() on. */
-function makeStreamMock(response: FakeResponse) {
+/** Build an AsyncIterable that yields the given LLMStreamEvents. */
+function makeStream(events: LLMStreamEvent[]) {
   return {
     async *[Symbol.asyncIterator]() {
-      for (const block of response.content) {
-        if (block.type === 'text' && block.text) {
-          yield {
-            type: 'content_block_delta',
-            delta: { type: 'text_delta', text: block.text },
-          };
-        }
-      }
+      for (const event of events) yield event;
     },
-    finalMessage: jest.fn().mockResolvedValue(response),
   };
+}
+
+function stopEnd(text: string): LLMStreamEvent[] {
+  return [
+    { type: 'text_delta', text },
+    { type: 'stop', reason: 'end_turn', toolCalls: [], assistantText: text },
+  ];
+}
+
+function stopToolUse(toolCalls: LLMToolCall[]): LLMStreamEvent[] {
+  return [{ type: 'stop', reason: 'tool_use', toolCalls, assistantText: '' }];
 }
 
 describe('TravelAgent', () => {
   let mockStream: jest.Mock;
-  let mockAnthropicClient: Anthropic;
+  let llmClient: LLMClient;
   let toolRegistry: ToolRegistry;
   let agent: TravelAgent;
 
   beforeEach(() => {
     mockStream = jest.fn();
-    mockAnthropicClient = {
-      messages: { stream: mockStream },
-    } as unknown as Anthropic;
-
+    llmClient = { stream: mockStream, complete: jest.fn() } as unknown as LLMClient;
     toolRegistry = new ToolRegistry();
-    agent = new TravelAgent(toolRegistry, mockAnthropicClient);
+    agent = new TravelAgent(toolRegistry, llmClient);
   });
 
-  it('emits text and done events when Claude responds with end_turn', async () => {
-    mockStream.mockReturnValueOnce(makeStreamMock({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: 'Here is your Tokyo itinerary.' }],
-    }));
+  it('emits text and done events when the model responds with end_turn', async () => {
+    mockStream.mockReturnValueOnce(makeStream(stopEnd('Here is your Tokyo itinerary.')));
 
     const events = await collectEvents(agent.run(buildContext()));
 
@@ -75,40 +68,30 @@ describe('TravelAgent', () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
   });
 
-  it('emits tool_start, tool_end, then final text when Claude uses a tool', async () => {
-    // Register a mock tool
+  it('emits tool_start, tool_end, then final text when the model uses a tool', async () => {
     const mockTool = {
       name: 'web_search',
       description: 'Search the web',
       inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
       execute: jest.fn().mockResolvedValue({ success: true, data: { results: [{ title: 'Tokyo info' }] } }),
-      toAnthropicTool: () => ({
+      toToolDefinition: () => ({
         name: 'web_search',
         description: 'Search the web',
-        input_schema: { type: 'object' as const, properties: { query: { type: 'string' } }, required: ['query'] },
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
       }),
     };
     toolRegistry.register(mockTool as any);
 
-    // First call: tool_use; second call: end_turn
     mockStream
-      .mockReturnValueOnce(makeStreamMock({
-        stop_reason: 'tool_use',
-        content: [
-          { type: 'tool_use', id: 'call-1', name: 'web_search', input: { query: 'Tokyo travel' } },
-        ],
-      }))
-      .mockReturnValueOnce(makeStreamMock({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'Based on the search, here is Tokyo info.' }],
-      }));
+      .mockReturnValueOnce(
+        makeStream(stopToolUse([{ id: 'call-1', name: 'web_search', input: { query: 'Tokyo travel' } }])),
+      )
+      .mockReturnValueOnce(makeStream(stopEnd('Based on the search, here is Tokyo info.')));
 
     const events = await collectEvents(agent.run(buildContext()));
 
     expect(events).toContainEqual({ type: 'tool_start', tool: 'web_search', input: { query: 'Tokyo travel' } });
-    expect(events).toContainEqual(
-      expect.objectContaining({ type: 'tool_end', tool: 'web_search' }),
-    );
+    expect(events).toContainEqual(expect.objectContaining({ type: 'tool_end', tool: 'web_search' }));
     expect(events).toContainEqual({ type: 'text', content: 'Based on the search, here is Tokyo info.' });
     expect(events[events.length - 1]).toEqual({ type: 'done' });
     expect(mockStream).toHaveBeenCalledTimes(2);
@@ -120,23 +103,21 @@ describe('TravelAgent', () => {
       description: 'Search the web',
       inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
       execute: jest.fn().mockResolvedValue({ success: false, error: 'Rate limit exceeded' }),
-      toAnthropicTool: () => ({
+      toToolDefinition: () => ({
         name: 'web_search',
         description: 'Search the web',
-        input_schema: { type: 'object' as const, properties: {}, required: [] },
+        inputSchema: { type: 'object', properties: {}, required: [] },
       }),
     };
     toolRegistry.register(mockTool as any);
 
     mockStream
-      .mockReturnValueOnce(makeStreamMock({
-        stop_reason: 'tool_use',
-        content: [{ type: 'tool_use', id: 'call-err', name: 'web_search', input: { query: 'Tokyo' } }],
-      }))
-      .mockReturnValueOnce(makeStreamMock({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'I could not search, but here are some general tips.' }],
-      }));
+      .mockReturnValueOnce(
+        makeStream(stopToolUse([{ id: 'call-err', name: 'web_search', input: { query: 'Tokyo' } }])),
+      )
+      .mockReturnValueOnce(
+        makeStream(stopEnd('I could not search, but here are some general tips.')),
+      );
 
     const events = await collectEvents(agent.run(buildContext()));
 
@@ -151,19 +132,15 @@ describe('TravelAgent', () => {
     });
     expect(events[events.length - 1]).toEqual({ type: 'done' });
 
-    // The error was passed back to Claude as a tool_result with is_error: true
-    const secondCallMessages = mockStream.mock.calls[1][0].messages;
-    const toolResultMsg = secondCallMessages[secondCallMessages.length - 1];
-    expect(toolResultMsg.role).toBe('user');
-    const toolResultContent = toolResultMsg.content[0];
-    expect(toolResultContent.is_error).toBe(true);
+    // The error was passed back to the model as a tool result with isError: true
+    const secondCallParams = mockStream.mock.calls[1][0];
+    const toolMsg = secondCallParams.messages[secondCallParams.messages.length - 1];
+    expect(toolMsg.role).toBe('tool');
+    expect(toolMsg.results[0].isError).toBe(true);
   });
 
   it('prepends RAG context to the user message when provided', async () => {
-    mockStream.mockReturnValueOnce(makeStreamMock({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: 'Answer.' }],
-    }));
+    mockStream.mockReturnValueOnce(makeStream(stopEnd('Answer.')));
 
     const ctx = new AgentContext('u', 'c', 'Visa to Japan?', [], 'Japan requires no visa for 90 days.', []);
     await collectEvents(agent.run(ctx));
@@ -175,10 +152,7 @@ describe('TravelAgent', () => {
   });
 
   it('includes conversation history in the request', async () => {
-    mockStream.mockReturnValueOnce(makeStreamMock({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: 'Sure.' }],
-    }));
+    mockStream.mockReturnValueOnce(makeStream(stopEnd('Sure.')));
 
     const ctx = new AgentContext(
       'u', 'c', 'What about hotels?', [],

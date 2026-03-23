@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { ToolResult, JSONSchema } from '../types/tools';
+import { LLMToolDefinition } from '../llm/types';
 
 export abstract class BaseTool {
   abstract readonly name: string;
@@ -8,11 +8,11 @@ export abstract class BaseTool {
 
   abstract execute(input: unknown): Promise<ToolResult>;
 
-  toAnthropicTool(): Anthropic.Tool {
+  toToolDefinition(): LLMToolDefinition {
     return {
       name: this.name,
       description: this.description,
-      input_schema: this.inputSchema as Anthropic.Tool['input_schema'],
+      inputSchema: this.inputSchema,
     };
   }
 }

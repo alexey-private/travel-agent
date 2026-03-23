@@ -94,9 +94,9 @@ describe('WebSearchTool', () => {
     expect((result.data as { results: unknown[] }).results).toHaveLength(0);
   });
 
-  it('exposes the correct Anthropic tool schema', () => {
-    const schema = tool.toAnthropicTool();
-    expect(schema.name).toBe('web_search');
-    expect(schema.input_schema.required).toContain('query');
+  it('exposes the correct tool definition', () => {
+    const def = tool.toToolDefinition();
+    expect(def.name).toBe('web_search');
+    expect((def.inputSchema as { required: string[] }).required).toContain('query');
   });
 });

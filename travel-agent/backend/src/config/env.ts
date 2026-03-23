@@ -19,6 +19,7 @@ const envSchema = z.object({
     .optional(),
 
   // AI
+  LLM_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
 
   // External tools

@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { RAGService } from '@/services/RAGService';
 import { KnowledgeRepository } from '@/repositories/KnowledgeRepository';
 import { EmbeddingService } from '@/services/EmbeddingService';
+import { LLMClient } from '@/llm/LLMClient';
 
 jest.mock('@/repositories/KnowledgeRepository');
 
@@ -11,54 +11,48 @@ describe('RAGService', () => {
   let service: RAGService;
   let mockRepo: jest.Mocked<KnowledgeRepository>;
   let mockEmbed: jest.Mock;
-  let mockCreate: jest.Mock;
+  let mockComplete: jest.Mock;
 
   beforeEach(() => {
     MockKnowledgeRepository.mockClear();
 
-    mockCreate = jest.fn();
-    const mockAnthropic = { messages: { create: mockCreate } } as unknown as Anthropic;
+    mockComplete = jest.fn();
+    const mockLLMClient = { complete: mockComplete, stream: jest.fn() } as unknown as LLMClient;
 
     mockEmbed = jest.fn().mockResolvedValue(Array(1536).fill(0.1));
     const mockEmbeddingService = { embed: mockEmbed } as unknown as EmbeddingService;
 
-    service = new RAGService({} as any, mockAnthropic, mockEmbeddingService);
+    service = new RAGService({} as any, mockLLMClient, mockEmbeddingService);
     mockRepo = MockKnowledgeRepository.mock.instances[0] as jest.Mocked<KnowledgeRepository>;
   });
 
   describe('shouldQueryKnowledgeBase', () => {
-    it('returns true when Claude responds with "yes"', async () => {
-      mockCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'yes' }],
-      });
+    it('returns true when the model responds with "yes"', async () => {
+      mockComplete.mockResolvedValue('yes');
 
       const result = await service.shouldQueryKnowledgeBase('Do I need a visa for Japan?');
 
       expect(result).toBe(true);
     });
 
-    it('returns true when Claude responds with "yes" followed by more text', async () => {
-      mockCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'Yes, this needs a knowledge base lookup.' }],
-      });
+    it('returns true when the model responds with "yes" followed by more text', async () => {
+      mockComplete.mockResolvedValue('Yes, this needs a knowledge base lookup.');
 
       const result = await service.shouldQueryKnowledgeBase('What vaccines do I need for Thailand?');
 
       expect(result).toBe(true);
     });
 
-    it('returns false when Claude responds with "no"', async () => {
-      mockCreate.mockResolvedValue({
-        content: [{ type: 'text', text: 'no' }],
-      });
+    it('returns false when the model responds with "no"', async () => {
+      mockComplete.mockResolvedValue('no');
 
       const result = await service.shouldQueryKnowledgeBase('What time is it?');
 
       expect(result).toBe(false);
     });
 
-    it('defaults to true when the Anthropic call throws', async () => {
-      mockCreate.mockRejectedValue(new Error('API unavailable'));
+    it('defaults to true when the LLM call throws', async () => {
+      mockComplete.mockRejectedValue(new Error('API unavailable'));
 
       const result = await service.shouldQueryKnowledgeBase('Any query');
 
@@ -108,7 +102,7 @@ describe('RAGService', () => {
 
   describe('buildRagContext', () => {
     it('returns formatted context string when RAG is needed and chunks are found', async () => {
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'yes' }] });
+      mockComplete.mockResolvedValue('yes');
       mockRepo.findSimilar.mockResolvedValue([
         { topic: 'Tokyo visa', content: 'Visa-free for 90 days.', similarity: 0.9 },
         { topic: 'Tokyo health', content: 'No vaccinations required.', similarity: 0.8 },
@@ -122,7 +116,7 @@ describe('RAGService', () => {
     });
 
     it('returns null when RAG is not needed', async () => {
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'no' }] });
+      mockComplete.mockResolvedValue('no');
 
       const context = await service.buildRagContext('What time is it?');
 
@@ -131,7 +125,7 @@ describe('RAGService', () => {
     });
 
     it('returns null when no chunks are found', async () => {
-      mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'yes' }] });
+      mockComplete.mockResolvedValue('yes');
       mockRepo.findSimilar.mockResolvedValue([]);
 
       const context = await service.buildRagContext('Obscure travel question');
