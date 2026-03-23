@@ -46,10 +46,12 @@ travel-agent/
 │       │       ├── 001_schema.sql   # users, conversations, messages, user_memories
 │       │       └── 002_pgvector.sql # knowledge_base + IVFFlat index
 │       ├── tools/
-│       │   ├── BaseTool.ts      # Abstract base class → Anthropic Tool shape
-│       │   ├── WebSearchTool.ts # Tavily web search
-│       │   ├── WeatherTool.ts   # OpenWeatherMap forecast
-│       │   └── ToolRegistry.ts  # Tool map + execute dispatcher
+│       │   ├── BaseTool.ts         # Abstract base class → Anthropic Tool shape
+│       │   ├── WebSearchTool.ts    # Tavily web search
+│       │   ├── WeatherTool.ts      # OpenWeatherMap forecast
+│       │   ├── CountryInfoTool.ts  # RestCountries API (free, no key)
+│       │   ├── CurrencyTool.ts     # Frankfurter API (free, no key)
+│       │   └── ToolRegistry.ts     # Tool map + execute dispatcher
 │       ├── agent/
 │       │   ├── TravelAgent.ts   # ReAct loop (AsyncGenerator + SSE events)
 │       │   ├── AgentContext.ts  # Immutable per-request value object
@@ -217,12 +219,15 @@ emit { type: "done" }
 **SSE event stream example:**
 
 ```
+data: {"type":"conversation_id","conversationId":"uuid"}
 data: {"type":"text","content":"Let me check the latest visa requirements…"}
 data: {"type":"tool_start","tool":"web_search","input":{"query":"Japan visa US citizens 2025"}}
 data: {"type":"tool_end","tool":"web_search","output":{"results":[…]}}
 data: {"type":"tool_start","tool":"get_weather","input":{"city":"Tokyo","days":5}}
 data: {"type":"tool_end","tool":"get_weather","output":{"forecast":[…]}}
 data: {"type":"text","content":"Here is your personalised Tokyo itinerary…"}
+data: {"type":"sources","sources":[{"title":"Japan Visa Guide","url":"https://…"}]}
+data: {"type":"suggestions","suggestions":["What's the best time to visit Kyoto?","How much does a week in Tokyo cost?","Do I need travel insurance for Japan?"]}
 data: {"type":"done"}
 ```
 

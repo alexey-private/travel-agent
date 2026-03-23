@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2 } from "lucide-react";
 import MessageBubble, { type Message } from "./MessageBubble";
-import { streamChat, fetchMessages, type AgentEvent } from "@/lib/api";
+import { streamChat, fetchMessages, type AgentEvent, type ChatMessage } from "@/lib/api";
 import { type ToolStep } from "./AgentThoughts";
 
 interface ChatWindowProps {
@@ -19,6 +19,34 @@ interface ChatWindowProps {
 let msgCounter = 0;
 function newId() {
   return `msg-${++msgCounter}`;
+}
+
+function sourcesFromSteps(steps?: AgentEvent[] | null): { title: string; url: string }[] {
+  if (!steps) return [];
+  const sources: { title: string; url: string }[] = [];
+  for (const step of steps) {
+    if (step.type === "tool_end" && step.tool === "web_search" && !step.error) {
+      const output = step.output as { results?: { title: string; url: string }[] } | null;
+      if (output?.results) sources.push(...output.results.map((r) => ({ title: r.title, url: r.url })));
+    }
+  }
+  return sources;
+}
+
+function suggestionsFromSteps(steps?: AgentEvent[] | null): string[] {
+  if (!steps) return [];
+  const found = steps.find((s) => s.type === "suggestions") as { type: "suggestions"; suggestions: string[] } | undefined;
+  return found?.suggestions ?? [];
+}
+
+function historyToMessage(m: ChatMessage) {
+  return {
+    id: newId(),
+    role: m.role,
+    content: m.content,
+    sources: sourcesFromSteps(m.agent_steps),
+    suggestions: suggestionsFromSteps(m.agent_steps),
+  };
 }
 
 /**
@@ -45,9 +73,7 @@ export default function ChatWindow({
     if (!initialConversationId) return;
     fetchMessages(userId, initialConversationId)
       .then((history) => {
-        setMessages(
-          history.map((m) => ({ id: newId(), role: m.role, content: m.content })),
-        );
+        setMessages(history.map(historyToMessage));
       })
       .catch(() => {
         // silently ignore — user can still send new messages

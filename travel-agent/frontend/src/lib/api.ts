@@ -89,6 +89,7 @@ export async function deleteMemory(userId: string, key: string): Promise<void> {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  agent_steps?: AgentEvent[] | null;
 }
 
 /** Fetch messages for a specific conversation. */

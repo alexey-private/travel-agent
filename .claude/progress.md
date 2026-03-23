@@ -592,4 +592,33 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 ---
 
-*Last updated: 2026-03-22*
+---
+
+## Post-review improvements (2026-03-23)
+
+### Test contract fixed
+- `TravelAgent.test.ts` and `chat.test.ts` now mock `messages.stream` (used by `TravelAgent`) separately from `messages.create` (used by `RAGService` / `MemoryService`). Added `makeStreamMock()` helper that returns an async iterable + `finalMessage()`.
+
+### Source citations
+- `chat.ts` collects `{title, url}` from `tool_end` events where `tool === 'web_search'`
+- Emits `{ type: 'sources', sources: [...] }` SSE event before `done`
+- `MessageBubble.tsx` renders sources as a linked list below the assistant reply
+
+### Follow-up suggestions
+- After the agent loop, `chat.ts` calls `getSuggestions()` via `claude-haiku-4-5-20251001` (non-streaming, ~0.5s)
+- Emits `{ type: 'suggestions', suggestions: string[] }` SSE event before `done`
+- `MessageBubble.tsx` renders suggestions as clickable chips; click fills the input field
+
+### Prompt sync (finding #3)
+- `prompts.ts` now lists all 4 registered tools: `web_search`, `get_weather`, `get_country_info`, `convert_currency`
+
+### Ownership check order fixed (finding #4)
+- Added `verifyOwnership(userId, conversationId)` to `ConversationRepository` and `ConversationService` (single SQL query)
+- `conversations.ts` now checks ownership **before** reading message history
+
+### SDK client removed from memory routes (finding #6)
+- `MemoryService` constructor now accepts `Anthropic | null = null`
+- `extractAndSaveMemories` guards with `if (!this.anthropic) return`
+- `memory.ts` no longer imports or instantiates the Anthropic SDK
+
+*Last updated: 2026-03-23*

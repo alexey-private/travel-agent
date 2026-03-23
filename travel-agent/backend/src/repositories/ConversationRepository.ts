@@ -12,6 +12,7 @@ interface ConversationRow {
 interface MessageRow {
   role: 'user' | 'assistant';
   content: string;
+  agent_steps: unknown[] | null;
 }
 
 interface ConversationListRow {
@@ -80,9 +81,9 @@ export class ConversationRepository extends BaseRepository {
   /**
    * Returns the message history for a conversation, ordered chronologically.
    */
-  async getHistory(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  async getHistory(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null }>> {
     return this.query<MessageRow>(
-      'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      'SELECT role, content, agent_steps FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
       [conversationId],
     );
   }

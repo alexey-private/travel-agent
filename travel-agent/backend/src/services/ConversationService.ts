@@ -41,7 +41,7 @@ export class ConversationService {
    */
   async getHistory(
     conversationId: string,
-  ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null }>> {
     return this.repo.getHistory(conversationId);
   }
 

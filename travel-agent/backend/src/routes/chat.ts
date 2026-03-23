@@ -25,25 +25,34 @@ async function getSuggestions(
   userMessage: string,
   assistantReply: string,
 ): Promise<string[]> {
+  if (!assistantReply.trim()) return [];
   try {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 120,
+      max_tokens: 150,
       messages: [
         {
           role: 'user',
-          content: `Based on this travel Q&A, suggest 3 short follow-up questions the user might want to ask next. Reply with ONLY a JSON array of strings, no explanation.
+          content: `You are a travel assistant. Given the Q&A below, output exactly 3 short follow-up questions the user might ask next.
 
-User: ${userMessage}
-Assistant: ${assistantReply.slice(0, 600)}
+Rules:
+- Output ONLY a valid JSON array of 3 strings
+- Each question must be short (under 10 words)
+- No explanation, no markdown, no extra text
 
-Reply with ONLY: ["question 1?", "question 2?", "question 3?"]`,
+User question: ${userMessage}
+Assistant answer (summary): ${assistantReply.slice(0, 800)}
+
+Output (JSON array only):`,
         },
       ],
     });
-    const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '[]';
-    const parsed: unknown = JSON.parse(text);
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
+    const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '';
+    // Extract JSON array even if model adds surrounding text
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    const parsed: unknown = JSON.parse(match[0]);
+    return Array.isArray(parsed) ? (parsed as string[]).slice(0, 3) : [];
   } catch {
     return [];
   }
@@ -170,6 +179,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         const suggestions = await getSuggestions(anthropic, message, assistantText);
         if (suggestions.length > 0) {
           raw.write(`data: ${JSON.stringify({ type: 'suggestions', suggestions })}\n\n`);
+          // Store suggestions in agentSteps so they survive conversation reload
+          agentSteps.push({ type: 'suggestions', suggestions });
         }
 
         raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
