@@ -13,49 +13,13 @@ import { WebSearchTool } from '../tools/WebSearchTool';
 import { WeatherTool } from '../tools/WeatherTool';
 import { CountryInfoTool } from '../tools/CountryInfoTool';
 import { CurrencyTool } from '../tools/CurrencyTool';
+import { FlightSearchTool } from '../tools/FlightSearchTool';
+import { SuggestionService } from '../services/SuggestionService';
 import { AgentEvent } from '../types/agent';
 
 interface Source {
   title: string;
   url: string;
-}
-
-async function getSuggestions(
-  anthropic: Anthropic,
-  userMessage: string,
-  assistantReply: string,
-): Promise<string[]> {
-  if (!assistantReply.trim()) return [];
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
-      messages: [
-        {
-          role: 'user',
-          content: `You are a travel assistant. Given the Q&A below, output exactly 3 short follow-up questions the user might ask next.
-
-Rules:
-- Output ONLY a valid JSON array of 3 strings
-- Each question must be short (under 10 words)
-- No explanation, no markdown, no extra text
-
-User question: ${userMessage}
-Assistant answer (summary): ${assistantReply.slice(0, 800)}
-
-Output (JSON array only):`,
-        },
-      ],
-    });
-    const raw = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '';
-    // Extract JSON array even if model adds surrounding text
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return [];
-    const parsed: unknown = JSON.parse(match[0]);
-    return Array.isArray(parsed) ? (parsed as string[]).slice(0, 3) : [];
-  } catch {
-    return [];
-  }
 }
 
 interface ChatBody {
@@ -128,8 +92,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       toolRegistry.register(new WeatherTool());
       toolRegistry.register(new CountryInfoTool());
       toolRegistry.register(new CurrencyTool());
+      toolRegistry.register(new FlightSearchTool());
 
       const agent = new TravelAgent(toolRegistry, anthropic);
+      const suggestionService = new SuggestionService(anthropic);
 
       // Hijack the connection so Fastify does not finalise the response.
       // CORS headers must be set manually here because reply.hijack() bypasses
@@ -176,7 +142,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // Emit suggestions
-        const suggestions = await getSuggestions(anthropic, message, assistantText);
+        const suggestions = await suggestionService.getSuggestions(message, assistantText);
         if (suggestions.length > 0) {
           raw.write(`data: ${JSON.stringify({ type: 'suggestions', suggestions })}\n\n`);
           // Store suggestions in agentSteps so they survive conversation reload

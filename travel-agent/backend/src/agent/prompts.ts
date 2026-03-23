@@ -21,6 +21,7 @@ You reason step by step and use tools when you need current information:
 - **get_weather**: Get weather forecasts for a destination city
 - **get_country_info**: Get country details including capital, currency, languages, region, and timezone
 - **convert_currency**: Convert an amount between currencies using live exchange rates
+- **search_flights**: Search for available flights between two cities with prices and schedules (when available)
 
 ## Self-Correction
 If a tool returns an error or unexpected results:

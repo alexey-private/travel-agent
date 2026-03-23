@@ -1,5 +1,7 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import AgentThoughts, { type ToolStep } from "./AgentThoughts";
 
 export interface Message {
@@ -58,13 +60,38 @@ export default function MessageBubble({ message, onSuggestionClick }: MessageBub
         {/* Bubble text */}
         {message.content && (
           <div
-            className={`px-4 py-3 rounded-2xl shadow-sm whitespace-pre-wrap text-sm leading-relaxed ${
+            className={`px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
               isUser
-                ? "bg-blue-600 text-white rounded-tr-sm"
+                ? "bg-blue-600 text-white rounded-tr-sm whitespace-pre-wrap"
                 : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm"
             }`}
           >
-            {message.content}
+            {isUser ? (
+              message.content
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  h1: ({ children }) => <h1 className="text-base font-bold mb-1 mt-2">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2">{children}</h3>,
+                  code: ({ children }) => <code className="bg-gray-100 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+                  blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-3 text-gray-600 my-2">{children}</blockquote>,
+                  a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{children}</a>,
+                  hr: () => <hr className="border-gray-200 my-2" />,
+                  table: ({ children }) => <table className="text-xs border-collapse w-full my-2">{children}</table>,
+                  th: ({ children }) => <th className="border border-gray-200 px-2 py-1 bg-gray-50 font-semibold text-left">{children}</th>,
+                  td: ({ children }) => <td className="border border-gray-200 px-2 py-1">{children}</td>,
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            )}
             {/* Blinking cursor while streaming text */}
             {!isUser && message.streaming && (
               <span className="inline-block w-0.5 h-4 bg-gray-400 animate-pulse ml-0.5 align-text-bottom" />
