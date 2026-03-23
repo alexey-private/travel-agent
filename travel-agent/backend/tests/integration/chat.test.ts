@@ -59,18 +59,48 @@ async function waitForBackgroundSaves(ms = 300): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-function makeMockCreate(): jest.Mock {
-  // Call order within a single POST /api/chat request:
-  //   1. RAGService.shouldQueryKnowledgeBase  → "no"  (skip RAG retrieval)
-  //   2. TravelAgent ReAct loop               → end_turn with assistant text
-  //   3. MemoryService.extractAndSaveMemories → empty JSON (no preferences)
-  return jest.fn()
+type FakeResponse = {
+  stop_reason?: string;
+  content: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
+};
+
+/** Build a fake stream object that TravelAgent can iterate over and call finalMessage() on. */
+function makeStreamMock(response: FakeResponse) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const block of response.content) {
+        if (block.type === 'text' && block.text) {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: block.text },
+          };
+        }
+      }
+    },
+    finalMessage: jest.fn().mockResolvedValue(response),
+  };
+}
+
+/**
+ * Returns mocks for both messages.create (RAG check + memory extraction)
+ * and messages.stream (TravelAgent ReAct loop).
+ *
+ * Call order within a single POST /api/chat request:
+ *   create call 1: RAGService.shouldQueryKnowledgeBase  → "no"
+ *   stream call 1: TravelAgent ReAct loop               → end_turn
+ *   create call 2: MemoryService.extractAndSaveMemories → empty JSON
+ */
+function makeMocks(agentResponse = 'Here is your Tokyo itinerary.') {
+  const mockCreate = jest.fn()
     .mockResolvedValueOnce({ content: [{ type: 'text', text: 'no' }] })
-    .mockResolvedValueOnce({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: 'Here is your Tokyo itinerary.' }],
-    })
     .mockResolvedValue({ content: [{ type: 'text', text: '{}' }] });
+
+  const mockStream = jest.fn().mockReturnValueOnce(makeStreamMock({
+    stop_reason: 'end_turn',
+    content: [{ type: 'text', text: agentResponse }],
+  }));
+
+  return { mockCreate, mockStream };
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
@@ -93,8 +123,9 @@ describe('POST /api/chat (integration)', () => {
     await clearTestDb();
     jest.clearAllMocks();
 
+    const { mockCreate, mockStream } = makeMocks();
     MockAnthropic.mockImplementation(
-      () => ({ messages: { create: makeMockCreate() } }) as unknown as Anthropic,
+      () => ({ messages: { create: mockCreate, stream: mockStream } }) as unknown as Anthropic,
     );
   });
 
@@ -204,18 +235,9 @@ describe('POST /api/chat (integration)', () => {
     const conversationId = convResult.rows[0].id;
 
     // Reset mock for second request
+    const { mockCreate: mockCreate2, mockStream: mockStream2 } = makeMocks('Follow-up reply.');
     MockAnthropic.mockImplementation(
-      () => ({
-        messages: {
-          create: jest.fn()
-            .mockResolvedValueOnce({ content: [{ type: 'text', text: 'no' }] })
-            .mockResolvedValueOnce({
-              stop_reason: 'end_turn',
-              content: [{ type: 'text', text: 'Follow-up reply.' }],
-            })
-            .mockResolvedValue({ content: [{ type: 'text', text: '{}' }] }),
-        },
-      }) as unknown as Anthropic,
+      () => ({ messages: { create: mockCreate2, stream: mockStream2 } }) as unknown as Anthropic,
     );
 
     // Second request — continues the same conversation
@@ -246,17 +268,18 @@ describe('POST /api/chat (integration)', () => {
   it('saves extracted memories to the database when Claude returns preferences', async () => {
     const mockCreate = jest.fn()
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'no' }] }) // RAG check
-      .mockResolvedValueOnce({
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'Great, noted your preferences!' }],
-      })
       .mockResolvedValue({
         // Memory extraction returns real preferences
         content: [{ type: 'text', text: '{"home_city":"San Francisco","diet":"vegetarian"}' }],
       });
 
+    const mockStream = jest.fn().mockReturnValueOnce(makeStreamMock({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: 'Great, noted your preferences!' }],
+    }));
+
     MockAnthropic.mockImplementation(
-      () => ({ messages: { create: mockCreate } }) as unknown as Anthropic,
+      () => ({ messages: { create: mockCreate, stream: mockStream } }) as unknown as Anthropic,
     );
 
     const response = await app.inject({
