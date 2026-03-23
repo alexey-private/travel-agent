@@ -67,6 +67,17 @@ export class ConversationRepository extends BaseRepository {
   }
 
   /**
+   * Returns true if the conversation belongs to the given user.
+   */
+  async verifyOwnership(userId: string, conversationId: string): Promise<boolean> {
+    const row = await this.queryOne<{ id: string }>(
+      'SELECT id FROM conversations WHERE id = $1 AND user_id = $2',
+      [conversationId, userId],
+    );
+    return row !== null;
+  }
+
+  /**
    * Returns the message history for a conversation, ordered chronologically.
    */
   async getHistory(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {

@@ -2,8 +2,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getPool } from '../db/client';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
-import Anthropic from '@anthropic-ai/sdk';
-import { env } from '../config/env';
 
 interface UserIdParam {
   /** Client-side session ID stored in localStorage */
@@ -31,10 +29,8 @@ export async function memoryRoutes(fastify: FastifyInstance): Promise<void> {
       const { userId: sessionId } = request.params;
 
       const pool = getPool();
-      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-
       const conversationService = new ConversationService(pool);
-      const memoryService = new MemoryService(pool, anthropic);
+      const memoryService = new MemoryService(pool);
 
       const internalUserId = await conversationService.findOrCreateUser(sessionId);
       const memories = await memoryService.getMemories(internalUserId);
@@ -53,10 +49,8 @@ export async function memoryRoutes(fastify: FastifyInstance): Promise<void> {
       const { userId: sessionId, key } = request.params;
 
       const pool = getPool();
-      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-
       const conversationService = new ConversationService(pool);
-      const memoryService = new MemoryService(pool, anthropic);
+      const memoryService = new MemoryService(pool);
 
       const internalUserId = await conversationService.findOrCreateUser(sessionId);
       await memoryService.deleteMemory(internalUserId, key);

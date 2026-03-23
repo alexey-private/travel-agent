@@ -5,6 +5,8 @@ export type AgentEvent =
   | { type: "text"; content: string }
   | { type: "tool_start"; tool: string; input: unknown }
   | { type: "tool_end"; tool: string; output: unknown; error?: string }
+  | { type: "sources"; sources: { title: string; url: string }[] }
+  | { type: "suggestions"; suggestions: string[] }
   | { type: "done" };
 
 export interface Conversation {

@@ -20,9 +20,9 @@ Example output:
  */
 export class MemoryService {
   private repo: MemoryRepository;
-  private anthropic: Anthropic;
+  private anthropic: Anthropic | null;
 
-  constructor(pool: Pool, anthropic: Anthropic) {
+  constructor(pool: Pool, anthropic: Anthropic | null = null) {
     this.repo = new MemoryRepository(pool);
     this.anthropic = anthropic;
   }
@@ -52,7 +52,7 @@ export class MemoryService {
    * @param conversationText - Combined user+assistant turns from the last exchange
    */
   async extractAndSaveMemories(userId: string, conversationText: string): Promise<void> {
-    if (!conversationText.trim()) return;
+    if (!conversationText.trim() || !this.anthropic) return;
 
     let extracted: Record<string, string>;
     try {

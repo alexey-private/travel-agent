@@ -28,13 +28,12 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
       const conversationService = new ConversationService(pool);
 
       const internalUserId = await conversationService.findOrCreateUser(sessionId);
-      const history = await conversationService.getHistory(conversationId);
 
-      // Verify ownership — return empty if conversation belongs to another user
-      const conversations = await conversationService.listConversations(internalUserId);
-      const owned = conversations.some((c) => c.id === conversationId);
+      // Verify ownership before reading messages
+      const owned = await conversationService.verifyOwnership(internalUserId, conversationId);
       if (!owned) return reply.status(403).send({ error: 'Forbidden' });
 
+      const history = await conversationService.getHistory(conversationId);
       return reply.send({ messages: history });
     },
   );

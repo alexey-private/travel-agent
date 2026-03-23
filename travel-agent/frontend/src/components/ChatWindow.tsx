@@ -157,6 +157,24 @@ export default function ChatWindow({
               break;
             }
 
+            case "sources": {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId ? { ...m, sources: event.sources } : m,
+                ),
+              );
+              break;
+            }
+
+            case "suggestions": {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId ? { ...m, suggestions: event.suggestions } : m,
+                ),
+              );
+              break;
+            }
+
             case "done": {
               setMessages((prev) =>
                 prev.map((m) =>
@@ -185,6 +203,10 @@ export default function ChatWindow({
     }
   }, [input, loading, userId, conversationId, onConversationCreated, onReplyComplete]);
 
+  const handleSuggestionClick = useCallback((text: string) => {
+    setInput(text);
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -205,7 +227,7 @@ export default function ChatWindow({
         )}
 
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onSuggestionClick={handleSuggestionClick} />
         ))}
 
         <div ref={bottomRef} />

@@ -15,6 +15,40 @@ import { CountryInfoTool } from '../tools/CountryInfoTool';
 import { CurrencyTool } from '../tools/CurrencyTool';
 import { AgentEvent } from '../types/agent';
 
+interface Source {
+  title: string;
+  url: string;
+}
+
+async function getSuggestions(
+  anthropic: Anthropic,
+  userMessage: string,
+  assistantReply: string,
+): Promise<string[]> {
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 120,
+      messages: [
+        {
+          role: 'user',
+          content: `Based on this travel Q&A, suggest 3 short follow-up questions the user might want to ask next. Reply with ONLY a JSON array of strings, no explanation.
+
+User: ${userMessage}
+Assistant: ${assistantReply.slice(0, 600)}
+
+Reply with ONLY: ["question 1?", "question 2?", "question 3?"]`,
+        },
+      ],
+    });
+    const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '[]';
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 interface ChatBody {
   /** Client-side session ID stored in localStorage */
   userId: string;
@@ -106,6 +140,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
+      const sources: Source[] = [];
 
       try {
         for await (const event of agent.run(context)) {
@@ -113,11 +148,35 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
           if (event.type === 'text') {
             assistantText += event.content;
           }
-          raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          // Collect sources from web_search results
+          if (event.type === 'tool_end' && event.tool === 'web_search' && !event.error) {
+            const output = event.output as { results?: { title: string; url: string }[] } | null;
+            if (output?.results) {
+              sources.push(...output.results.map(r => ({ title: r.title, url: r.url })));
+            }
+          }
+          // Delay 'done' until sources and suggestions are emitted
+          if (event.type !== 'done') {
+            raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
         }
+
+        // Emit sources
+        if (sources.length > 0) {
+          raw.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
+        }
+
+        // Emit suggestions
+        const suggestions = await getSuggestions(anthropic, message, assistantText);
+        if (suggestions.length > 0) {
+          raw.write(`data: ${JSON.stringify({ type: 'suggestions', suggestions })}\n\n`);
+        }
+
+        raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        raw.write(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        raw.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
+        raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       } finally {
         raw.end();
       }

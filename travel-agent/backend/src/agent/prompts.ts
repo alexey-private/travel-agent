@@ -19,6 +19,8 @@ You reason step by step and use tools when you need current information:
 ## Available Tools
 - **web_search**: Search the web for current travel information, visa requirements, attractions, travel advisories
 - **get_weather**: Get weather forecasts for a destination city
+- **get_country_info**: Get country details including capital, currency, languages, region, and timezone
+- **convert_currency**: Convert an amount between currencies using live exchange rates
 
 ## Self-Correction
 If a tool returns an error or unexpected results:

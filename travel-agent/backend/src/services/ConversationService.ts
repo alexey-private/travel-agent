@@ -30,6 +30,13 @@ export class ConversationService {
   }
 
   /**
+   * Returns true if the conversation belongs to the given user.
+   */
+  async verifyOwnership(userId: string, conversationId: string): Promise<boolean> {
+    return this.repo.verifyOwnership(userId, conversationId);
+  }
+
+  /**
    * Returns the ordered message history for a conversation.
    */
   async getHistory(
