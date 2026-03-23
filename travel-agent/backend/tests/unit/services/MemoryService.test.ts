@@ -1,3 +1,4 @@
+import { Pool } from 'pg';
 import { MemoryService } from '@/services/MemoryService';
 import { MemoryRepository } from '@/repositories/MemoryRepository';
 import { LLMClient } from '@/llm/LLMClient';
@@ -17,7 +18,7 @@ describe('MemoryService', () => {
     mockComplete = jest.fn();
     const mockLLMClient = { complete: mockComplete, stream: jest.fn() } as unknown as LLMClient;
 
-    service = new MemoryService({} as any, mockLLMClient);
+    service = new MemoryService(null as unknown as Pool, mockLLMClient);
     mockRepo = MockMemoryRepository.mock.instances[0] as jest.Mocked<MemoryRepository>;
   });
 

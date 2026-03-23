@@ -1,6 +1,7 @@
 import { TravelAgent } from '@/agent/TravelAgent';
 import { AgentContext } from '@/agent/AgentContext';
 import { ToolRegistry } from '@/tools/ToolRegistry';
+import { BaseTool } from '@/tools/BaseTool';
 import { AgentEvent } from '@/types/agent';
 import { LLMClient } from '@/llm/LLMClient';
 import { LLMStreamEvent, LLMToolCall } from '@/llm/types';
@@ -80,7 +81,7 @@ describe('TravelAgent', () => {
         inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
       }),
     };
-    toolRegistry.register(mockTool as any);
+    toolRegistry.register(mockTool as unknown as BaseTool);
 
     mockStream
       .mockReturnValueOnce(
@@ -109,7 +110,7 @@ describe('TravelAgent', () => {
         inputSchema: { type: 'object', properties: {}, required: [] },
       }),
     };
-    toolRegistry.register(mockTool as any);
+    toolRegistry.register(mockTool as unknown as BaseTool);
 
     mockStream
       .mockReturnValueOnce(

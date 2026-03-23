@@ -1,3 +1,4 @@
+import { Pool } from 'pg';
 import { UserService } from '@/services/UserService';
 import { UserRepository } from '@/repositories/UserRepository';
 
@@ -11,7 +12,7 @@ describe('UserService', () => {
 
   beforeEach(() => {
     MockUserRepository.mockClear();
-    service = new UserService({} as any);
+    service = new UserService(null as unknown as Pool);
     mockRepo = MockUserRepository.mock.instances[0] as jest.Mocked<UserRepository>;
   });
 

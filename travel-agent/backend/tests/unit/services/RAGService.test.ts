@@ -1,3 +1,4 @@
+import { Pool } from 'pg';
 import { RAGService } from '@/services/RAGService';
 import { KnowledgeRepository } from '@/repositories/KnowledgeRepository';
 import { EmbeddingService } from '@/services/EmbeddingService';
@@ -22,7 +23,7 @@ describe('RAGService', () => {
     mockEmbed = jest.fn().mockResolvedValue(Array(1536).fill(0.1));
     const mockEmbeddingService = { embed: mockEmbed } as unknown as EmbeddingService;
 
-    service = new RAGService({} as any, mockLLMClient, mockEmbeddingService);
+    service = new RAGService(null as unknown as Pool, mockLLMClient, mockEmbeddingService);
     mockRepo = MockKnowledgeRepository.mock.instances[0] as jest.Mocked<KnowledgeRepository>;
   });
 
