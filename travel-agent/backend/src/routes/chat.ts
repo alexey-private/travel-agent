@@ -161,11 +161,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Persist conversation — user message first to ensure correct ordering by created_at
-      const conversationText = `User: ${message}\n\nAssistant: ${assistantText}`;
       await conversationService.saveMessage(conversationId, 'user', message);
       await Promise.allSettled([
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
-        memoryService.extractAndSaveMemories(internalUserId, conversationText),
+        // Pass only the user's message so the extractor never picks up facts
+        // that the assistant inferred (e.g. "flying from Tel Aviv" → home_city).
+        memoryService.extractAndSaveMemories(internalUserId, message),
       ]);
     },
   );

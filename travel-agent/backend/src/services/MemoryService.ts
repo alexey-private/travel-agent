@@ -4,15 +4,19 @@ import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
 
 const EXTRACT_MEMORIES_PROMPT = `You are a memory extraction assistant.
-Given a travel planning conversation, extract key user preferences and facts as a JSON object.
-Focus on: home city, preferred airlines, dietary restrictions, budget level, travel style,
-visa/passport country, preferred hotel type, and any other persistent preferences mentioned.
+Given a message from the user, extract key personal facts and persistent preferences as a JSON object.
+Focus on: name, home city, preferred airlines, seat preference, dietary restrictions, budget level,
+travel style, passport/visa country, preferred hotel type, and any other persistent preferences.
 
-Return ONLY a valid JSON object where keys are snake_case preference names and values are short strings.
-If nothing meaningful can be extracted, return an empty object {}.
+Rules:
+- Only extract facts the user explicitly stated about themselves — never infer from context.
+- Do not extract trip-specific details (destination, travel dates, number of nights, etc.).
+- If a fact was already known (provided in "Existing memories"), only include it in the output
+  if the user is explicitly updating or correcting it.
+- Return ONLY a valid JSON object. If nothing new can be extracted, return {}.
 
 Example output:
-{"home_city": "San Francisco", "diet": "vegetarian", "budget": "mid-range", "airline": "United"}`;
+{"name": "Alex", "home_city": "San Francisco", "diet": "vegetarian", "budget": "mid-range", "airline": "United"}`;
 
 /**
  * Service for managing user long-term memory.
@@ -42,17 +46,25 @@ export class MemoryService {
   }
 
   /**
-   * Uses Claude to extract user preferences from the conversation text,
+   * Uses Claude to extract user preferences from the user's message,
    * then persists each extracted key-value pair via upsert.
    *
-   * Silently skips extraction if the conversation is empty or Claude returns
+   * Existing memories are passed as context so the extractor avoids
+   * overwriting known facts with weaker/inferred signals.
+   *
+   * Silently skips extraction if the message is empty or Claude returns
    * an unparseable response.
    *
    * @param userId - The internal user UUID
-   * @param conversationText - Combined user+assistant turns from the last exchange
+   * @param userMessage - The raw user message from the last exchange
    */
-  async extractAndSaveMemories(userId: string, conversationText: string): Promise<void> {
-    if (!conversationText.trim() || !this.anthropic) return;
+  async extractAndSaveMemories(userId: string, userMessage: string): Promise<void> {
+    if (!userMessage.trim() || !this.anthropic) return;
+
+    const existing = await this.repo.getMemories(userId);
+    const existingSection = existing.length > 0
+      ? `\nExisting memories:\n${existing.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
+      : '';
 
     let extracted: Record<string, string>;
     try {
@@ -60,7 +72,7 @@ export class MemoryService {
         model: 'claude-haiku-4-5-20251001', // Cheaper model; extraction is simple
         max_tokens: 512,
         system: EXTRACT_MEMORIES_PROMPT,
-        messages: [{ role: 'user', content: conversationText }],
+        messages: [{ role: 'user', content: `${existingSection}User message:\n${userMessage}` }],
       });
 
       const text = response.content

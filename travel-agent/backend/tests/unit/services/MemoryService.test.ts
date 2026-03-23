@@ -45,6 +45,7 @@ describe('MemoryService', () => {
 
   describe('extractAndSaveMemories', () => {
     it('calls Claude, parses the JSON response, and upserts each key-value pair', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
       mockCreate.mockResolvedValue({
         content: [
           {
@@ -55,7 +56,7 @@ describe('MemoryService', () => {
       });
       mockRepo.upsertMemory.mockResolvedValue(undefined);
 
-      await service.extractAndSaveMemories('user-1', 'User: I live in San Francisco and I am vegetarian.');
+      await service.extractAndSaveMemories('user-1', 'I live in San Francisco and I am vegetarian.');
 
       expect(mockCreate).toHaveBeenCalledTimes(1);
       expect(mockRepo.upsertMemory).toHaveBeenCalledTimes(3);
@@ -64,7 +65,26 @@ describe('MemoryService', () => {
       expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'budget', 'mid-range');
     });
 
+    it('passes existing memories to Claude as context', async () => {
+      mockRepo.getMemories.mockResolvedValue([
+        { key: 'home_city', value: 'Ashkelon' },
+        { key: 'name', value: 'Alexey' },
+      ]);
+      mockCreate.mockResolvedValue({
+        content: [{ type: 'text', text: '{"airline": "EL AL"}' }],
+      });
+      mockRepo.upsertMemory.mockResolvedValue(undefined);
+
+      await service.extractAndSaveMemories('user-1', 'I usually fly EL AL.');
+
+      const callArg = mockCreate.mock.calls[0][0];
+      const userContent = callArg.messages[0].content as string;
+      expect(userContent).toContain('home_city: Ashkelon');
+      expect(userContent).toContain('name: Alexey');
+    });
+
     it('handles JSON embedded in surrounding prose', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
       mockCreate.mockResolvedValue({
         content: [
           {
@@ -81,6 +101,7 @@ describe('MemoryService', () => {
     });
 
     it('skips saving when Claude returns an empty object', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
       mockCreate.mockResolvedValue({
         content: [{ type: 'text', text: '{}' }],
       });
@@ -90,7 +111,7 @@ describe('MemoryService', () => {
       expect(mockRepo.upsertMemory).not.toHaveBeenCalled();
     });
 
-    it('does not call Claude when the conversation text is empty', async () => {
+    it('does not call Claude when the user message is empty', async () => {
       await service.extractAndSaveMemories('user-1', '   ');
 
       expect(mockCreate).not.toHaveBeenCalled();
@@ -98,11 +119,11 @@ describe('MemoryService', () => {
     });
 
     it('does not throw when Claude returns unparseable text', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
       mockCreate.mockResolvedValue({
         content: [{ type: 'text', text: 'No preferences found.' }],
       });
 
-      // Should complete without throwing
       await expect(
         service.extractAndSaveMemories('user-1', 'Hello, how are you?'),
       ).resolves.toBeUndefined();
@@ -111,6 +132,7 @@ describe('MemoryService', () => {
     });
 
     it('does not throw when the Anthropic call rejects', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
       mockCreate.mockRejectedValue(new Error('API error'));
 
       await expect(
