@@ -291,6 +291,43 @@ The seeded knowledge base contains curated documents on visa requirements, healt
 
 ---
 
+## Replacing the LLM Provider
+
+The codebase is coupled to the **Anthropic SDK** in five files. Replacing Claude with another provider (OpenAI, Gemini, etc.) requires changes in those places only — the rest of the stack (database, tools, RAG, streaming) is provider-agnostic.
+
+### What needs to change
+
+| File | What to update |
+|------|----------------|
+| `agent/TravelAgent.ts` | Replace `anthropic.messages.stream()` call and Anthropic-specific types (`MessageParam`, `ToolUseBlock`, `ToolResultBlockParam`) with the new provider's streaming API and message format |
+| `tools/BaseTool.ts` | Replace `toAnthropicTool()` with the new provider's tool definition schema (e.g. OpenAI uses `"type": "function"` with `parameters`, Anthropic uses `input_schema`) |
+| `services/MemoryService.ts` | Replace `anthropic.messages.create()` call and response parsing |
+| `services/RAGService.ts` | Same — replace `messages.create()` call |
+| `services/SuggestionService.ts` | Same — replace `messages.create()` call |
+
+### What does NOT need to change
+
+- All tools (`WebSearchTool`, `WeatherTool`, etc.) — they return plain objects
+- `EmbeddingService` — uses Voyage AI independently
+- Database schema and repositories
+- SSE streaming infrastructure
+- Frontend
+
+### Making it provider-agnostic
+
+If multi-provider support is needed, introduce an `LLMClient` interface:
+
+```typescript
+interface LLMClient {
+  chat(params: { messages: Message[]; tools: ToolDef[]; system: string }): AsyncIterable<LLMEvent>;
+  complete(params: { messages: Message[]; system: string }): Promise<string>;
+}
+```
+
+Implement it for each provider and inject into `TravelAgent`, `MemoryService`, `RAGService`, and `SuggestionService`. For a single-provider demo this abstraction is unnecessary.
+
+---
+
 ## Running Tests
 
 ```bash
