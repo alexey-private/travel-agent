@@ -277,7 +277,7 @@ Before invoking the agent, the chat route runs a **two-step retrieval pipeline**
 ### Step 2 — Semantic search
 
 If retrieval is warranted:
-1. `EmbeddingService.embed(query)` converts the query to a 1 536-dimension vector via Voyage AI (`voyage-3-lite`). In development without a `VOYAGE_API_KEY`, random unit vectors are used as a fallback.
+1. `EmbeddingService.embed(query)` converts the query to a 512-dimension vector via Voyage AI (`voyage-3-lite`). In development without a `VOYAGE_API_KEY`, random unit vectors are used as a fallback.
 2. `KnowledgeRepository.findSimilar()` runs a **cosine similarity** search against the `knowledge_base` table using pgvector:
    ```sql
    SELECT topic, content, 1 - (embedding <=> $1) AS similarity
