@@ -1,5 +1,5 @@
-/** Dimension used in the knowledge_base schema (matches vector(1536)). */
-const EMBEDDING_DIM = 1536;
+/** Dimension used in the knowledge_base schema (matches voyage-3-lite native output). */
+const EMBEDDING_DIM = 512;
 
 /** Voyage AI REST endpoint for embeddings. */
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings';
@@ -31,7 +31,7 @@ export class EmbeddingService {
     return this.randomVector();
   }
 
-  private async embedWithVoyage(text: string): Promise<number[]> {
+  private async embedWithVoyage(text: string, attempt = 0): Promise<number[]> {
     const response = await fetch(VOYAGE_API_URL, {
       method: 'POST',
       headers: {
@@ -41,9 +41,14 @@ export class EmbeddingService {
       body: JSON.stringify({
         model: 'voyage-3-lite',
         input: [text],
-        output_dimension: EMBEDDING_DIM,
       }),
     });
+
+    if (response.status === 429 && attempt < 4) {
+      const delay = 2000 * (attempt + 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return this.embedWithVoyage(text, attempt + 1);
+    }
 
     if (!response.ok) {
       throw new Error(`Voyage AI API error: ${response.status} ${response.statusText}`);

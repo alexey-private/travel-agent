@@ -248,8 +248,14 @@ async function main() {
     }
 
     process.stdout.write(`  INSERT ${doc.topic} … `);
-    await ragService.ingestDocument(doc.topic, doc.content, doc.metadata);
-    console.log('done');
+    try {
+      await ragService.ingestDocument(doc.topic, doc.content, doc.metadata);
+      console.log('done');
+    } catch (err) {
+      console.log(`FAILED (${err instanceof Error ? err.message : err}) — skipping`);
+    }
+    // Respect Voyage AI free-tier rate limit
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
   await pool.end();
