@@ -18,6 +18,7 @@ export class SuggestionService {
 Rules:
 - Output ONLY a valid JSON array of 3 strings
 - Each question must be short (under 10 words)
+- Write questions from the user's perspective (use "my", "I", "me" — not "your" or "you")
 - No explanation, no markdown, no extra text
 
 User question: ${userMessage}
