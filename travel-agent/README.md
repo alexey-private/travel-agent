@@ -51,6 +51,7 @@ travel-agent/
 │       │   ├── WeatherTool.ts      # OpenWeatherMap forecast
 │       │   ├── CountryInfoTool.ts  # RestCountries API (free, no key)
 │       │   ├── CurrencyTool.ts     # Frankfurter API (free, no key)
+│       │   ├── FlightSearchTool.ts # Deterministic flight mock (demo data)
 │       │   └── ToolRegistry.ts     # Tool map + execute dispatcher
 │       ├── agent/
 │       │   ├── TravelAgent.ts   # ReAct loop (AsyncGenerator + SSE events)
@@ -58,9 +59,10 @@ travel-agent/
 │       │   └── prompts.ts       # System prompt builder
 │       ├── services/
 │       │   ├── ConversationService.ts
-│       │   ├── MemoryService.ts    # Preference extraction + persistence
-│       │   ├── RAGService.ts       # Agentic retrieval-augmented generation
-│       │   └── EmbeddingService.ts # voyage-3-lite via Voyage AI (random vectors fallback in dev)
+│       │   ├── MemoryService.ts      # Preference extraction + persistence
+│       │   ├── SuggestionService.ts  # Follow-up question generation (Haiku)
+│       │   ├── RAGService.ts         # Agentic retrieval-augmented generation
+│       │   └── EmbeddingService.ts   # voyage-3-lite 512-dim; random fallback in dev
 │       ├── repositories/
 │       │   ├── BaseRepository.ts
 │       │   ├── ConversationRepository.ts

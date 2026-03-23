@@ -621,4 +621,35 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 - `extractAndSaveMemories` guards with `if (!this.anthropic) return`
 - `memory.ts` no longer imports or instantiates the Anthropic SDK
 
+---
+
+## Session 2 improvements (2026-03-23)
+
+### react-markdown
+- Installed `react-markdown` + `remark-gfm` in frontend
+- `MessageBubble` renders assistant replies as Markdown (bold, lists, headers, tables, code, links)
+- User messages remain plain text
+
+### FlightSearchTool
+- New `search_flights` tool — deterministic mock, no external API required
+- Accepts city names or IATA codes, returns 3 realistic flight offers sorted by price
+- Added to tool registry and system prompt
+
+### SuggestionService
+- Extracted `getSuggestions` from `chat.ts` into `src/services/SuggestionService.ts`
+- `chat.ts` now instantiates and delegates to the service
+
+### Starter suggestions
+- Empty chat shows 5 clickable suggestion chips above the input field
+
+### Memory acknowledgment
+- System prompt updated: agent must now explicitly say when it applies a stored preference
+
+### Voyage AI integration fixed
+- Removed unsupported `output_dimension` parameter
+- Switched to native 512-dim output of `voyage-3-lite`
+- Added retry with exponential backoff (up to 4 retries) on 429
+- Migration `003_embedding_dim.sql`: `vector(1536)` → `vector(512)`
+- Seed: per-document delay (3s) + graceful skip on rate-limit failures
+
 *Last updated: 2026-03-23*

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import AgentThoughts, { type ToolStep } from "./AgentThoughts";
 
 export interface Message {
@@ -27,8 +29,11 @@ interface MessageBubbleProps {
  * Renders a single chat message bubble.
  * Assistant messages include an optional AgentThoughts section.
  */
+const SOURCES_PREVIEW = 5;
+
 export default function MessageBubble({ message, onSuggestionClick }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
@@ -104,7 +109,7 @@ export default function MessageBubble({ message, onSuggestionClick }: MessageBub
           <div className="mt-1.5 px-1">
             <p className="text-xs text-gray-400 font-medium mb-1">Sources</p>
             <ul className="space-y-0.5">
-              {message.sources!.map((s, i) => (
+              {message.sources!.slice(0, SOURCES_PREVIEW).map((s, i) => (
                 <li key={i} className="flex items-start gap-1">
                   <span className="text-gray-300 text-xs mt-0.5">↗</span>
                   <a
@@ -117,7 +122,32 @@ export default function MessageBubble({ message, onSuggestionClick }: MessageBub
                   </a>
                 </li>
               ))}
+              {sourcesExpanded &&
+                message.sources!.slice(SOURCES_PREVIEW).map((s, i) => (
+                  <li key={SOURCES_PREVIEW + i} className="flex items-start gap-1">
+                    <span className="text-gray-300 text-xs mt-0.5">↗</span>
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-500 hover:underline line-clamp-1"
+                    >
+                      {s.title}
+                    </a>
+                  </li>
+                ))}
             </ul>
+            {message.sources!.length > SOURCES_PREVIEW && (
+              <button
+                onClick={() => setSourcesExpanded((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-1"
+              >
+                {sourcesExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                {sourcesExpanded
+                  ? "Show less"
+                  : `${message.sources!.length - SOURCES_PREVIEW} more…`}
+              </button>
+            )}
           </div>
         )}
 
