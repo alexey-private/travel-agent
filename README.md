@@ -1,6 +1,6 @@
 # Travel Planning AI Agent
 
-A full-stack AI travel planning assistant powered by Claude. The agent uses a **ReAct loop** (Reason → Act → Observe → Respond) to answer travel queries, remembers user preferences across sessions, and retrieves curated destination knowledge via **Agentic RAG**.
+A full-stack AI travel planning assistant that supports **Anthropic Claude** and **OpenAI GPT-4o** as interchangeable backends. The agent uses a **ReAct loop** (Reason → Act → Observe → Respond) to answer travel queries, remembers user preferences across sessions, and retrieves curated destination knowledge via **Agentic RAG**.
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -138,7 +138,7 @@ Fastify (Node.js)
     └── MemoryRoute ──► MemoryRepository ──► PostgreSQL
 ```
 
-**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · Lucide React · react-markdown · Claude `claude-sonnet-4-6` · Voyage AI (`voyage-3-lite`) · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
+**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · Lucide React · react-markdown · Claude `claude-sonnet-4-6` or OpenAI `gpt-4o` (switchable) · Voyage AI (`voyage-3-lite`) · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
 
 ---
 
@@ -210,7 +210,8 @@ Open [http://localhost:3000](http://localhost:3000).
 |---|---|---|
 | `DATABASE_URL` | Yes | PostgreSQL connection string (dev) |
 | `TEST_DATABASE_URL` | For tests | PostgreSQL connection string (test) |
-| `ANTHROPIC_API_KEY` | Yes | Claude API key (`sk-ant-…`) |
+| `ANTHROPIC_API_KEY` | When `LLM_PROVIDER=anthropic` | Claude API key (`sk-ant-…`) |
+| `OPENAI_API_KEY` | When `LLM_PROVIDER=openai` | OpenAI API key (`sk-proj-…`) |
 | `LLM_PROVIDER` | No | LLM backend: `anthropic` (default) or `openai` |
 | `TAVILY_API_KEY` | Yes | Tavily web search API key (`tvly-…`) |
 | `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key |
@@ -332,8 +333,8 @@ src/llm/
 ├── LLMClient.ts          # interface: stream() + complete()
 ├── types.ts              # shared types: LLMMessage, LLMToolCall, LLMStreamEvent, …
 ├── LLMClientFactory.ts   # Factory — reads LLM_PROVIDER from env
-├── AnthropicLLMClient.ts # production implementation
-└── OpenAILLMClient.ts    # stub — ready to implement
+├── AnthropicLLMClient.ts # Claude implementation (claude-sonnet-4-6 / haiku)
+└── OpenAILLMClient.ts    # OpenAI implementation (gpt-4o / gpt-4o-mini)
 ```
 
 ### Adding a new provider
@@ -345,6 +346,21 @@ src/llm/
 5. Set `LLM_PROVIDER=<provider>` in the environment
 
 Nothing else needs to change — `TravelAgent`, `MemoryService`, `RAGService`, `SuggestionService`, all tools, the database, the SSE infrastructure, and the frontend are all provider-agnostic.
+
+### Switching to OpenAI
+
+Set in `.env`:
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-proj-…
+```
+
+The `OpenAILLMClient` uses **gpt-4o** for the ReAct loop and **gpt-4o-mini** for lightweight tasks (memory extraction, suggestions), mirroring the Sonnet/Haiku split of the Anthropic client.
+
+**Message format differences handled transparently:**
+- Tool results: OpenAI requires one `{ role: "tool" }` message per result; Anthropic batches all results into a single user turn.
+- Tool calls in streaming: OpenAI sends deltas with `delta.tool_calls[].function.arguments` fragments that must be accumulated by index before parsing.
+- Finish reason: OpenAI uses `"tool_calls"` where Anthropic uses `"tool_use"`.
 
 ### Key mapping from Anthropic to OpenAI
 

@@ -57,9 +57,13 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       const pool = getPool();
+      const apiKey =
+        env.LLM_PROVIDER === 'openai'
+          ? env.OPENAI_API_KEY ?? (() => { throw new Error('OPENAI_API_KEY is required when LLM_PROVIDER=openai'); })()
+          : env.ANTHROPIC_API_KEY ?? (() => { throw new Error('ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic'); })();
       const llmClient = LLMClientFactory.create({
         provider: env.LLM_PROVIDER,
-        apiKey: env.ANTHROPIC_API_KEY,
+        apiKey,
       });
 
       const userService = new UserService(pool);

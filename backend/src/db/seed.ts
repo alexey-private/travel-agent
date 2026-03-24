@@ -229,7 +229,7 @@ Note: a separate Protected Area Permit (PAP) or Inner Line Permit (ILP) is requi
 
 async function main() {
   const pool = new Pool({ connectionString: env.DATABASE_URL });
-  const llmClient = new AnthropicLLMClient(env.ANTHROPIC_API_KEY);
+  const llmClient = new AnthropicLLMClient(env.ANTHROPIC_API_KEY ?? '');
   const embeddingService = new EmbeddingService();
   const ragService = new RAGService(pool, llmClient, embeddingService);
 

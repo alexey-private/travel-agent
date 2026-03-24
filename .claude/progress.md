@@ -667,4 +667,27 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 ### Suggestion prompts fixed (user perspective)
 - Suggestions are now phrased from the user's perspective ("my trip" not "your trip")
 
+---
+
+## Session 4 improvements (2026-03-24)
+
+### OpenAI LLM client — full implementation
+- `OpenAILLMClient.ts` fully implemented (was a stub)
+- `npm install openai` added to backend dependencies
+- `stream()`: accumulates `delta.tool_calls[]` fragments by index; maps `finish_reason: 'tool_calls'` → `reason: 'tool_use'`
+- `complete()`: uses `gpt-4o-mini` for lightweight single-turn tasks
+- Message format translation: one `{ role: 'tool' }` message per result (vs Anthropic's batched user turn)
+- Models: `gpt-4o` for ReAct loop, `gpt-4o-mini` for memory/suggestions (mirrors Sonnet/Haiku split)
+
+### Environment & config
+- `OPENAI_API_KEY` added to `env.ts` schema (optional), `.env`, and `.env.example`
+- `ANTHROPIC_API_KEY` made optional in Zod schema (required only when `LLM_PROVIDER=anthropic`)
+- `chat.ts`: API key selected dynamically based on `LLM_PROVIDER`; throws at request time with a clear message if the key is missing
+
+### System prompt improvements
+- Mandatory tool combinations by query type (flight search → also weather + country info + currency)
+- GPT-4o now calls 3–4 tools per travel query instead of 1
+- Rich Markdown formatting instructions: emoji section headers, tables for flights/weather, bullet lists, specific numbers
+- Example response structure included in the prompt
+
 *Last updated: 2026-03-24*
