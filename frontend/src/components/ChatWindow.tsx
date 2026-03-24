@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Send, Loader2 } from "lucide-react";
 import MessageBubble, { type Message } from "./MessageBubble";
+import { getRandomSuggestions } from "../data/starterSuggestions";
 import { streamChat, fetchMessages, type AgentEvent, type ChatMessage } from "@/lib/api";
 import { type ToolStep } from "./AgentThoughts";
 
@@ -233,13 +234,7 @@ export default function ChatWindow({
     setInput(text);
   }, []);
 
-  const STARTER_SUGGESTIONS = [
-    "Plan a 7-day trip to Tokyo in April",
-    "Best time to visit Bali — weather & crowds?",
-    "Do I need a visa for Thailand from the US?",
-    "Convert 1000 USD to EUR",
-    "Top vegetarian-friendly cities in Europe",
-  ];
+  const suggestions = useMemo(() => getRandomSuggestions(5), []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -272,7 +267,7 @@ export default function ChatWindow({
         {/* Starter suggestions — shown only in an empty chat */}
         {messages.length === 0 && !loading && (
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {STARTER_SUGGESTIONS.map((s) => (
+            {suggestions.map((s) => (
               <button
                 key={s}
                 onClick={() => handleSuggestionClick(s)}
