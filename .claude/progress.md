@@ -652,4 +652,19 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 - Migration `003_embedding_dim.sql`: `vector(1536)` → `vector(512)`
 - Seed: per-document delay (3s) + graceful skip on rate-limit failures
 
-*Last updated: 2026-03-23*
+---
+
+## Session 3 improvements (2026-03-24)
+
+### Parallel tool execution in TravelAgent
+- `TravelAgent.run()`: tool calls are now executed in parallel via `Promise.all` instead of sequentially
+- All `tool_start` events emitted first, then tools run concurrently, then `tool_end` events emitted in order
+
+### Provider-agnostic LLM client
+- Introduced `LLMClient` interface + `LLMClientFactory`
+- `AnthropicLLMClient` implements the interface; swap provider without touching agent/service code
+
+### Suggestion prompts fixed (user perspective)
+- Suggestions are now phrased from the user's perspective ("my trip" not "your trip")
+
+*Last updated: 2026-03-24*
