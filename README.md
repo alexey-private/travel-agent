@@ -43,8 +43,9 @@ A full-stack AI travel planning assistant powered by Claude. The agent uses a **
 │       │   ├── migrate.ts       # SQL migration runner
 │       │   ├── seed.ts          # Knowledge base seed data
 │       │   └── migrations/
-│       │       ├── 001_schema.sql   # users, conversations, messages, user_memories
-│       │       └── 002_pgvector.sql # knowledge_base + IVFFlat index
+│       │       ├── 001_schema.sql        # users, conversations, messages, user_memories
+│       │       ├── 002_pgvector.sql      # knowledge_base + IVFFlat index
+│       │       └── 003_embedding_dim.sql # resize embedding column 1536→512 (voyage-3-lite)
 │       ├── tools/
 │       │   ├── BaseTool.ts         # Abstract base class → Anthropic Tool shape
 │       │   ├── WebSearchTool.ts    # Tavily web search
@@ -69,8 +70,9 @@ A full-stack AI travel planning assistant powered by Claude. The agent uses a **
 │       │   ├── MemoryRepository.ts
 │       │   └── KnowledgeRepository.ts  # pgvector cosine similarity search
 │       ├── routes/
-│       │   ├── chat.ts          # POST /api/chat → SSE stream
-│       │   └── memory.ts        # GET/DELETE /api/memory/:userId
+│       │   ├── chat.ts              # POST /api/chat → SSE stream
+│       │   ├── memory.ts            # GET/DELETE /api/memory/:userId
+│       │   └── conversations.ts     # GET /api/conversations/:userId[/:conversationId/messages]
 │       └── types/
 │           ├── agent.ts
 │           ├── tools.ts
@@ -209,6 +211,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `DATABASE_URL` | Yes | PostgreSQL connection string (dev) |
 | `TEST_DATABASE_URL` | For tests | PostgreSQL connection string (test) |
 | `ANTHROPIC_API_KEY` | Yes | Claude API key (`sk-ant-…`) |
+| `LLM_PROVIDER` | No | LLM backend: `anthropic` (default) or `openai` |
 | `TAVILY_API_KEY` | Yes | Tavily web search API key (`tvly-…`) |
 | `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key |
 | `VOYAGE_API_KEY` | No | Voyage AI key for semantic embeddings (random vectors used in dev if absent) |
@@ -410,3 +413,32 @@ Returns all stored preferences for a user.
 ### `DELETE /api/memory/:userId/:key`
 
 Removes a single preference. Returns `204 No Content`.
+
+---
+
+### `GET /api/conversations/:userId`
+
+Returns the conversation list for a user, newest first.
+
+```json
+{
+  "conversations": [
+    { "id": "uuid", "title": "Plan a trip to Tokyo in April", "created_at": "2025-04-01T10:00:00Z" }
+  ]
+}
+```
+
+---
+
+### `GET /api/conversations/:userId/:conversationId/messages`
+
+Returns the full message history for a conversation. Returns `403 Forbidden` if the conversation does not belong to the user.
+
+```json
+{
+  "messages": [
+    { "role": "user", "content": "Plan a trip to Tokyo" },
+    { "role": "assistant", "content": "Here is your itinerary…", "agent_steps": [...] }
+  ]
+}
+```
