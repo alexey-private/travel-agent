@@ -17,9 +17,8 @@ interface ChatWindowProps {
   onReplyComplete?: () => void;
 }
 
-let msgCounter = 0;
 function newId() {
-  return `msg-${++msgCounter}`;
+  return crypto.randomUUID();
 }
 
 function sourcesFromSteps(steps?: AgentEvent[] | null): { title: string; url: string }[] {
@@ -147,7 +146,7 @@ export default function ChatWindow({
                 input: event.input,
                 pending: true,
               };
-              stepsMap.set(event.tool + stepId, step);
+              stepsMap.set(stepId, step);
               stepOrder = [...stepOrder, stepId];
 
               setMessages((prev) =>
@@ -162,9 +161,9 @@ export default function ChatWindow({
 
             case "tool_end": {
               // Find the last pending step for this tool
-              const pendingKey = Array.from(stepsMap.keys())
+              const pendingKey = Array.from(stepsMap.entries())
                 .reverse()
-                .find((k) => k.startsWith(event.tool) && stepsMap.get(k)?.pending);
+                .find(([, s]) => s.tool === event.tool && s.pending)?.[0];
               if (pendingKey) {
                 const existing = stepsMap.get(pendingKey)!;
                 stepsMap.set(pendingKey, {

@@ -77,18 +77,47 @@ A full-stack AI travel planning assistant powered by Claude. The agent uses a **
 │           └── memory.ts
 └── frontend/
     └── src/
-        ├── app/page.tsx
-        └── components/
-            ├── ChatWindow.tsx
-            ├── MessageBubble.tsx
-            ├── AgentThoughts.tsx  # Collapsible real-time tool calls
-            └── MemoryPanel.tsx    # Displayed + deletable preferences
+        ├── app/
+        │   ├── layout.tsx         # Root HTML shell + metadata
+        │   ├── page.tsx           # 3-panel layout; userId + refresh state
+        │   └── globals.css        # Tailwind base + scrollbar utilities
+        ├── components/
+        │   ├── ChatWindow.tsx     # SSE streaming, message list, input bar
+        │   ├── MessageBubble.tsx  # Markdown render, sources, suggestions
+        │   ├── AgentThoughts.tsx  # Collapsible real-time tool calls
+        │   ├── MemoryPanel.tsx    # Displayed + deletable preferences
+        │   └── ConversationList.tsx  # Left sidebar, conversation history
+        ├── lib/
+        │   └── api.ts             # Typed fetch wrappers + SSE stream parser
+        └── data/
+            └── starterSuggestions.ts  # Pool of example prompts shown on empty chat
 ```
 
 ### Component diagram
 
 ```
 Browser (Next.js)
+    │
+    ├── page.tsx  (Home)
+    │     ├── state: userId (localStorage), chatKey, selectedConversationId
+    │     ├── state: memoryRefresh, conversationListRefresh  (int counters → trigger re-fetch)
+    │     │
+    │     ├── ConversationList
+    │     │     └── GET /api/conversations/:userId  (re-fetches on refreshTrigger)
+    │     │
+    │     ├── ChatWindow  (remounted via chatKey on conversation switch)
+    │     │     ├── GET /api/conversations/:userId/:id/messages  (load history)
+    │     │     ├── POST /api/chat  →  SSE stream
+    │     │     │     └── lib/api.ts: streamChat()  (chunked SSE parser)
+    │     │     │           events: conversation_id | text | tool_start |
+    │     │     │                   tool_end | sources | suggestions | done
+    │     │     └── MessageBubble  (per message)
+    │     │           └── AgentThoughts  (collapsible tool steps)
+    │     │
+    │     └── MemoryPanel
+    │           ├── GET  /api/memory/:userId  (re-fetches on refreshTrigger)
+    │           └── DELETE /api/memory/:userId/:key
+    │
     │  POST /api/chat  (SSE stream)
     │  GET/DELETE /api/memory/:userId
     ▼
@@ -107,7 +136,7 @@ Fastify (Node.js)
     └── MemoryRoute ──► MemoryRepository ──► PostgreSQL
 ```
 
-**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · shadcn/ui · Claude `claude-sonnet-4-6` · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
+**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · Lucide React · react-markdown · Claude `claude-sonnet-4-6` · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
 
 ---
 
