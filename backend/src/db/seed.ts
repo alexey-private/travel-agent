@@ -10,10 +10,10 @@
  */
 
 import { Pool } from 'pg';
-import Anthropic from '@anthropic-ai/sdk';
 import { env } from '../config/env';
 import { EmbeddingService } from '../services/EmbeddingService';
 import { RAGService } from '../services/RAGService';
+import { AnthropicLLMClient } from '../llm/AnthropicLLMClient';
 
 // ---------------------------------------------------------------------------
 // Seed documents
@@ -229,9 +229,9 @@ Note: a separate Protected Area Permit (PAP) or Inner Line Permit (ILP) is requi
 
 async function main() {
   const pool = new Pool({ connectionString: env.DATABASE_URL });
-  const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  const llmClient = new AnthropicLLMClient(env.ANTHROPIC_API_KEY);
   const embeddingService = new EmbeddingService();
-  const ragService = new RAGService(pool, anthropic, embeddingService);
+  const ragService = new RAGService(pool, llmClient, embeddingService);
 
   console.log(`Seeding ${DOCUMENTS.length} knowledge base documents…\n`);
 
