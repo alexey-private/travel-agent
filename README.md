@@ -136,7 +136,7 @@ Fastify (Node.js)
     └── MemoryRoute ──► MemoryRepository ──► PostgreSQL
 ```
 
-**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · Lucide React · react-markdown · Claude `claude-sonnet-4-6` · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
+**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · Lucide React · react-markdown · Claude `claude-sonnet-4-6` · Voyage AI (`voyage-3-lite`) · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
 
 ---
 

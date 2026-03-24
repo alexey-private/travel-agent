@@ -32,12 +32,12 @@ describe("ChatWindow — initial render", () => {
   it("renders the textarea and send button", () => {
     render(<ChatWindow userId="u1" />);
     expect(screen.getByPlaceholderText(/plan a trip/i)).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /send/i })).toBeInTheDocument();
   });
 
   it("send button is disabled when input is empty", () => {
     render(<ChatWindow userId="u1" />);
-    expect(screen.getByRole("button")).toBeDisabled();
+    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   });
 });
 
@@ -49,7 +49,7 @@ describe("ChatWindow — sending messages", () => {
 
     render(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Plan a trip to Tokyo");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByText("Plan a trip to Tokyo"));
     await waitFor(() => screen.getByText("Here is your plan"));
@@ -60,7 +60,7 @@ describe("ChatWindow — sending messages", () => {
     render(<ChatWindow userId="u1" />);
     const textarea = screen.getByRole("textbox");
     await userEvent.type(textarea, "Hello");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(textarea).toHaveValue(""));
   });
 
@@ -73,7 +73,7 @@ describe("ChatWindow — sending messages", () => {
 
     render(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     expect(screen.getByRole("textbox")).toBeDisabled();
     act(() => resolve());
@@ -109,7 +109,7 @@ describe("ChatWindow — SSE event handling", () => {
 
     render(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByText("Hello world"));
   });
@@ -124,7 +124,7 @@ describe("ChatWindow — SSE event handling", () => {
 
     render(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Search");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => screen.getByText(/1 tool/i));
   });
@@ -134,7 +134,7 @@ describe("ChatWindow — SSE event handling", () => {
 
     render(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() =>
       screen.getByText(/error.*network failure/i),
@@ -147,7 +147,7 @@ describe("ChatWindow — SSE event handling", () => {
 
     render(<ChatWindow userId="u1" onReplyComplete={onReplyComplete} />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
-    await userEvent.click(screen.getByRole("button"));
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => expect(onReplyComplete).toHaveBeenCalledTimes(1));
   });

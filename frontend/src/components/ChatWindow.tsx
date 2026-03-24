@@ -288,6 +288,7 @@ export default function ChatWindow({
             disabled={loading}
           />
           <button
+            aria-label="Send"
             onClick={() => void sendMessage()}
             disabled={loading || !input.trim()}
             className="h-11 w-11 rounded-xl bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
