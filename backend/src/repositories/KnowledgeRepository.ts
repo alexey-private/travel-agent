@@ -32,6 +32,9 @@ export class KnowledgeRepository extends BaseRepository {
       // Probe all IVFFlat lists so small knowledge bases (<< lists count) are
       // searched exhaustively. Without this, the default probes=1 misses most
       // results when the table has fewer rows than the number of index lists.
+      // DEV ONLY: probes=10 compensates for lists=100 index built on a tiny dataset.
+      // In production, remove this and instead rebuild the index with lists sized
+      // to match the actual row count (rule of thumb: lists ≈ rows / 1000).
       await client.query('SET ivfflat.probes = 10');
       const result = await client.query<KnowledgeRow>(
         `SELECT topic, content, 1 - (embedding <=> $1::vector) AS similarity
