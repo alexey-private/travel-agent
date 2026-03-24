@@ -27,14 +27,23 @@ export class KnowledgeRepository extends BaseRepository {
    */
   async findSimilar(embedding: number[], topK: number): Promise<KnowledgeChunk[]> {
     const vectorLiteral = `[${embedding.join(',')}]`;
-    const rows = await this.query<KnowledgeRow>(
-      `SELECT topic, content, 1 - (embedding <=> $1::vector) AS similarity
-       FROM knowledge_base
-       ORDER BY embedding <=> $1::vector
-       LIMIT $2`,
-      [vectorLiteral, topK],
-    );
-    return rows.map(r => ({ topic: r.topic, content: r.content, similarity: Number(r.similarity) }));
+    const client = await this.pool.connect();
+    try {
+      // Probe all IVFFlat lists so small knowledge bases (<< lists count) are
+      // searched exhaustively. Without this, the default probes=1 misses most
+      // results when the table has fewer rows than the number of index lists.
+      await client.query('SET ivfflat.probes = 10');
+      const result = await client.query<KnowledgeRow>(
+        `SELECT topic, content, 1 - (embedding <=> $1::vector) AS similarity
+         FROM knowledge_base
+         ORDER BY embedding <=> $1::vector
+         LIMIT $2`,
+        [vectorLiteral, topK],
+      );
+      return result.rows.map(r => ({ topic: r.topic, content: r.content, similarity: Number(r.similarity) }));
+    } finally {
+      client.release();
+    }
   }
 
   /**

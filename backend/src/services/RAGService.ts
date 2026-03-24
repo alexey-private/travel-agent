@@ -40,8 +40,11 @@ export class RAGService {
         maxTokens: 10,
       });
 
-      return text.toLowerCase().trim().startsWith('yes');
-    } catch {
+      const result = text.toLowerCase().trim().startsWith('yes');
+      console.log(`[RAG] shouldQueryKnowledgeBase: "${text.trim()}" → ${result}`);
+      return result;
+    } catch (err) {
+      console.log(`[RAG] shouldQueryKnowledgeBase error: ${err}`);
       // Default to true on error so RAG is not silently skipped
       return true;
     }
@@ -55,7 +58,10 @@ export class RAGService {
    */
   async retrieve(query: string, topK = 3): Promise<KnowledgeChunk[]> {
     const embedding = await this.embeddingService.embed(query);
-    return this.knowledgeRepo.findSimilar(embedding, topK);
+    console.log(`[RAG] embedding dims: ${embedding.length}, first values: ${embedding.slice(0, 3).map(v => v.toFixed(4))}`);
+    const chunks = await this.knowledgeRepo.findSimilar(embedding, topK);
+    console.log(`[RAG] retrieve found ${chunks.length} chunks:`, chunks.map(c => `${c.topic} (${c.similarity.toFixed(3)})`));
+    return chunks;
   }
 
   /**

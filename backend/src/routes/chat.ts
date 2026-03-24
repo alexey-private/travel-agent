@@ -86,6 +86,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         ragService.buildRagContext(message),
       ]);
 
+      fastify.log.info({ ragContext: ragContext ? ragContext.slice(0, 200) : null }, 'RAG context result');
+
       const context = new AgentContext(
         internalUserId,
         conversationId,
@@ -121,6 +123,12 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Send conversationId immediately so the client can track the session
       raw.write(`data: ${JSON.stringify({ type: 'conversation_id', conversationId })}\n\n`);
+
+      // Show RAG context in the UI so it's visible during demos/testing
+      if (ragContext) {
+        raw.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'knowledge_base', input: { query: message } })}\n\n`);
+        raw.write(`data: ${JSON.stringify({ type: 'tool_end', tool: 'knowledge_base', output: ragContext })}\n\n`);
+      }
 
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
