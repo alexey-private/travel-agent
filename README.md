@@ -29,7 +29,7 @@ A full-stack AI travel planning assistant powered by Claude. The agent uses a **
 ## Architecture
 
 ```
-travel-agent/
+.
 ├── docker-compose.yml           # PostgreSQL 16 + pgvector (dev + test)
 ├── .env.example
 ├── package.json                 # npm workspaces root
@@ -124,7 +124,7 @@ Fastify (Node.js)
 
 ```bash
 git clone <repo-url>
-cd travel-agent
+cd <repo-dir>
 cp .env.example .env
 # Edit .env — fill in your API keys
 ```
