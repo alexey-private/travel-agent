@@ -255,6 +255,8 @@ emit { type: "done" }
 
 ```
 data: {"type":"conversation_id","conversationId":"uuid"}
+data: {"type":"tool_start","tool":"knowledge_base","input":{"query":"Plan a trip to Tokyo"}}
+data: {"type":"tool_end","tool":"knowledge_base","output":"[Tokyo visa requirements]\n…"}
 data: {"type":"text","content":"Let me check the latest visa requirements…"}
 data: {"type":"tool_start","tool":"web_search","input":{"query":"Japan visa US citizens 2025"}}
 data: {"type":"tool_end","tool":"web_search","output":{"results":[…]}}
@@ -313,11 +315,13 @@ If retrieval is warranted:
 1. `EmbeddingService.embed(query)` converts the query to a 512-dimension vector via Voyage AI (`voyage-3-lite`). In development without a `VOYAGE_API_KEY`, random unit vectors are used as a fallback.
 2. `KnowledgeRepository.findSimilar()` runs a **cosine similarity** search against the `knowledge_base` table using pgvector:
    ```sql
+   SET ivfflat.probes = 10;  -- dev only: compensates for lists=100 index on a small dataset
    SELECT topic, content, 1 - (embedding <=> $1) AS similarity
    FROM knowledge_base
    ORDER BY embedding <=> $1
    LIMIT $2;
    ```
+   > **Note (dev):** The IVFFlat index is built with `lists=100`. With the default `probes=1`, only 1 of 100 clusters is searched — the query returns 0 results on a tiny seed dataset. Setting `probes=10` forces a broader search. In production, rebuild the index with `lists ≈ rows / 1000` and remove this override.
 3. The top-3 chunks are prepended to the user message as inline context before Claude is called.
 
 The seeded knowledge base contains curated documents on visa requirements, health tips, currency/tipping guides, and cultural etiquette for 7 popular destinations. This gives the agent authoritative baseline knowledge even when web search is rate-limited.

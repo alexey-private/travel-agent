@@ -5,6 +5,14 @@ import { getPool, closePool } from './db/client';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
+import { LLMClientFactory } from './llm/LLMClientFactory';
+import { EmbeddingService } from './services/EmbeddingService';
+import { ToolRegistry } from './tools/ToolRegistry';
+import { WebSearchTool } from './tools/WebSearchTool';
+import { WeatherTool } from './tools/WeatherTool';
+import { CountryInfoTool } from './tools/CountryInfoTool';
+import { CurrencyTool } from './tools/CurrencyTool';
+import { FlightSearchTool } from './tools/FlightSearchTool';
 
 const fastify = Fastify({
   logger: {
@@ -23,8 +31,23 @@ async function bootstrap(): Promise<void> {
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
   });
 
+  // Shared singletons — created once at startup, reused across all requests
+  const apiKey = env.LLM_PROVIDER === 'openai'
+    ? env.OPENAI_API_KEY ?? (() => { throw new Error('OPENAI_API_KEY is required'); })()
+    : env.ANTHROPIC_API_KEY ?? (() => { throw new Error('ANTHROPIC_API_KEY is required'); })();
+
+  const llmClient = LLMClientFactory.create({ provider: env.LLM_PROVIDER, apiKey });
+  const embeddingService = new EmbeddingService();
+
+  const toolRegistry = new ToolRegistry();
+  toolRegistry.register(new WebSearchTool());
+  toolRegistry.register(new WeatherTool());
+  toolRegistry.register(new CountryInfoTool());
+  toolRegistry.register(new CurrencyTool());
+  toolRegistry.register(new FlightSearchTool());
+
   // Routes
-  await fastify.register(chatRoutes);
+  await fastify.register(chatRoutes, { llmClient, toolRegistry, embeddingService });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
 

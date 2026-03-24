@@ -1,7 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getPool } from '../db/client';
-import { env } from '../config/env';
-import { LLMClientFactory } from '../llm/LLMClientFactory';
+import { LLMClient } from '../llm/LLMClient';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
@@ -10,13 +9,14 @@ import { EmbeddingService } from '../services/EmbeddingService';
 import { TravelAgent } from '../agent/TravelAgent';
 import { AgentContext } from '../agent/AgentContext';
 import { ToolRegistry } from '../tools/ToolRegistry';
-import { WebSearchTool } from '../tools/WebSearchTool';
-import { WeatherTool } from '../tools/WeatherTool';
-import { CountryInfoTool } from '../tools/CountryInfoTool';
-import { CurrencyTool } from '../tools/CurrencyTool';
-import { FlightSearchTool } from '../tools/FlightSearchTool';
 import { SuggestionService } from '../services/SuggestionService';
 import { AgentEvent } from '../types/agent';
+
+interface ChatRouteOptions {
+  llmClient: LLMClient;
+  toolRegistry: ToolRegistry;
+  embeddingService: EmbeddingService;
+}
 
 interface Source {
   title: string;
@@ -46,7 +46,8 @@ interface ChatBody {
  * After the stream ends the route persists the exchange to the DB and
  * triggers memory extraction in the background.
  */
-export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
+export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
+  const { llmClient, toolRegistry, embeddingService } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -57,19 +58,9 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       const pool = getPool();
-      const apiKey =
-        env.LLM_PROVIDER === 'openai'
-          ? env.OPENAI_API_KEY ?? (() => { throw new Error('OPENAI_API_KEY is required when LLM_PROVIDER=openai'); })()
-          : env.ANTHROPIC_API_KEY ?? (() => { throw new Error('ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic'); })();
-      const llmClient = LLMClientFactory.create({
-        provider: env.LLM_PROVIDER,
-        apiKey,
-      });
-
       const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
       const memoryService = new MemoryService(pool, llmClient);
-      const embeddingService = new EmbeddingService();
       const ragService = new RAGService(pool, llmClient, embeddingService);
 
       // Resolve/create user and conversation
@@ -96,14 +87,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         ragContext,
         history,
       );
-
-      // Build tool registry
-      const toolRegistry = new ToolRegistry();
-      toolRegistry.register(new WebSearchTool());
-      toolRegistry.register(new WeatherTool());
-      toolRegistry.register(new CountryInfoTool());
-      toolRegistry.register(new CurrencyTool());
-      toolRegistry.register(new FlightSearchTool());
 
       const agent = new TravelAgent(toolRegistry, llmClient);
       const suggestionService = new SuggestionService(llmClient);

@@ -9,6 +9,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import Fastify, { FastifyInstance } from 'fastify';
 import { chatRoutes } from '@/routes/chat';
 import { closePool } from '@/db/client';
+import { AnthropicLLMClient } from '@/llm/AnthropicLLMClient';
+import { EmbeddingService } from '@/services/EmbeddingService';
+import { ToolRegistry } from '@/tools/ToolRegistry';
+import { WebSearchTool } from '@/tools/WebSearchTool';
+import { WeatherTool } from '@/tools/WeatherTool';
+import { CountryInfoTool } from '@/tools/CountryInfoTool';
+import { CurrencyTool } from '@/tools/CurrencyTool';
+import { FlightSearchTool } from '@/tools/FlightSearchTool';
 import { setupTestDb, clearTestDb, teardownTestDb, getTestPool } from '../helpers/testDb';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -45,7 +53,19 @@ function parseSseBody(body: string): Array<Record<string, unknown>> {
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(chatRoutes);
+
+  const toolRegistry = new ToolRegistry();
+  toolRegistry.register(new WebSearchTool());
+  toolRegistry.register(new WeatherTool());
+  toolRegistry.register(new CountryInfoTool());
+  toolRegistry.register(new CurrencyTool());
+  toolRegistry.register(new FlightSearchTool());
+
+  await app.register(chatRoutes, {
+    llmClient: new AnthropicLLMClient('test-key'),
+    toolRegistry,
+    embeddingService: new EmbeddingService(),
+  });
   return app;
 }
 
@@ -111,11 +131,9 @@ describe('POST /api/chat (integration)', () => {
 
   beforeAll(async () => {
     await setupTestDb();
-    app = await buildApp();
   });
 
   afterAll(async () => {
-    await app.close();
     await closePool();
     await teardownTestDb();
   });
@@ -124,10 +142,17 @@ describe('POST /api/chat (integration)', () => {
     await clearTestDb();
     jest.clearAllMocks();
 
+    // Set up mocks BEFORE building the app so that new Anthropic() picks them up
     const { mockCreate, mockStream } = makeMocks();
     MockAnthropic.mockImplementation(
       () => ({ messages: { create: mockCreate, stream: mockStream } }) as unknown as Anthropic,
     );
+
+    app = await buildApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
   });
 
   // ── Response format ──────────────────────────────────────────────────────
@@ -267,6 +292,8 @@ describe('POST /api/chat (integration)', () => {
   // ── Memory extraction ────────────────────────────────────────────────────
 
   it('saves extracted memories to the database when Claude returns preferences', async () => {
+    // Rebuild app with custom mocks BEFORE creating the LLM client
+    await app.close();
     const mockCreate = jest.fn()
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'no' }] }) // RAG check
       .mockResolvedValue({
@@ -282,6 +309,7 @@ describe('POST /api/chat (integration)', () => {
     MockAnthropic.mockImplementation(
       () => ({ messages: { create: mockCreate, stream: mockStream } }) as unknown as Anthropic,
     );
+    app = await buildApp();
 
     const response = await app.inject({
       method: 'POST',
