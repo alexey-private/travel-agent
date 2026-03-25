@@ -79,18 +79,6 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       fastify.log.info({ ragContext: ragContext ? ragContext.slice(0, 200) : null }, 'RAG context result');
 
-      const context = new AgentContext(
-        internalUserId,
-        conversationId,
-        message,
-        memories,
-        ragContext,
-        history,
-      );
-
-      const agent = new TravelAgent(toolRegistry, llmClient);
-      const suggestionService = new SuggestionService(llmClient);
-
       // Hijack the connection so Fastify does not finalise the response.
       // CORS headers must be set manually here because reply.hijack() bypasses
       // the @fastify/cors onSend hook.
@@ -113,6 +101,17 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         raw.write(`data: ${JSON.stringify({ type: 'tool_end', tool: 'knowledge_base', output: ragContext })}\n\n`);
       }
 
+      const context = new AgentContext(
+        internalUserId,
+        conversationId,
+        message,
+        memories,
+        ragContext,
+        history,
+      );
+
+      const agent = new TravelAgent(toolRegistry, llmClient);
+      const suggestionService = new SuggestionService(llmClient);
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
       const sources: Source[] = [];

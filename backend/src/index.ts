@@ -35,7 +35,7 @@ async function bootstrap(): Promise<void> {
   const apiKey = env.LLM_PROVIDER === 'openai'
     ? env.OPENAI_API_KEY ?? (() => { throw new Error('OPENAI_API_KEY is required'); })()
     : env.ANTHROPIC_API_KEY ?? (() => { throw new Error('ANTHROPIC_API_KEY is required'); })();
-
+  // 
   const llmClient = LLMClientFactory.create({ provider: env.LLM_PROVIDER, apiKey });
   const embeddingService = new EmbeddingService();
 
