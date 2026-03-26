@@ -57,6 +57,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         return reply.status(400).send({ error: 'userId and message are required' });
       }
 
+      // Services Initialization 
       const pool = getPool();
       const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
@@ -101,6 +102,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         raw.write(`data: ${JSON.stringify({ type: 'tool_end', tool: 'knowledge_base', output: ragContext })}\n\n`);
       }
 
+      // 
       const context = new AgentContext(
         internalUserId,
         conversationId,

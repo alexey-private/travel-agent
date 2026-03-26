@@ -50,7 +50,7 @@ export class TravelAgent {
 
     messages.push({ role: 'user', content: userContent });
 
-    // ── ReAct loop ────────────────────────────────────────────────────────────
+    // -- ReAct loop --
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       let stopEvent: Extract<LLMStreamEvent, { type: 'stop' }> | null = null;
 
