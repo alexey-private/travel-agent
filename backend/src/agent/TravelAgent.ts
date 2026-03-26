@@ -105,7 +105,7 @@ export class TravelAgent {
       // call more tools or produce a final answer.
       messages.push({ role: 'tool', results: toolResults });
     }
-    // ─────────────────────────────────────────────────────────────────────────
+    // ----------------------------------------
 
     yield { type: 'done' };
   }

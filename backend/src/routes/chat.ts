@@ -117,7 +117,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
       const sources: Source[] = [];
-
+      // 
       try {
         for await (const event of agent.run(context)) {
           agentSteps.push(event);
