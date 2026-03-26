@@ -30,6 +30,7 @@ const CITY_TO_IATA: Record<string, string> = {
   'melbourne': 'MEL', 'toronto': 'YYZ', 'chicago': 'ORD', 'miami': 'MIA',
   'boston': 'BOS', 'seattle': 'SEA', 'denver': 'DEN', 'mexico city': 'MEX',
   'buenos aires': 'EZE', 'sao paulo': 'GRU', 'cairo': 'CAI', 'istanbul': 'IST',
+  'tel aviv': 'TLV', 'jerusalem': 'TLV',
 };
 
 const AIRLINES = [
@@ -43,6 +44,7 @@ const AIRLINES = [
   { code: 'JL', name: 'Japan Airlines' },
   { code: 'SQ', name: 'Singapore Airlines' },
   { code: 'EK', name: 'Emirates' },
+  { code: 'LY', name: 'El Al' },
 ];
 
 /**

@@ -32,19 +32,27 @@ export class AnthropicLLMClient implements LLMClient {
   }
 
   async *stream(params: LLMStreamParams): AsyncIterable<LLMStreamEvent> {
+    // Translate provider-agnostic types into Anthropic-specific shapes before the API call.
     const anthropicMessages = this.toAnthropicMessages(params.messages);
     const tools = params.tools.map(t => this.toAnthropicTool(t));
 
+    // Open a streaming connection. The SDK returns an async iterable of raw SSE chunks
+    // and also tracks the full response internally for finalMessage() below.
     const streamInstance = this.client.messages.stream({
       model: REASONING_MODEL,
       max_tokens: params.maxTokens ?? 4096,
       system: params.system,
+      // Omit the tools field entirely when none are registered — Anthropic rejects an empty array.
       tools: tools.length > 0 ? tools : undefined,
       messages: anthropicMessages,
     });
 
     let assistantText = '';
 
+    // ── Phase 1: live text streaming ─────────────────────────────────────────
+    // Yield each text token as it arrives so callers can display it incrementally.
+    // We skip all other chunk types (content_block_start, ping, tool deltas, etc.)
+    // because tool_use blocks are easier to read from finalMessage() below.
     for await (const chunk of streamInstance) {
       if (
         chunk.type === 'content_block_delta' &&
@@ -56,12 +64,19 @@ export class AnthropicLLMClient implements LLMClient {
       }
     }
 
+    // ── Phase 2: final event ─────────────────────────────────────────────────
+    // finalMessage() resolves once the stream is fully consumed and returns the
+    // complete assembled response — including tool_use blocks that arrived as
+    // partial deltas during streaming. Using it avoids manually reassembling
+    // fragmented tool JSON from the raw chunk stream.
     const response = await streamInstance.finalMessage();
 
+    // Extract all tool calls requested by the model in this turn (may be empty).
     const toolCalls: LLMToolCall[] = response.content
       .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
       .map(b => ({ id: b.id, name: b.name, input: b.input }));
 
+    // Normalize Anthropic's stop_reason to our provider-agnostic union.
     const reason =
       response.stop_reason === 'end_turn'
         ? 'end_turn'
@@ -69,6 +84,8 @@ export class AnthropicLLMClient implements LLMClient {
           ? 'tool_use'
           : 'other';
 
+    // Emit exactly one 'stop' event per turn — callers use this to decide
+    // whether to execute tool calls (tool_use) or finish the ReAct loop (end_turn).
     yield { type: 'stop', reason, toolCalls, assistantText };
   }
 
