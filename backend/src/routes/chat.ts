@@ -7,6 +7,7 @@ import { MemoryService } from '../services/MemoryService';
 import { RAGService } from '../services/RAGService';
 import { EmbeddingService } from '../services/EmbeddingService';
 import { TravelAgent } from '../agent/TravelAgent';
+import { ShoppingAgent } from '../agent/ShoppingAgent';
 import { AgentContext } from '../agent/AgentContext';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { SuggestionService } from '../services/SuggestionService';
@@ -15,6 +16,7 @@ import { AgentEvent } from '../types/agent';
 interface ChatRouteOptions {
   llmClient: LLMClient;
   travelToolRegistry: ToolRegistry;
+  shoppingToolRegistry: ToolRegistry;
   embeddingService: EmbeddingService;
 }
 
@@ -29,6 +31,7 @@ interface ChatBody {
   message: string;
   /** Pass to continue an existing conversation */
   conversationId?: string;
+  agentType?: 'travel' | 'shopping';
 }
 
 /**
@@ -47,11 +50,11 @@ interface ChatBody {
  * triggers memory extraction in the background.
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { llmClient, travelToolRegistry, embeddingService } = options;
+  const { llmClient, travelToolRegistry, shoppingToolRegistry, embeddingService } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
-      const { userId: sessionId, message, conversationId: existingConvId } = request.body;
+      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel' } = request.body;
 
       if (!sessionId || !message) {
         return reply.status(400).send({ error: 'userId and message are required' });
@@ -112,7 +115,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         history,
       );
 
-      const agent = new TravelAgent(travelToolRegistry, llmClient);
+      const agent = agentType === 'shopping'
+        ? new ShoppingAgent(shoppingToolRegistry, llmClient)
+        : new TravelAgent(travelToolRegistry, llmClient);
       const suggestionService = new SuggestionService(llmClient);
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
@@ -165,7 +170,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
         // Pass only the user's message so the extractor never picks up facts
         // that the assistant inferred (e.g. "flying from Tel Aviv" → home_city).
-        memoryService.extractAndSaveMemories(internalUserId, message),
+        memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
     },
   );

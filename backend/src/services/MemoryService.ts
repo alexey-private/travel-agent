@@ -3,7 +3,7 @@ import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
 import { LLMClient } from '../llm/LLMClient';
 
-const EXTRACT_MEMORIES_PROMPT = `You are a memory extraction assistant.
+const TRAVEL_EXTRACT_PROMPT = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent preferences as a JSON object.
 Focus on: name, home city, preferred airlines, seat preference, dietary restrictions, budget level,
 travel style, passport/visa country, preferred hotel type, and any other persistent preferences.
@@ -17,6 +17,21 @@ Rules:
 
 Example output:
 {"name": "Alex", "home_city": "San Francisco", "diet": "vegetarian", "budget": "mid-range", "airline": "United"}`;
+
+const SHOPPING_EXTRACT_PROMPT = `You are a memory extraction assistant.
+Given a message from the user, extract key personal facts and persistent shopping preferences as a JSON object.
+Focus on: name, preferred brands, budget range, favorite stores, size preferences, product categories of interest,
+payment method, and any other persistent shopping preferences.
+
+Rules:
+- Only extract facts the user explicitly stated about themselves — never infer from context.
+- Do not extract order-specific details (specific items being purchased now, one-time deals, etc.).
+- If a fact was already known (provided in "Existing memories"), only include it in the output
+  if the user is explicitly updating or correcting it.
+- Return ONLY a valid JSON object. If nothing new can be extracted, return {}.
+
+Example output:
+{"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes"}`;
 
 /**
  * Service for managing user long-term memory.
@@ -58,7 +73,11 @@ export class MemoryService {
    * @param userId - The internal user UUID
    * @param userMessage - The raw user message from the last exchange
    */
-  async extractAndSaveMemories(userId: string, userMessage: string): Promise<void> {
+  async extractAndSaveMemories(
+    userId: string,
+    userMessage: string,
+    agentType: 'travel' | 'shopping' = 'travel',
+  ): Promise<void> {
     if (!userMessage.trim() || !this.llmClient) return;
 
     const existing = await this.repo.getMemories(userId);
@@ -67,10 +86,12 @@ export class MemoryService {
         ? `\nExisting memories:\n${existing.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
         : '';
 
+    const systemPrompt = agentType === 'shopping' ? SHOPPING_EXTRACT_PROMPT : TRAVEL_EXTRACT_PROMPT;
+
     let extracted: Record<string, string>;
     try {
       const text = await this.llmClient.complete({
-        system: EXTRACT_MEMORIES_PROMPT,
+        system: systemPrompt,
         messages: [{ role: 'user', content: `${existingSection}User message:\n${userMessage}` }],
         maxTokens: 512,
       });

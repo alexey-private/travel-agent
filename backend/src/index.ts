@@ -13,6 +13,10 @@ import { CurrencyTool } from './tools/CurrencyTool';
 import { WeatherTool } from './tools/travel/WeatherTool';
 import { CountryInfoTool } from './tools/travel/CountryInfoTool';
 import { FlightSearchTool } from './tools/travel/FlightSearchTool';
+import { ProductSearchTool } from './tools/shopping/ProductSearchTool';
+import { PriceCompareTool } from './tools/shopping/PriceCompareTool';
+import { ProductReviewsTool } from './tools/shopping/ProductReviewsTool';
+import { DealSearchTool } from './tools/shopping/DealSearchTool';
 
 const fastify = Fastify({
   logger: {
@@ -46,8 +50,16 @@ async function bootstrap(): Promise<void> {
   travelToolRegistry.register(new CurrencyTool());
   travelToolRegistry.register(new FlightSearchTool());
 
+  const shoppingToolRegistry = new ToolRegistry();
+  shoppingToolRegistry.register(new ProductSearchTool());
+  shoppingToolRegistry.register(new PriceCompareTool());
+  shoppingToolRegistry.register(new ProductReviewsTool());
+  shoppingToolRegistry.register(new DealSearchTool());
+  shoppingToolRegistry.register(new CurrencyTool());
+  shoppingToolRegistry.register(new WebSearchTool());
+
   // Routes
-  await fastify.register(chatRoutes, { llmClient, travelToolRegistry, embeddingService });
+  await fastify.register(chatRoutes, { llmClient, travelToolRegistry, shoppingToolRegistry, embeddingService });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
 
