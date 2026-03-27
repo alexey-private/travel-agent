@@ -6,6 +6,7 @@ interface KnowledgeRow {
   topic: string;
   content: string;
   similarity: number;
+  metadata: Record<string, unknown> | null;
 }
 
 /**
@@ -25,25 +26,41 @@ export class KnowledgeRepository extends BaseRepository {
    * @param topK - Maximum number of results to return
    * @returns Knowledge chunks ordered by descending similarity
    */
-  async findSimilar(embedding: number[], topK: number): Promise<KnowledgeChunk[]> {
+  async findSimilar(
+    embedding: number[],
+    topK: number,
+    filter?: Record<string, unknown>,
+  ): Promise<KnowledgeChunk[]> {
     const vectorLiteral = `[${embedding.join(',')}]`;
     const client = await this.pool.connect();
     try {
-      // Probe all IVFFlat lists so small knowledge bases (<< lists count) are
-      // searched exhaustively. Without this, the default probes=1 misses most
-      // results when the table has fewer rows than the number of index lists.
-      // DEV ONLY: probes=10 compensates for lists=100 index built on a tiny dataset.
-      // In production, remove this and instead rebuild the index with lists sized
-      // to match the actual row count (rule of thumb: lists ≈ rows / 1000).
       await client.query('SET ivfflat.probes = 10');
-      const result = await client.query<KnowledgeRow>(
-        `SELECT topic, content, 1 - (embedding <=> $1::vector) AS similarity
-         FROM knowledge_base
-         ORDER BY embedding <=> $1::vector
-         LIMIT $2`,
-        [vectorLiteral, topK],
-      );
-      return result.rows.map(r => ({ topic: r.topic, content: r.content, similarity: Number(r.similarity) }));
+
+      let query: string;
+      let params: unknown[];
+
+      if (filter) {
+        query = `SELECT topic, content, metadata, 1 - (embedding <=> $1::vector) AS similarity
+                 FROM knowledge_base
+                 WHERE metadata @> $3::jsonb
+                 ORDER BY embedding <=> $1::vector
+                 LIMIT $2`;
+        params = [vectorLiteral, topK, JSON.stringify(filter)];
+      } else {
+        query = `SELECT topic, content, metadata, 1 - (embedding <=> $1::vector) AS similarity
+                 FROM knowledge_base
+                 ORDER BY embedding <=> $1::vector
+                 LIMIT $2`;
+        params = [vectorLiteral, topK];
+      }
+
+      const result = await client.query<KnowledgeRow>(query, params);
+      return result.rows.map(r => ({
+        topic: r.topic,
+        content: r.content,
+        similarity: Number(r.similarity),
+        metadata: r.metadata ?? undefined,
+      }));
     } finally {
       client.release();
     }

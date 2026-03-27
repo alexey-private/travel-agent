@@ -56,10 +56,14 @@ export class RAGService {
    * @param query - The user's message or a semantic query derived from it
    * @param topK - Number of chunks to retrieve (default: 3)
    */
-  async retrieve(query: string, topK = 3): Promise<KnowledgeChunk[]> {
+  async retrieve(
+    query: string,
+    topK = 3,
+    filter?: Record<string, unknown>,
+  ): Promise<KnowledgeChunk[]> {
     const embedding = await this.embeddingService.embed(query);
     console.log(`[RAG] embedding dims: ${embedding.length}, first values: ${embedding.slice(0, 3).map(v => v.toFixed(4))}`);
-    const chunks = await this.knowledgeRepo.findSimilar(embedding, topK);
+    const chunks = await this.knowledgeRepo.findSimilar(embedding, topK, filter);
     console.log(`[RAG] retrieve found ${chunks.length} chunks:`, chunks.map(c => `${c.topic} (${c.similarity.toFixed(3)})`));
     return chunks;
   }

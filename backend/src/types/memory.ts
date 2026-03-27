@@ -7,4 +7,5 @@ export interface KnowledgeChunk {
   topic: string;
   content: string;
   similarity: number;
+  metadata?: Record<string, unknown>;
 }

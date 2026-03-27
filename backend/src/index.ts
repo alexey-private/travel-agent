@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { env } from './config/env';
 import { getPool, closePool } from './db/client';
+import { RAGService } from './services/RAGService';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
@@ -42,6 +43,8 @@ async function bootstrap(): Promise<void> {
   // 
   const llmClient = LLMClientFactory.create({ provider: env.LLM_PROVIDER, apiKey });
   const embeddingService = new EmbeddingService();
+  const pool = getPool();
+  const ragService = new RAGService(pool, llmClient, embeddingService);
 
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(new WebSearchTool());
@@ -51,9 +54,9 @@ async function bootstrap(): Promise<void> {
   travelToolRegistry.register(new FlightSearchTool());
 
   const shoppingToolRegistry = new ToolRegistry();
-  shoppingToolRegistry.register(new ProductSearchTool());
+  shoppingToolRegistry.register(new ProductSearchTool(ragService));
   shoppingToolRegistry.register(new PriceCompareTool());
-  shoppingToolRegistry.register(new ProductReviewsTool());
+  shoppingToolRegistry.register(new ProductReviewsTool(ragService));
   shoppingToolRegistry.register(new DealSearchTool());
   shoppingToolRegistry.register(new CurrencyTool());
   shoppingToolRegistry.register(new WebSearchTool());
@@ -67,7 +70,6 @@ async function bootstrap(): Promise<void> {
   fastify.get('/health', async () => ({ status: 'ok' }));
 
   // Verify DB connectivity before accepting traffic
-  const pool = getPool();
   await pool.query('SELECT 1');
   fastify.log.info('Database connection verified');
 
