@@ -30,11 +30,12 @@ export async function streamChat(
   conversationId: string | null,
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
+  agentType?: "travel" | "shopping",
 ): Promise<void> {
   const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, message, conversationId }),
+    body: JSON.stringify({ userId, message, conversationId, agentType }),
     signal,
   });
 

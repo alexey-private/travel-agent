@@ -5,6 +5,7 @@ import { Plane } from "lucide-react";
 import ChatWindow from "@/components/ChatWindow";
 import MemoryPanel from "@/components/MemoryPanel";
 import ConversationList from "@/components/ConversationList";
+import AgentSelector, { type AgentType } from "@/components/AgentSelector";
 import { getOrCreateUserId } from "@/lib/api";
 
 /**
@@ -12,6 +13,7 @@ import { getOrCreateUserId } from "@/lib/api";
  */
 export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [agentType, setAgentType] = useState<AgentType>("travel");
   const [memoryRefresh, setMemoryRefresh] = useState(0);
   const [conversationListRefresh, setConversationListRefresh] = useState(0);
   /** Currently open conversation. null = new (unsaved) chat. */
@@ -24,6 +26,12 @@ export default function Home() {
   }, []);
 
   const handleNewChat = useCallback(() => {
+    setSelectedConversationId(null);
+    setChatKey((k) => k + 1);
+  }, []);
+
+  const handleAgentChange = useCallback((type: AgentType) => {
+    setAgentType(type);
     setSelectedConversationId(null);
     setChatKey((k) => k + 1);
   }, []);
@@ -57,8 +65,9 @@ export default function Home() {
       <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shrink-0">
         <div className="flex items-center gap-2">
           <Plane size={20} className="text-blue-600" />
-          <span className="font-semibold text-gray-800">Travel Planning Agent</span>
+          <span className="font-semibold text-gray-800">AI Agent</span>
         </div>
+        <AgentSelector value={agentType} onChange={handleAgentChange} />
         <span className="text-xs text-gray-400 font-mono">{userId.slice(0, 8)}…</span>
       </header>
 
@@ -79,6 +88,7 @@ export default function Home() {
             key={chatKey}
             userId={userId}
             initialConversationId={selectedConversationId}
+            agentType={agentType}
             onConversationCreated={handleConversationCreated}
             onReplyComplete={handleReplyComplete}
           />

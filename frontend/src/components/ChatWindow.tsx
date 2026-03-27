@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Send, Loader2 } from "lucide-react";
 import MessageBubble, { type Message } from "./MessageBubble";
 import { getRandomSuggestions } from "../data/starterSuggestions";
+import { type AgentType } from "./AgentSelector";
 import { streamChat, fetchMessages, type AgentEvent, type ChatMessage } from "@/lib/api";
 import { type ToolStep } from "./AgentThoughts";
 
@@ -11,6 +12,8 @@ interface ChatWindowProps {
   userId: string;
   /** Pre-selected conversation to load/continue */
   initialConversationId?: string | null;
+  /** Which agent backend to use */
+  agentType?: AgentType;
   /** Called when the backend assigns a conversationId (first message of new chat) */
   onConversationCreated?: (conversationId: string) => void;
   /** Called after each completed assistant reply so the memory panel can refresh */
@@ -56,6 +59,7 @@ function historyToMessage(m: ChatMessage) {
 export default function ChatWindow({
   userId,
   initialConversationId,
+  agentType = "travel",
   onConversationCreated,
   onReplyComplete,
 }: ChatWindowProps) {
@@ -212,6 +216,7 @@ export default function ChatWindow({
           }
         },
         controller.signal,
+        agentType,
       );
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -227,13 +232,13 @@ export default function ChatWindow({
       setLoading(false);
       onReplyComplete?.();
     }
-  }, [input, loading, userId, conversationId, onConversationCreated, onReplyComplete]);
+  }, [input, loading, userId, conversationId, agentType, onConversationCreated, onReplyComplete]);
 
   const handleSuggestionClick = useCallback((text: string) => {
     setInput(text);
   }, []);
 
-  const suggestions = useMemo(() => getRandomSuggestions(5), []);
+  const suggestions = useMemo(() => getRandomSuggestions(5, agentType), [agentType]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
