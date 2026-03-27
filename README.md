@@ -1,10 +1,10 @@
-# Travel Planning AI Agent
+# AI Travel & Shopping Agent
 
-A full-stack AI travel planning assistant that supports **Anthropic Claude** and **OpenAI GPT-4o** as interchangeable backends. The agent uses a **ReAct loop** (Reason → Act → Observe → Respond) to answer travel queries, remembers user preferences across sessions, and retrieves curated destination knowledge via **Agentic RAG**.
+A full-stack AI assistant with two specialized agents — **Travel** and **Shopping** — that share the same architecture. Both agents support **Anthropic Claude** and **OpenAI GPT-4o** as interchangeable backends, use a **ReAct loop** (Reason → Act → Observe → Respond), remember user preferences across sessions, and retrieve curated knowledge via **Agentic RAG**.
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  ✈  Travel Planning Agent           [Your Preferences] │
+│  [ ✈ Travel ]  [ 🛍 Shopping ]      [Your Preferences] │
 ├──────────────────────────────────┬─────────────────────┤
 │                                  │ Home: SF            │
 │  [user]                          │ Airline: United     │
@@ -47,20 +47,27 @@ A full-stack AI travel planning assistant that supports **Anthropic Claude** and
 │       │       ├── 002_pgvector.sql      # knowledge_base + IVFFlat index
 │       │       └── 003_embedding_dim.sql # resize embedding column 1536→512 (voyage-3-lite)
 │       ├── tools/
-│       │   ├── BaseTool.ts         # Abstract base class → Anthropic Tool shape
-│       │   ├── WebSearchTool.ts    # Tavily web search
-│       │   ├── WeatherTool.ts      # OpenWeatherMap forecast
-│       │   ├── CountryInfoTool.ts  # RestCountries API (free, no key)
-│       │   ├── CurrencyTool.ts     # Frankfurter API (free, no key)
-│       │   ├── FlightSearchTool.ts # Deterministic flight mock (demo data)
-│       │   └── ToolRegistry.ts     # Tool map + execute dispatcher
+│       │   ├── BaseTool.ts           # Abstract base class → Anthropic Tool shape
+│       │   ├── ToolRegistry.ts       # Tool map + execute dispatcher
+│       │   ├── WebSearchTool.ts      # Tavily web search (shared)
+│       │   ├── CurrencyTool.ts       # Frankfurter API, free (shared)
+│       │   ├── travel/
+│       │   │   ├── WeatherTool.ts        # OpenWeatherMap forecast
+│       │   │   ├── CountryInfoTool.ts    # RestCountries API (free, no key)
+│       │   │   └── FlightSearchTool.ts   # Deterministic flight mock (demo data)
+│       │   └── shopping/
+│       │       ├── ProductSearchTool.ts  # Deterministic product catalog mock
+│       │       ├── PriceCompareTool.ts   # Multi-retailer price comparison mock
+│       │       ├── ProductReviewsTool.ts # Seeded review pool mock
+│       │       └── DealSearchTool.ts     # Current deals catalog mock
 │       ├── agent/
-│       │   ├── TravelAgent.ts   # ReAct loop (AsyncGenerator + SSE events)
-│       │   ├── AgentContext.ts  # Immutable per-request value object
-│       │   └── prompts.ts       # System prompt builder
+│       │   ├── TravelAgent.ts    # ReAct loop for travel queries
+│       │   ├── ShoppingAgent.ts  # ReAct loop for shopping queries
+│       │   ├── AgentContext.ts   # Immutable per-request value object
+│       │   └── prompts.ts        # buildTravelAgentSystemPrompt + buildShoppingAgentSystemPrompt
 │       ├── services/
 │       │   ├── ConversationService.ts
-│       │   ├── MemoryService.ts      # Preference extraction + persistence
+│       │   ├── MemoryService.ts      # Preference extraction + persistence (agentType-aware)
 │       │   ├── SuggestionService.ts  # Follow-up question generation (Haiku)
 │       │   ├── RAGService.ts         # Agentic retrieval-augmented generation
 │       │   └── EmbeddingService.ts   # voyage-3-lite 512-dim; random fallback in dev
@@ -70,7 +77,7 @@ A full-stack AI travel planning assistant that supports **Anthropic Claude** and
 │       │   ├── MemoryRepository.ts
 │       │   └── KnowledgeRepository.ts  # pgvector cosine similarity search
 │       ├── routes/
-│       │   ├── chat.ts              # POST /api/chat → SSE stream
+│       │   ├── chat.ts              # POST /api/chat → SSE stream (routes to Travel or Shopping agent)
 │       │   ├── memory.ts            # GET/DELETE /api/memory/:userId
 │       │   └── conversations.ts     # GET /api/conversations/:userId[/:conversationId/messages]
 │       └── types/
@@ -81,10 +88,11 @@ A full-stack AI travel planning assistant that supports **Anthropic Claude** and
     └── src/
         ├── app/
         │   ├── layout.tsx         # Root HTML shell + metadata
-        │   ├── page.tsx           # 3-panel layout; userId + refresh state
+        │   ├── page.tsx           # 3-panel layout; userId + agentType state
         │   └── globals.css        # Tailwind base + scrollbar utilities
         ├── components/
-        │   ├── ChatWindow.tsx     # SSE streaming, message list, input bar
+        │   ├── AgentSelector.tsx  # Travel / Shopping tab toggle
+        │   ├── ChatWindow.tsx     # SSE streaming, message list, input bar (agentType-aware)
         │   ├── MessageBubble.tsx  # Markdown render, sources, suggestions
         │   ├── AgentThoughts.tsx  # Collapsible real-time tool calls
         │   ├── MemoryPanel.tsx    # Displayed + deletable preferences
@@ -92,7 +100,7 @@ A full-stack AI travel planning assistant that supports **Anthropic Claude** and
         ├── lib/
         │   └── api.ts             # Typed fetch wrappers + SSE stream parser
         └── data/
-            └── starterSuggestions.ts  # Pool of example prompts shown on empty chat
+            └── starterSuggestions.ts  # Travel + shopping example prompts, filtered by agentType
 ```
 
 ### Component diagram
@@ -101,15 +109,18 @@ A full-stack AI travel planning assistant that supports **Anthropic Claude** and
 Browser (Next.js)
     │
     ├── page.tsx  (Home)
-    │     ├── state: userId (localStorage), chatKey, selectedConversationId
+    │     ├── state: userId (localStorage), agentType, chatKey, selectedConversationId
     │     ├── state: memoryRefresh, conversationListRefresh  (int counters → trigger re-fetch)
+    │     │
+    │     ├── AgentSelector  (Travel ✈ / Shopping 🛍 tab toggle)
+    │     │     └── sets agentType state → remounts ChatWindow via chatKey
     │     │
     │     ├── ConversationList
     │     │     └── GET /api/conversations/:userId  (re-fetches on refreshTrigger)
     │     │
-    │     ├── ChatWindow  (remounted via chatKey on conversation switch)
+    │     ├── ChatWindow  (remounted via chatKey on conversation/agent switch)
     │     │     ├── GET /api/conversations/:userId/:id/messages  (load history)
-    │     │     ├── POST /api/chat  →  SSE stream
+    │     │     ├── POST /api/chat  →  SSE stream  (agentType passed in body)
     │     │     │     └── lib/api.ts: streamChat()  (chunked SSE parser)
     │     │     │           events: conversation_id | text | tool_start |
     │     │     │                   tool_end | sources | suggestions | done
@@ -126,15 +137,24 @@ Browser (Next.js)
 Fastify (Node.js)
     ├── ChatRoute
     │     ├── ConversationService  ──► PostgreSQL
-    │     ├── MemoryService        ──► PostgreSQL (user_memories)
+    │     ├── MemoryService        ──► PostgreSQL (user_memories, agentType-specific keys)
     │     ├── RAGService           ──► EmbeddingService ──► Voyage AI API
     │     │                        ──► KnowledgeRepository ──► pgvector
-    │     └── TravelAgent (ReAct loop)
-    │           ├── Claude claude-sonnet-4-6  (reasoning + tool calls)
-    │           ├── WebSearchTool    ──► Tavily API
-    │           ├── WeatherTool      ──► OpenWeatherMap API
-    │           ├── CountryInfoTool  ──► RestCountries API (free, no key)
-    │           └── CurrencyTool     ──► Frankfurter API (free, no key)
+    │     ├── TravelAgent (agentType=travel, default)
+    │     │     ├── Claude claude-sonnet-4-6
+    │     │     ├── WebSearchTool    ──► Tavily API
+    │     │     ├── WeatherTool      ──► OpenWeatherMap API
+    │     │     ├── CountryInfoTool  ──► RestCountries API
+    │     │     ├── FlightSearchTool ──► deterministic mock
+    │     │     └── CurrencyTool     ──► Frankfurter API
+    │     └── ShoppingAgent (agentType=shopping)
+    │           ├── Claude claude-sonnet-4-6
+    │           ├── ProductSearchTool  ──► deterministic mock catalog
+    │           ├── PriceCompareTool   ──► deterministic multi-retailer mock
+    │           ├── ProductReviewsTool ──► seeded review pool mock
+    │           ├── DealSearchTool     ──► deterministic deals mock
+    │           ├── WebSearchTool      ──► Tavily API
+    │           └── CurrencyTool       ──► Frankfurter API
     └── MemoryRoute ──► MemoryRepository ──► PostgreSQL
 ```
 
@@ -214,22 +234,23 @@ Open [http://localhost:3000](http://localhost:3000).
 | `OPENAI_API_KEY` | When `LLM_PROVIDER=openai` | OpenAI API key (`sk-proj-…`) |
 | `LLM_PROVIDER` | No | LLM backend: `anthropic` (default) or `openai` |
 | `TAVILY_API_KEY` | Yes | Tavily web search API key (`tvly-…`) |
-| `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key |
+| `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key (travel agent only) |
 | `VOYAGE_API_KEY` | No | Voyage AI key for semantic embeddings (random vectors used in dev if absent) |
-
-> **RestCountries** and **Frankfurter** are fully free public APIs — no key or registration required.
 | `PORT` | No | Backend port (default `3001`) |
 | `NODE_ENV` | No | `development` / `production` / `test` |
 | `NEXT_PUBLIC_API_URL` | Yes (frontend) | Backend URL seen by the browser |
+
+> **RestCountries** and **Frankfurter** are fully free public APIs — no key or registration required.
+> **Shopping tools** use deterministic mock data — no external API keys needed.
 
 ---
 
 ## How the ReAct Loop Works
 
-The `TravelAgent` implements the **ReAct** pattern (Reasoning + Acting) as an async generator that emits SSE events to the client in real time.
+Both `TravelAgent` and `ShoppingAgent` implement the same **ReAct** pattern (Reasoning + Acting) as an async generator that emits SSE events to the client in real time. The routing in `POST /api/chat` selects the agent based on the `agentType` field in the request body.
 
 ```
-User message
+User message  +  agentType
      │
      ▼
 ┌────────────────────────────────────────┐
@@ -251,20 +272,27 @@ User message
 emit { type: "done" }
 ```
 
-**SSE event stream example:**
+**SSE event stream example (travel agent):**
 
 ```
 data: {"type":"conversation_id","conversationId":"uuid"}
-data: {"type":"tool_start","tool":"knowledge_base","input":{"query":"Plan a trip to Tokyo"}}
-data: {"type":"tool_end","tool":"knowledge_base","output":"[Tokyo visa requirements]\n…"}
-data: {"type":"text","content":"Let me check the latest visa requirements…"}
-data: {"type":"tool_start","tool":"web_search","input":{"query":"Japan visa US citizens 2025"}}
-data: {"type":"tool_end","tool":"web_search","output":{"results":[…]}}
 data: {"type":"tool_start","tool":"get_weather","input":{"city":"Tokyo","days":5}}
 data: {"type":"tool_end","tool":"get_weather","output":{"forecast":[…]}}
 data: {"type":"text","content":"Here is your personalised Tokyo itinerary…"}
 data: {"type":"sources","sources":[{"title":"Japan Visa Guide","url":"https://…"}]}
-data: {"type":"suggestions","suggestions":["What's the best time to visit Kyoto?","How much does a week in Tokyo cost?","Do I need travel insurance for Japan?"]}
+data: {"type":"suggestions","suggestions":["What's the best time to visit Kyoto?",…]}
+data: {"type":"done"}
+```
+
+**SSE event stream example (shopping agent):**
+
+```
+data: {"type":"conversation_id","conversationId":"uuid"}
+data: {"type":"tool_start","tool":"search_products","input":{"query":"noise-cancelling headphones"}}
+data: {"type":"tool_end","tool":"search_products","output":{"products":[…]}}
+data: {"type":"tool_start","tool":"compare_prices","input":{"product":"Sony WH-1000XM5"}}
+data: {"type":"tool_end","tool":"compare_prices","output":{"comparisons":[…]}}
+data: {"type":"text","content":"Here are the best options and where to buy them cheapest…"}
 data: {"type":"done"}
 ```
 
@@ -279,7 +307,7 @@ When a tool call fails (network error, bad API key, malformed response), the err
 ```
 
 Claude then sees the failure in its context and can:
-- Retry with different parameters (e.g. a simpler search query)
+- Retry with different parameters (e.g. a broader product search query)
 - Switch to an alternative tool
 - Inform the user and proceed without that data
 
@@ -289,13 +317,14 @@ This loop continues for up to 10 iterations, so transient failures are handled g
 
 ## Long-Term Memory
 
-After each conversation turn, `MemoryService.extractAndSaveMemories()` sends the full exchange to **Claude Haiku** with the prompt:
+After each conversation turn, `MemoryService.extractAndSaveMemories()` sends the full exchange to **Claude Haiku** with an agent-type-specific extraction prompt:
 
-> *"Extract user travel preferences from this conversation as a flat JSON object."*
+- **Travel agent** extracts: `home_city`, `preferred_airlines`, `dietary_restrictions`, `travel_budget`, `travel_style`, `passport_country`, `hotel_type`
+- **Shopping agent** extracts: `preferred_brands`, `budget_range`, `favorite_stores`, `size_preferences`, `product_categories`, `payment_method`
 
-Extracted key-value pairs (e.g. `{ "home_city": "San Francisco", "diet": "vegetarian" }`) are **upserted** into the `user_memories` table using `INSERT … ON CONFLICT DO UPDATE`.
+Extracted key-value pairs are **upserted** into the `user_memories` table using `INSERT … ON CONFLICT DO UPDATE`.
 
-On the next request these preferences are injected into the system prompt so Claude personalises every response — recommending vegetarian restaurants, routing through the user's home airport, staying within budget, etc.
+On the next request these preferences are injected into the system prompt so Claude personalises every response — recommending products within the user's budget, prioritising their preferred brands, etc.
 
 Users can view and delete individual preferences from the **Preferences panel** in the UI, which calls `DELETE /api/memory/:userId/:key`.
 
@@ -324,7 +353,7 @@ If retrieval is warranted:
    > **Note (dev):** The IVFFlat index is built with `lists=100`. With the default `probes=1`, only 1 of 100 clusters is searched — the query returns 0 results on a tiny seed dataset. Setting `probes=10` forces a broader search. In production, rebuild the index with `lists ≈ rows / 1000` and remove this override.
 3. The top-3 chunks are prepended to the user message as inline context before Claude is called.
 
-The seeded knowledge base contains curated documents on visa requirements, health tips, currency/tipping guides, and cultural etiquette for 7 popular destinations. This gives the agent authoritative baseline knowledge even when web search is rate-limited.
+The seeded knowledge base contains curated documents on visa requirements, health tips, currency/tipping guides, and cultural etiquette for 7 popular destinations. This gives the travel agent authoritative baseline knowledge even when web search is rate-limited.
 
 ---
 
@@ -349,7 +378,7 @@ src/llm/
 4. Add the API key to `.env` and `src/config/env.ts`
 5. Set `LLM_PROVIDER=<provider>` in the environment
 
-Nothing else needs to change — `TravelAgent`, `MemoryService`, `RAGService`, `SuggestionService`, all tools, the database, the SSE infrastructure, and the frontend are all provider-agnostic.
+Nothing else needs to change — `TravelAgent`, `ShoppingAgent`, `MemoryService`, `RAGService`, `SuggestionService`, all tools, the database, the SSE infrastructure, and the frontend are all provider-agnostic.
 
 ### Switching to OpenAI
 
@@ -381,16 +410,27 @@ The `OpenAILLMClient` uses **gpt-4o** for the ReAct loop and **gpt-4o-mini** for
 ## Running Tests
 
 ```bash
-# Unit tests (all external dependencies mocked)
+# Backend unit tests (all external dependencies mocked)
 npm run test:unit --workspace=backend
 
-# Integration tests (requires Docker running)
+# Backend integration tests (requires Docker running)
 docker compose up -d
 npm run test:integration --workspace=backend
 
-# All tests
+# All backend tests
 npm test --workspace=backend
+
+# Frontend unit tests
+npm test --workspace=frontend
 ```
+
+### Test coverage
+
+| Layer | Suite | Tests |
+|-------|-------|-------|
+| Backend unit | TravelAgent, ShoppingAgent, WebSearchTool, WeatherTool, MemoryService, UserService, RAGService | 56 |
+| Backend integration | POST /api/chat, GET/DELETE /api/memory, GET /api/conversations | 7 |
+| Frontend unit | AgentSelector, ChatWindow, MessageBubble, MemoryPanel, AgentThoughts, api.ts, starterSuggestions | 62 |
 
 ---
 
@@ -405,9 +445,17 @@ Start or continue a conversation. Returns a **Server-Sent Events** stream.
 {
   "userId": "session-uuid",
   "message": "Plan a 5-day trip to Kyoto in cherry blossom season",
-  "conversationId": "optional-uuid-to-continue-a-conversation"
+  "conversationId": "optional-uuid-to-continue-a-conversation",
+  "agentType": "travel"
 }
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `userId` | string | required | Session identifier (persisted in browser localStorage) |
+| `message` | string | required | User message |
+| `conversationId` | string | — | Omit to start a new conversation |
+| `agentType` | `"travel"` \| `"shopping"` | `"travel"` | Which agent to use |
 
 **Response:** `Content-Type: text/event-stream`
 

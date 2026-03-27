@@ -54,16 +54,20 @@ function parseSseBody(body: string): Array<Record<string, unknown>> {
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
-  const toolRegistry = new ToolRegistry();
-  toolRegistry.register(new WebSearchTool());
-  toolRegistry.register(new WeatherTool());
-  toolRegistry.register(new CountryInfoTool());
-  toolRegistry.register(new CurrencyTool());
-  toolRegistry.register(new FlightSearchTool());
+  const travelToolRegistry = new ToolRegistry();
+  travelToolRegistry.register(new WebSearchTool());
+  travelToolRegistry.register(new WeatherTool());
+  travelToolRegistry.register(new CountryInfoTool());
+  travelToolRegistry.register(new CurrencyTool());
+  travelToolRegistry.register(new FlightSearchTool());
+
+  // Shopping registry not exercised by these tests — register an empty one
+  const shoppingToolRegistry = new ToolRegistry();
 
   await app.register(chatRoutes, {
     llmClient: new AnthropicLLMClient('test-key'),
-    toolRegistry,
+    travelToolRegistry,
+    shoppingToolRegistry,
     embeddingService: new EmbeddingService(),
   });
   return app;
