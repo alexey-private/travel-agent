@@ -97,6 +97,31 @@ describe("ChatWindow — sending messages", () => {
   });
 });
 
+describe("ChatWindow — agentType prop", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("passes agentType to streamChat (default: travel)", async () => {
+    mockStream([{ type: "done" }]);
+    render(<ChatWindow userId="u1" />);
+    await userEvent.type(screen.getByRole("textbox"), "hi");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(mockStreamChat).toHaveBeenCalledTimes(1));
+    // agentType is the 6th argument (index 5)
+    expect(mockStreamChat.mock.calls[0][5]).toBe("travel");
+  });
+
+  it("passes agentType='shopping' to streamChat when set", async () => {
+    mockStream([{ type: "done" }]);
+    render(<ChatWindow userId="u1" agentType="shopping" />);
+    await userEvent.type(screen.getByRole("textbox"), "find headphones");
+    await userEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(mockStreamChat).toHaveBeenCalledTimes(1));
+    expect(mockStreamChat.mock.calls[0][5]).toBe("shopping");
+  });
+});
+
 describe("ChatWindow — SSE event handling", () => {
   beforeEach(() => jest.clearAllMocks());
 

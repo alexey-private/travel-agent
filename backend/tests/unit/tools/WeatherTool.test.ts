@@ -1,4 +1,4 @@
-import { WeatherTool } from '@/tools/WeatherTool';
+import { WeatherTool } from '@/tools/travel/WeatherTool';
 
 jest.mock('@/config/env', () => ({
   env: {

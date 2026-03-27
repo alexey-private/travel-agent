@@ -13,10 +13,10 @@ import { AnthropicLLMClient } from '@/llm/AnthropicLLMClient';
 import { EmbeddingService } from '@/services/EmbeddingService';
 import { ToolRegistry } from '@/tools/ToolRegistry';
 import { WebSearchTool } from '@/tools/WebSearchTool';
-import { WeatherTool } from '@/tools/WeatherTool';
-import { CountryInfoTool } from '@/tools/CountryInfoTool';
+import { WeatherTool } from '@/tools/travel/WeatherTool';
+import { CountryInfoTool } from '@/tools/travel/CountryInfoTool';
 import { CurrencyTool } from '@/tools/CurrencyTool';
-import { FlightSearchTool } from '@/tools/FlightSearchTool';
+import { FlightSearchTool } from '@/tools/travel/FlightSearchTool';
 import { setupTestDb, clearTestDb, teardownTestDb, getTestPool } from '../helpers/testDb';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
