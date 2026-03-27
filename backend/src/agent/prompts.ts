@@ -66,7 +66,7 @@ ${memories.length > 0
 - Actively apply them (e.g. filter restaurants by diet, route via home city, respect budget)
 - Briefly acknowledge when you use a preference, e.g. "Since you're vegetarian, I'll focus on plant-based options" or "Routing through your home city San Francisco…"
 - Never ask the user to repeat information already stored`
-  : 'No preferences stored yet. If the user mentions personal details (home city, diet, budget, airline, etc.), note them — they will be remembered for future conversations.'}
+  : 'No preferences stored yet. If the user mentions personal details (country, home city, diet, budget, airline, etc.), note them — they will be remembered for future conversations.'}
 
 ${memoriesSection}`.trim();
 }
