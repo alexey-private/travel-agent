@@ -14,7 +14,7 @@ import { AgentEvent } from '../types/agent';
 
 interface ChatRouteOptions {
   llmClient: LLMClient;
-  toolRegistry: ToolRegistry;
+  travelToolRegistry: ToolRegistry;
   embeddingService: EmbeddingService;
 }
 
@@ -47,7 +47,7 @@ interface ChatBody {
  * triggers memory extraction in the background.
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { llmClient, toolRegistry, embeddingService } = options;
+  const { llmClient, travelToolRegistry, embeddingService } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -112,7 +112,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         history,
       );
 
-      const agent = new TravelAgent(toolRegistry, llmClient);
+      const agent = new TravelAgent(travelToolRegistry, llmClient);
       const suggestionService = new SuggestionService(llmClient);
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';

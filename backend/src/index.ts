@@ -39,15 +39,15 @@ async function bootstrap(): Promise<void> {
   const llmClient = LLMClientFactory.create({ provider: env.LLM_PROVIDER, apiKey });
   const embeddingService = new EmbeddingService();
 
-  const toolRegistry = new ToolRegistry();
-  toolRegistry.register(new WebSearchTool());
-  toolRegistry.register(new WeatherTool());
-  toolRegistry.register(new CountryInfoTool());
-  toolRegistry.register(new CurrencyTool());
-  toolRegistry.register(new FlightSearchTool());
+  const travelToolRegistry = new ToolRegistry();
+  travelToolRegistry.register(new WebSearchTool());
+  travelToolRegistry.register(new WeatherTool());
+  travelToolRegistry.register(new CountryInfoTool());
+  travelToolRegistry.register(new CurrencyTool());
+  travelToolRegistry.register(new FlightSearchTool());
 
   // Routes
-  await fastify.register(chatRoutes, { llmClient, toolRegistry, embeddingService });
+  await fastify.register(chatRoutes, { llmClient, travelToolRegistry, embeddingService });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
 

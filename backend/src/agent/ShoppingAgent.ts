@@ -2,7 +2,7 @@ import { LLMClient } from '../llm/LLMClient';
 import { LLMMessage, LLMStreamEvent, LLMToolResult } from '../llm/types';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { AgentContext } from './AgentContext';
-import { buildTravelAgentSystemPrompt } from './prompts';
+import { buildShoppingAgentSystemPrompt } from './prompts';
 import { AgentEvent } from '../types/agent';
 
 /** Maximum number of Reason→Act→Observe cycles before giving up. */
@@ -10,7 +10,7 @@ const MAX_ITERATIONS = 10;
 /** Keep only the most recent N history entries to avoid context overflow. */
 const MAX_HISTORY = 20;
 
-export class TravelAgent {
+export class ShoppingAgent {
   constructor(
     private toolRegistry: ToolRegistry,
     private llmClient: LLMClient,
@@ -30,7 +30,7 @@ export class TravelAgent {
 
     // Inject user long-term memories (preferences) into the system prompt
     // so the LLM can personalize the response without re-asking each time.
-    const systemPrompt = buildTravelAgentSystemPrompt(context.memories);
+    const systemPrompt = buildShoppingAgentSystemPrompt(context.memories);
 
     // Truncate history to avoid context overflow on long conversations
     const recentHistory = context.history.slice(-MAX_HISTORY);
@@ -45,7 +45,7 @@ export class TravelAgent {
     // Prepend RAG context to the user message when the knowledge base returned
     // relevant chunks, giving the LLM grounded facts before it reasons.
     const userContent = context.ragContext
-      ? `Relevant travel knowledge:\n${context.ragContext}\n\nUser request: ${context.userMessage}`
+      ? `Relevant shopping knowledge:\n${context.ragContext}\n\nUser request: ${context.userMessage}`
       : context.userMessage;
 
     messages.push({ role: 'user', content: userContent });
@@ -82,13 +82,13 @@ export class TravelAgent {
       const toolResults: LLMToolResult[] = [];
 
       // Notify the UI about every pending tool call upfront so the frontend
-      // can show "Searching flights…" spinners before results arrive.
+      // can show "Searching products…" spinners before results arrive.
       for (const toolCall of stopEvent.toolCalls) {
         yield { type: 'tool_start', tool: toolCall.name, input: toolCall.input };
       }
 
       // Execute all requested tool calls in parallel to minimize latency
-      // (e.g. weather + currency fetched simultaneously).
+      // (e.g. price comparison + reviews fetched simultaneously).
       const results = await Promise.all(
         stopEvent.toolCalls.map(tc => this.handleToolCall(tc.id, tc.name, tc.input)),
       );
