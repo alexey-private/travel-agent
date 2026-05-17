@@ -4,10 +4,12 @@
   "private": true,
   "workspaces": [
     "backend",
+    "backend-langgraph",
     "frontend"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=backend",
+    "dev:backend-lg": "npm run dev --workspace=backend-langgraph",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspace=backend"
