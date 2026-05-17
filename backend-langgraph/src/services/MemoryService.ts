@@ -1,10 +1,8 @@
 import { Pool } from 'pg';
-import { ChatAnthropic } from '@langchain/anthropic';
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
 import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
-import { env } from '../config/env';
+import { createModel } from '../llm/createModel';
 
 const TRAVEL_EXTRACT_PROMPT = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent preferences as a JSON object.
@@ -90,14 +88,7 @@ export class MemoryService {
     const systemPrompt = agentType === 'shopping' ? SHOPPING_EXTRACT_PROMPT : TRAVEL_EXTRACT_PROMPT;
 
     try {
-      let model;
-      if (env.LLM_PROVIDER === 'openai') {
-        model = new ChatOpenAI({ model: 'gpt-4o-mini', apiKey: env.OPENAI_API_KEY, maxTokens: 512 });
-      } else {
-        model = new ChatAnthropic({ model: 'claude-haiku-4-5-20251001', apiKey: env.ANTHROPIC_API_KEY, maxTokens: 512 });
-      }
-
-      const response = await model.invoke([
+      const response = await createModel('fast', 512).invoke([
         new HumanMessage(`${systemPrompt}\n\n${existingSection}User message:\n${userMessage}`),
       ]);
 

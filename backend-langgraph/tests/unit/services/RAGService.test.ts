@@ -38,7 +38,7 @@ describe('RAGService', () => {
     mockEmbed = jest.fn().mockResolvedValue(Array(1536).fill(0.1));
     const mockEmbeddingService = { embed: mockEmbed } as unknown as EmbeddingService;
 
-    service = new RAGService(null as unknown as Pool, null, mockEmbeddingService);
+    service = new RAGService(null as unknown as Pool, mockEmbeddingService);
     mockRepo = MockKnowledgeRepository.mock.instances[0] as jest.Mocked<KnowledgeRepository>;
   });
 

@@ -229,7 +229,7 @@ Note: a separate Protected Area Permit (PAP) or Inner Line Permit (ILP) is requi
 async function main() {
   const pool = new Pool({ connectionString: env.DATABASE_URL });
   const embeddingService = new EmbeddingService();
-  const ragService = new RAGService(pool, null, embeddingService);
+  const ragService = new RAGService(pool, embeddingService);
 
   console.log(`Seeding ${DOCUMENTS.length} knowledge base documents…\n`);
 

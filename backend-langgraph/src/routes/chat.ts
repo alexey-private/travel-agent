@@ -9,6 +9,7 @@ import { EmbeddingService } from '../services/EmbeddingService';
 import { SuggestionService } from '../services/SuggestionService';
 import { buildTravelGraph } from '../graph/travelGraph';
 import { buildShoppingGraph } from '../graph/shoppingGraph';
+import { AgentEvent } from '../types/agent';
 
 interface ChatBody {
   userId: string;
@@ -25,7 +26,7 @@ interface Source {
 /**
  * POST /api/chat — LangGraph SSE streaming endpoint.
  *
- * Same SSE event format as the original backend so the frontend works unchanged:
+ * SSE event format (same as the original backend so the frontend works unchanged):
  *   { type: 'conversation_id', conversationId }
  *   { type: 'text', content }
  *   { type: 'tool_start', tool, input }
@@ -34,10 +35,10 @@ interface Source {
  *   { type: 'suggestions', suggestions }
  *   { type: 'done' }
  *
- * Event mapping from graph.streamEvents() v2:
- *   on_chat_model_stream  → type: 'text'
- *   on_tool_start         → type: 'tool_start'
- *   on_tool_end           → type: 'tool_end'
+ * Mapped from graph.streamEvents() v2:
+ *   on_chat_model_stream → text
+ *   on_tool_start        → tool_start
+ *   on_tool_end          → tool_end
  */
 export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{ Body: ChatBody }>(
@@ -54,7 +55,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
       const memoryService = new MemoryService(pool);
-      const ragService = new RAGService(pool, null as never, embeddingService);
+      const ragService = new RAGService(pool, embeddingService);
       const suggestionService = new SuggestionService();
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
@@ -69,7 +70,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         ragService.buildRagContext(message),
       ]);
 
-      // Hijack the response so Fastify doesn't close it automatically
       reply.hijack();
       const raw = reply.raw;
       raw.writeHead(200, {
@@ -80,7 +80,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         'Access-Control-Allow-Credentials': 'true',
       });
 
-      const sse = (payload: unknown) => raw.write(`data: ${JSON.stringify(payload)}\n\n`);
+      const sse = (payload: AgentEvent | { type: 'error'; message: string } | { type: 'sources'; sources: Source[] }) =>
+        raw.write(`data: ${JSON.stringify(payload)}\n\n`);
 
       sse({ type: 'conversation_id', conversationId });
 
@@ -89,103 +90,61 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         sse({ type: 'tool_end', tool: 'knowledge_base', output: ragContext });
       }
 
-      // Build initial LangGraph message list from stored conversation history.
-      // History entries alternate user/assistant — map them to LangChain message types.
       const historyMessages = history.flatMap(m =>
-        m.role === 'user'
-          ? [new HumanMessage(m.content)]
-          : [new AIMessage(m.content)],
+        m.role === 'user' ? [new HumanMessage(m.content)] : [new AIMessage(m.content)],
       );
 
-      // Prepend RAG context to the current user message when available.
       const userContent = ragContext
         ? `Relevant ${agentType} knowledge:\n${ragContext}\n\nUser request: ${message}`
         : message;
 
       const initialMessages = [...historyMessages, new HumanMessage(userContent)];
 
-      // Build the graph with per-request system prompt (memories injected).
       const graph = agentType === 'shopping'
         ? buildShoppingGraph(ragService, memories)
-        : buildTravelGraph(ragService, memories);
+        : buildTravelGraph(memories);
 
       let assistantText = '';
       const sources: Source[] = [];
-      const agentSteps: unknown[] = [];
+      const agentSteps: AgentEvent[] = [];
 
       try {
-        /**
-         * graph.streamEvents() yields a stream of granular lifecycle events.
-         * Version "v2" provides stable event names across LangGraph releases.
-         *
-         * Key events we handle:
-         *   on_chat_model_stream — a single token chunk from the LLM
-         *   on_tool_start        — a tool call is about to execute
-         *   on_tool_end          — a tool call completed (with output)
-         */
-        for await (const event of graph.streamEvents(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          {
-            messages: initialMessages,
-            userId: internalUserId,
-            conversationId,
-            agentType,
-            memories: memories as any,
-            ragContext: ragContext as any,
-          } as any,
-          { version: 'v2' },
-        )) {
-          // -- Text streaming: emit each token as it arrives --
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for await (const event of graph.streamEvents({ messages: initialMessages } as any, { version: 'v2' })) {
           if (event.event === 'on_chat_model_stream') {
-            const chunk = event.data?.chunk;
-            const text = chunk?.content;
-            // Debug: log content type to understand Claude's streaming format
-            if (text !== undefined && text !== '') {
-              console.log('[DEBUG stream]', JSON.stringify({ type: typeof text, isArray: Array.isArray(text), value: text }));
-            }
+            const text = event.data?.chunk?.content;
             if (typeof text === 'string' && text) {
               assistantText += text;
-              const ev = { type: 'text', content: text };
+              const ev: AgentEvent = { type: 'text', content: text };
               sse(ev);
               agentSteps.push(ev);
             }
           }
 
-          // -- Tool start: notify UI before the tool executes --
           if (event.event === 'on_tool_start') {
-            const toolName = event.name as string;
-            const input = event.data?.input as unknown;
-            const ev = { type: 'tool_start', tool: toolName, input };
+            const ev: AgentEvent = { type: 'tool_start', tool: event.name as string, input: event.data?.input as unknown };
             sse(ev);
             agentSteps.push(ev);
           }
 
-          // -- Tool end: send result to UI and collect web_search sources --
           if (event.event === 'on_tool_end') {
             const toolName = event.name as string;
             const outputRaw = event.data?.output;
-
-            // ToolMessage.content is always a string (JSON or plain text)
             let output: unknown = outputRaw;
             let error: string | undefined;
 
             if (outputRaw instanceof ToolMessage) {
               const content = outputRaw.content as string;
-              try {
-                output = JSON.parse(content);
-              } catch {
-                output = content;
-              }
+              try { output = JSON.parse(content); } catch { output = content; }
               if (outputRaw.status === 'error') {
                 error = typeof output === 'string' ? output : JSON.stringify(output);
               }
             }
 
-            const ev = { type: 'tool_end', tool: toolName, output, error };
+            const ev: AgentEvent = { type: 'tool_end', tool: toolName, output, error };
             sse(ev);
             agentSteps.push(ev);
 
-            // Collect web search source URLs for the frontend source panel
             if (toolName === 'web_search' && !error) {
               const data = output as { results?: { title: string; url: string }[] } | null;
               if (data?.results) {
@@ -196,28 +155,24 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         if (sources.length > 0) {
-          const ev = { type: 'sources', sources };
-          sse(ev);
-          agentSteps.push(ev);
+          sse({ type: 'sources', sources });
         }
 
         const suggestions = await suggestionService.getSuggestions(message, assistantText, agentType);
         if (suggestions.length > 0) {
-          const ev = { type: 'suggestions', suggestions };
+          const ev: AgentEvent = { type: 'suggestions', suggestions };
           sse(ev);
           agentSteps.push(ev);
         }
 
         sse({ type: 'done' });
       } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        sse({ type: 'error', message: errMsg });
+        sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
         sse({ type: 'done' });
       } finally {
         raw.end();
       }
 
-      // Persist conversation after stream ends
       await conversationService.saveMessage(conversationId, 'user', message);
       await Promise.allSettled([
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),

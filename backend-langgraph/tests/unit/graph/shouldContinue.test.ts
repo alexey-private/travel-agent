@@ -1,5 +1,5 @@
 import { END } from '@langchain/langgraph';
-import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { shouldContinue } from '@/graph/nodes/shouldContinue';
 import { AgentStateType } from '@/graph/state';
 
@@ -74,6 +74,24 @@ describe('shouldContinue', () => {
   it('returns END when AIMessage has an empty tool_calls array', () => {
     const aiMsg = new AIMessage({ content: 'Done!', tool_calls: [] });
     const state = makeState([new HumanMessage('Hi'), aiMsg]);
+
+    expect(shouldContinue(state)).toBe(END);
+  });
+
+  it('returns "act" when the last message is AIMessageChunk with tool_calls (streaming case)', () => {
+    // LangChain streaming returns AIMessageChunk instead of AIMessage from model.invoke()
+    const chunk = new AIMessageChunk({
+      content: '',
+      tool_calls: [{ id: 'call-1', name: 'convert_currency', args: { amount: 1000, from: 'USD', to: 'EUR' }, type: 'tool_call' }],
+    });
+    const state = makeState([new HumanMessage('Convert 1000 USD to EUR'), chunk]);
+
+    expect(shouldContinue(state)).toBe('act');
+  });
+
+  it('returns END when AIMessageChunk has no tool_calls', () => {
+    const chunk = new AIMessageChunk({ content: 'Paris is the capital of France.' });
+    const state = makeState([new HumanMessage('Capital of France?'), chunk]);
 
     expect(shouldContinue(state)).toBe(END);
   });

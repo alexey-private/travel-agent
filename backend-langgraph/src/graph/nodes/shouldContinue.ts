@@ -1,5 +1,4 @@
 import { END } from '@langchain/langgraph';
-import { AIMessage } from '@langchain/core/messages';
 import { AgentStateType } from '../state';
 
 /**
@@ -9,17 +8,16 @@ import { AgentStateType } from '../state';
  *   - "act"  → the model requested tool calls, execute them
  *   - END    → model produced a final answer, stop the loop
  *
- * This mirrors the manual check in the original TravelAgent:
- *   if (!stopEvent || stopEvent.reason !== 'tool_use') break;
+ * We check tool_calls without strict instanceof because LangChain streaming
+ * returns AIMessageChunk (not AIMessage) when the model is invoked via
+ * model.invoke() with streaming: true. Both types share the tool_calls field.
  */
 export function shouldContinue(state: AgentStateType): 'act' | typeof END {
   const lastMessage = state.messages.at(-1);
 
-  if (
-    lastMessage instanceof AIMessage &&
-    lastMessage.tool_calls &&
-    lastMessage.tool_calls.length > 0
-  ) {
+  // Duck-type check: AIMessage and AIMessageChunk both expose tool_calls
+  const toolCalls = (lastMessage as { tool_calls?: unknown[] })?.tool_calls;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) {
     return 'act';
   }
 

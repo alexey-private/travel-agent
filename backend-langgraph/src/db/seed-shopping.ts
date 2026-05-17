@@ -1452,7 +1452,7 @@ Sample Customer Reviews:
 async function main() {
   const pool = new Pool({ connectionString: env.DATABASE_URL });
   const embeddingService = new EmbeddingService();
-  const ragService = new RAGService(pool, null, embeddingService);
+  const ragService = new RAGService(pool, embeddingService);
 
   console.log(`Seeding ${DOCUMENTS.length} shopping knowledge base documents…\n`);
 

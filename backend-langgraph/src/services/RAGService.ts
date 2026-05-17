@@ -1,11 +1,9 @@
 import { Pool } from 'pg';
-import { ChatAnthropic } from '@langchain/anthropic';
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { KnowledgeRepository } from '../repositories/KnowledgeRepository';
 import { EmbeddingService } from './EmbeddingService';
 import { KnowledgeChunk } from '../types/memory';
-import { env } from '../config/env';
+import { createModel } from '../llm/createModel';
 
 const SHOULD_QUERY_PROMPT = `You decide whether a travel-planning query needs factual destination knowledge
 from a knowledge base (visa rules, health tips, cultural guides, etc.).
@@ -24,7 +22,7 @@ export class RAGService {
   private knowledgeRepo: KnowledgeRepository;
   private embeddingService: EmbeddingService;
 
-  constructor(pool: Pool, _unused: null, embeddingService: EmbeddingService) {
+  constructor(pool: Pool, embeddingService: EmbeddingService) {
     this.knowledgeRepo = new KnowledgeRepository(pool);
     this.embeddingService = embeddingService;
   }
@@ -35,14 +33,7 @@ export class RAGService {
    */
   async shouldQueryKnowledgeBase(query: string): Promise<boolean> {
     try {
-      let model;
-      if (env.LLM_PROVIDER === 'openai') {
-        model = new ChatOpenAI({ model: 'gpt-4o-mini', apiKey: env.OPENAI_API_KEY, maxTokens: 10 });
-      } else {
-        model = new ChatAnthropic({ model: 'claude-haiku-4-5-20251001', apiKey: env.ANTHROPIC_API_KEY, maxTokens: 10 });
-      }
-
-      const response = await model.invoke([
+      const response = await createModel('fast', 10).invoke([
         new SystemMessage(SHOULD_QUERY_PROMPT),
         new HumanMessage(query),
       ]);
