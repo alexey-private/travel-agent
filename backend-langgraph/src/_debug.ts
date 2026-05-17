@@ -2,35 +2,33 @@ import { EmbeddingService } from './services/EmbeddingService';
 import { RAGService } from './services/RAGService';
 import { getPool } from './db/client';
 import { buildTravelGraph } from './graph/travelGraph';
-import { HumanMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { AgentState } from './graph/state';
+
+// Patch shouldContinue to debug
+import { END } from '@langchain/langgraph';
 
 async function main() {
   const pool = getPool();
   const ragService = new RAGService(pool, null, new EmbeddingService());
   const graph = buildTravelGraph(ragService, []);
 
-  const ragContext = await ragService.buildRagContext('Best time to visit Bali?');
-  const userContent = ragContext
-    ? `Relevant travel knowledge:\n${ragContext}\n\nUser request: Best time to visit Bali?`
-    : 'Best time to visit Bali?';
-
-  console.log('ragContext exists:', !!ragContext);
-  console.log('---');
-
   for await (const event of graph.streamEvents(
-    { messages: [new HumanMessage(userContent)], userId: 'test', conversationId: 'test', agentType: 'travel', memories: [], ragContext } as any,
+    { messages: [new HumanMessage('Best time to visit Bali?')], userId: 'test', conversationId: 'test', agentType: 'travel', memories: [], ragContext: null } as any,
     { version: 'v2' },
   )) {
-    const e = event.event;
-    if (e === 'on_chat_model_stream') {
-      const content = event.data?.chunk?.content;
-      if (content) process.stdout.write(`[TEXT] ${JSON.stringify(content)}\n`);
+    if (event.event === 'on_chain_start' && event.name === 'shouldContinue') {
+      const msgs = event.data?.input?.messages ?? [];
+      const last = msgs.at(-1);
+      console.log('shouldContinue input - last msg type:', last?.constructor?.name);
+      console.log('tool_calls:', JSON.stringify(last?.tool_calls));
+      console.log('additional_kwargs.tool_calls:', JSON.stringify(last?.additional_kwargs?.tool_calls));
     }
-    if (e === 'on_tool_start') console.log(`[TOOL_START] ${event.name}`);
-    if (e === 'on_tool_end') console.log(`[TOOL_END] ${event.name}`);
-    if (e === 'on_chain_end' && event.name === 'LangGraph') {
-      console.log('[GRAPH DONE]');
-      break;
+    if (event.event === 'on_chain_end' && event.name === 'shouldContinue') {
+      console.log('shouldContinue output:', JSON.stringify(event.data?.output));
+    }
+    if (event.event === 'on_chain_end' && event.name === 'LangGraph') {
+      console.log('[GRAPH DONE]'); break;
     }
   }
   await pool.end();

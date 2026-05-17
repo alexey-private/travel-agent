@@ -67,9 +67,7 @@ export class RAGService {
     filter?: Record<string, unknown>,
   ): Promise<KnowledgeChunk[]> {
     const embedding = await this.embeddingService.embed(query);
-    console.log(`[RAG] embedding dims: ${embedding.length}, first values: ${embedding.slice(0, 3).map(v => v.toFixed(4))}`);
     const chunks = await this.knowledgeRepo.findSimilar(embedding, topK, filter);
-    console.log(`[RAG] retrieve found ${chunks.length} chunks:`, chunks.map(c => `${c.topic} (${c.similarity.toFixed(3)})`));
     return chunks;
   }
 

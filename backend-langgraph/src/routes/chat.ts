@@ -139,6 +139,10 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
           if (event.event === 'on_chat_model_stream') {
             const chunk = event.data?.chunk;
             const text = chunk?.content;
+            // Debug: log content type to understand Claude's streaming format
+            if (text !== undefined && text !== '') {
+              console.log('[DEBUG stream]', JSON.stringify({ type: typeof text, isArray: Array.isArray(text), value: text }));
+            }
             if (typeof text === 'string' && text) {
               assistantText += text;
               const ev = { type: 'text', content: text };
