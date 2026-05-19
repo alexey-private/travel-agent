@@ -22,17 +22,19 @@ Example output:
 const SHOPPING_EXTRACT_PROMPT = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent shopping preferences as a JSON object.
 Focus on: name, preferred brands, budget range, favorite stores, size preferences, product categories of interest,
-payment method, and any other persistent shopping preferences.
+payment method, current devices the user owns or uses (laptop, phone, tablet, TV, smartwatch, etc.),
+and any other persistent shopping preferences.
 
 Rules:
 - Only extract facts the user explicitly stated about themselves — never infer from context.
+- "I use X", "I have X", "I own X", "my X is Y" are explicit statements and MUST be extracted as current devices.
 - Do not extract order-specific details (specific items being purchased now, one-time deals, etc.).
 - If a fact was already known (provided in "Existing memories"), only include it in the output
   if the user is explicitly updating or correcting it.
 - Return ONLY a valid JSON object. If nothing new can be extracted, return {}.
 
 Example output:
-{"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes"}`;
+{"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes", "current_laptop": "Lenovo IdeaPad Slim 5", "current_phone": "iPhone 15"}`;
 
 /**
  * Service for managing user long-term memory.
