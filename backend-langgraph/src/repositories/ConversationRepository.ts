@@ -50,7 +50,11 @@ export class ConversationRepository extends BaseRepository {
    */
   async getHistory(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null }>> {
     return this.query<MessageRow>(
-      'SELECT role, content, agent_steps FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      `SELECT role, content, agent_steps FROM (
+         SELECT role, content, agent_steps, created_at
+         FROM messages WHERE conversation_id = $1
+         ORDER BY created_at DESC LIMIT 20
+       ) sub ORDER BY created_at ASC`,
       [conversationId],
     );
   }

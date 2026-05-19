@@ -29,7 +29,7 @@ export function createModel(size: ModelSize, maxTokensOrOptions?: number | Model
       apiKey: env.OPENAI_API_KEY,
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(streaming !== undefined ? { streaming } : {}),
-    });
+    }) as BaseChatModel;
   }
 
   return new ChatAnthropic({
@@ -37,5 +37,5 @@ export function createModel(size: ModelSize, maxTokensOrOptions?: number | Model
     apiKey: env.ANTHROPIC_API_KEY,
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(streaming !== undefined ? { streaming } : {}),
-  });
+  }) as BaseChatModel;
 }

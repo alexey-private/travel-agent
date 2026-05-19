@@ -162,6 +162,132 @@ Fastify (Node.js)
 
 ---
 
+## LangGraph Backend (`backend-langgraph`)
+
+`backend-langgraph` is an alternative implementation of the same agents using **LangChain / LangGraph** instead of the hand-written ReAct loop in `backend/`. The REST API, SSE event format, database schema, and all tool logic are identical — only the agent orchestration layer differs.
+
+### Graph topology
+
+Both Travel and Shopping agents share the same graph shape, compiled once per request by `buildAgentGraph`:
+
+```
+START → [reason] → shouldContinue → [act] → [reason] → …
+                          │
+                          ▼
+                         END
+```
+
+| Node | Implementation | Role |
+|------|---------------|------|
+| `reason` | `createReasonNode` | Calls the LLM with the full message history; returns an `AIMessage` (possibly with `tool_calls`) |
+| `act` | LangGraph built-in `ToolNode` | Extracts `tool_calls` from the last message, executes the matching tools, appends `ToolMessage` results to state |
+| `shouldContinue` | conditional edge | Routes to `act` when `tool_calls` is non-empty, otherwise to `END` |
+
+### State
+
+All data flowing through the graph is typed in `AgentState`:
+
+```typescript
+// backend-langgraph/src/graph/state.ts
+export const AgentState = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: messagesStateReducer, // append — not replace
+    default: () => [],
+  }),
+  memories: Annotation<UserMemory[]>(),   // LastValue — set once at entry
+  ragContext: Annotation<string | null>(),
+});
+```
+
+`messagesStateReducer` means every node returns only its delta (`{ messages: [newMessage] }`) and LangGraph accumulates the full history automatically.
+
+### Request flow
+
+```
+POST /api/chat
+  │
+  ├─ Promise.all([memories, history, ragContext])   ← parallel DB queries
+  │
+  ├─ buildTravelGraph(memories)  /  buildShoppingGraph(ragService, memories)
+  │     └─ buildAgentGraph(tools, systemPrompt)
+  │           ├─ tools.map(wrapTool)          ← BaseTool JSONSchema → Zod (required by ToolNode)
+  │           ├─ createReasonNode(...)         ← model = createModel('full').bindTools(tools)
+  │           ├─ new ToolNode(tools)           ← built-in executor
+  │           └─ .compile()                   ← graph is frozen
+  │
+  └─ graph.streamEvents({ messages: initialMessages }, { version: 'v2' })
+        │
+        ├─ on_chat_model_stream → SSE { type: 'text' }        (per token)
+        ├─ on_tool_start        → SSE { type: 'tool_start' }
+        └─ on_tool_end          → SSE { type: 'tool_end' }
+```
+
+### Tool adapter — `wrapTool`
+
+`BaseTool` (shared with `backend/`) describes input schemas as plain JSONSchema objects. LangGraph's `ToolNode` requires Zod. `wrapTool` bridges the two:
+
+```typescript
+// backend-langgraph/src/tools/wrapTool.ts
+export function wrapTool(baseTool: BaseTool): DynamicStructuredTool {
+  const schema = jsonSchemaToZod(baseTool.inputSchema); // recursive JSONSchema → Zod
+  return new DynamicStructuredTool({
+    name: baseTool.name,
+    func: async (input) => {
+      const result = await baseTool.execute(input);
+      if (!result.success) throw new Error(result.error); // LLM sees the error and self-corrects
+      return JSON.stringify(result.data);
+    },
+  });
+}
+```
+
+### RAG — two patterns
+
+| Agent | When RAG runs | Who initiates it |
+|-------|--------------|-----------------|
+| Travel | Before the graph, in the route | Always, once per request |
+| Shopping | Inside the graph, as tools | The LLM decides when and with what query |
+
+`ProductSearchTool` and `ProductReviewsTool` receive `ragService` in their constructor and call `ragService.retrieve()` directly during tool execution. This lets the model issue targeted semantic searches ("Sony WH-1000XM5 reviews") rather than a single broad pre-query.
+
+### LLM model factory
+
+```typescript
+// backend-langgraph/src/llm/createModel.ts
+createModel('fast') // → Claude Haiku / GPT-4o-mini  (memory extraction, suggestions)
+createModel('full') // → Claude Sonnet / GPT-4o      (ReAct reasoning loop)
+```
+
+Provider is selected via the same `LLM_PROVIDER` environment variable as `backend/`.
+
+### Running `backend-langgraph`
+
+```bash
+# Migrations (shares the same DB schema as backend/)
+npm run migrate --workspace=backend-langgraph
+
+# Seed knowledge base
+npm run seed --workspace=backend-langgraph
+
+# Dev server (port 3002 by default — see backend-langgraph/.env)
+npm run dev:backend-langgraph
+```
+
+Point the frontend at the LangGraph backend by setting `NEXT_PUBLIC_API_URL=http://localhost:3002` in the frontend `.env`.
+
+### Key differences vs `backend/`
+
+| Aspect | `backend/` | `backend-langgraph/` |
+|--------|-----------|----------------------|
+| ReAct loop | Manual `for` loop with `MAX_ITERATIONS` | LangGraph graph with conditional edge |
+| State management | Local `messages[]` array in `run()` | `AgentState` with typed reducers |
+| Tool execution | `handleToolCall` + `Promise.all` | Built-in `ToolNode` |
+| Streaming | `yield` at each event site | `graph.streamEvents()` emits automatically |
+| LLM abstraction | Custom `LLMClient` interface | LangChain `BaseChatModel` |
+| Adding a node | Rewrite `run()` | `graph.addNode()` + one edge |
+
+---
+
 ## Quick Start
 
 ### Prerequisites

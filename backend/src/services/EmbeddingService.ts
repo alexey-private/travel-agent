@@ -16,6 +16,7 @@ const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings';
  */
 export class EmbeddingService {
   private readonly voyageApiKey: string | undefined;
+  private readonly cache = new Map<string, number[]>();
 
   constructor() {
     this.voyageApiKey = process.env.VOYAGE_API_KEY;
@@ -25,10 +26,15 @@ export class EmbeddingService {
    * Embeds the given text and returns a 1536-dimensional float array.
    */
   async embed(text: string): Promise<number[]> {
-    if (this.voyageApiKey) {
-      return this.embedWithVoyage(text);
-    }
-    return this.randomVector();
+    const cached = this.cache.get(text);
+    if (cached) return cached;
+
+    const result = this.voyageApiKey
+      ? await this.embedWithVoyage(text)
+      : this.randomVector();
+
+    this.cache.set(text, result);
+    return result;
   }
 
   private async embedWithVoyage(text: string, attempt = 0): Promise<number[]> {
