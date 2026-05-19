@@ -76,6 +76,7 @@ export default function Home() {
         {/* Conversation sidebar */}
         <ConversationList
           userId={userId}
+          agentType={agentType}
           selectedId={selectedConversationId}
           refreshTrigger={conversationListRefresh}
           onSelect={handleSelectConversation}

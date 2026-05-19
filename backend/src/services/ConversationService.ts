@@ -17,8 +17,8 @@ export class ConversationService {
    * Pass an existing conversationId to continue a prior session.
    * @returns The conversation UUID (new or existing)
    */
-  async findOrCreateConversation(userId: string, conversationId?: string): Promise<string> {
-    return this.repo.findOrCreateConversation(userId, conversationId);
+  async findOrCreateConversation(userId: string, conversationId?: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<string> {
+    return this.repo.findOrCreateConversation(userId, conversationId, agentType);
   }
 
   /**
@@ -35,8 +35,9 @@ export class ConversationService {
    */
   async listConversations(
     userId: string,
+    agentType: 'travel' | 'shopping' = 'travel',
   ): Promise<Array<{ id: string; created_at: string; title: string | null }>> {
-    return this.repo.listConversations(userId);
+    return this.repo.listConversations(userId, agentType);
   }
 
   /**

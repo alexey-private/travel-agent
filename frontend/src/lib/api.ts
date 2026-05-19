@@ -106,9 +106,9 @@ export async function fetchMessages(
   return data.messages;
 }
 
-/** Fetch all conversations for a user, newest first. */
-export async function fetchConversations(userId: string): Promise<Conversation[]> {
-  const response = await fetch(`${API_URL}/api/conversations/${userId}`);
+/** Fetch all conversations for a user filtered by agent type, newest first. */
+export async function fetchConversations(userId: string, agentType: "travel" | "shopping" = "travel"): Promise<Conversation[]> {
+  const response = await fetch(`${API_URL}/api/conversations/${userId}?agentType=${agentType}`);
   if (!response.ok) throw new Error(`Failed to fetch conversations: ${response.status}`);
   const data = (await response.json()) as { conversations: Conversation[] };
   return data.conversations;

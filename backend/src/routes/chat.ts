@@ -72,6 +72,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const conversationId = await conversationService.findOrCreateConversation(
         internalUserId,
         existingConvId,
+        agentType,
       );
 
       // Load context in parallel

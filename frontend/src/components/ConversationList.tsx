@@ -6,6 +6,7 @@ import { fetchConversations, type Conversation } from "@/lib/api";
 
 interface ConversationListProps {
   userId: string;
+  agentType: "travel" | "shopping";
   selectedId: string | null;
   refreshTrigger: number;
   onSelect: (conversationId: string) => void;
@@ -24,6 +25,7 @@ function formatDate(iso: string): string {
 
 export default function ConversationList({
   userId,
+  agentType,
   selectedId,
   refreshTrigger,
   onSelect,
@@ -33,11 +35,11 @@ export default function ConversationList({
 
   const load = useCallback(async () => {
     try {
-      setConversations(await fetchConversations(userId));
+      setConversations(await fetchConversations(userId, agentType));
     } catch {
       // silently ignore fetch errors
     }
-  }, [userId]);
+  }, [userId, agentType]);
 
   useEffect(() => {
     void load();
