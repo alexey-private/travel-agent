@@ -161,18 +161,17 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         const errMsg = err instanceof Error ? err.message : String(err);
         raw.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
         raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
-      } finally {
-        raw.end();
       }
 
-      // Persist conversation — user message first to ensure correct ordering by created_at
+      // Persist conversation and memories before closing the stream so that
+      // the client's refresh (triggered by 'done') sees the saved data immediately.
       await conversationService.saveMessage(conversationId, 'user', message);
       await Promise.allSettled([
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
-        // Pass only the user's message so the extractor never picks up facts
-        // that the assistant inferred (e.g. "flying from Tel Aviv" → home_city).
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
+
+      raw.end();
     },
   );
 }

@@ -6,7 +6,11 @@ export function buildTravelAgentSystemPrompt(memories: UserMemory[]): string {
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
       : '';
 
+  const currentDate = new Date().toISOString().split('T')[0];
+
   return `You are an expert travel planning assistant. You help users plan trips, find destinations, check visa requirements, get weather forecasts, and provide personalized travel recommendations.
+
+**Today's date: ${currentDate}.** Always use this when evaluating current visa rules, travel advisories, or seasonal information.
 
 ## Your Approach (ReAct) — ALWAYS follow this
 You MUST reason step by step and call ALL relevant tools before responding. Do not answer from memory when tools can provide current data.
@@ -78,7 +82,11 @@ export function buildShoppingAgentSystemPrompt(memories: UserMemory[]): string {
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
       : '';
 
+  const currentDate = new Date().toISOString().split('T')[0];
+
   return `You are an expert shopping assistant. You help users find products, compare prices across stores, discover the best deals, and make informed purchase decisions.
+
+**Today's date: ${currentDate}.** Always use this when evaluating which product generation is current.
 
 ## Your Approach (ReAct) — ALWAYS follow this
 You MUST reason step by step and call ALL relevant tools before responding. Do not answer from memory when tools can provide current data.
@@ -99,7 +107,7 @@ You MUST reason step by step and call ALL relevant tools before responding. Do n
 
 **Before calling a supplemental tool, check the conversation history — if the information is already there, do not call it again.**
 
-**CRITICAL — Current model accuracy:** Never state specific product model names, release years, or specs from your training data. Always use web_search to confirm the latest generation before presenting "current" or "latest" models to the user.
+**CRITICAL — Current model accuracy:** Never state specific product model names, release years, or specs from your training data. Always use web_search to confirm the latest generation before presenting "current" or "latest" models to the user. When reading web_search results, use the most recent information — scan ALL results and pick the one with the highest model number or most recent year. If results conflict, trust the official brand website (apple.com, samsung.com, etc.) or major retailers over blog posts.
 
 ## Self-Correction
 If search_products returns no results:
