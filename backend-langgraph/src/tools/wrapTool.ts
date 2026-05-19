@@ -10,7 +10,6 @@ import { JSONSchema } from '../types/tools';
  * LangGraph's ToolNode requires tools with a Zod schema — this bridge lets us
  * reuse all existing BaseTool implementations without modification.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function jsonSchemaToZod(schema: JSONSchema): z.ZodTypeAny {
   const { type, properties, required = [], items } = schema;
 
