@@ -46,7 +46,7 @@ describe('MemoryService', () => {
 
       const result = await service.getMemories('user-1');
 
-      expect(mockRepo.getMemories).toHaveBeenCalledWith('user-1');
+      expect(mockRepo.getMemories).toHaveBeenCalledWith('user-1', 'travel');
       expect(result).toEqual(memories);
     });
   });
@@ -57,7 +57,7 @@ describe('MemoryService', () => {
 
       await service.deleteMemory('user-1', 'home_city');
 
-      expect(mockRepo.deleteMemory).toHaveBeenCalledWith('user-1', 'home_city');
+      expect(mockRepo.deleteMemory).toHaveBeenCalledWith('user-1', 'home_city', 'travel');
     });
   });
 
@@ -73,9 +73,9 @@ describe('MemoryService', () => {
 
       expect(mockInvoke).toHaveBeenCalledTimes(1);
       expect(mockRepo.upsertMemory).toHaveBeenCalledTimes(3);
-      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'home_city', 'San Francisco');
-      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'diet', 'vegetarian');
-      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'budget', 'mid-range');
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'home_city', 'San Francisco', 'travel');
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'diet', 'vegetarian', 'travel');
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'budget', 'mid-range', 'travel');
     });
 
     it('passes existing memories to the LLM as context', async () => {
@@ -104,7 +104,7 @@ describe('MemoryService', () => {
 
       await service.extractAndSaveMemories('user-1', 'I always fly United Airlines.');
 
-      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'airline', 'United');
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'airline', 'United', 'travel');
     });
 
     it('skips saving when the LLM returns an empty object', async () => {

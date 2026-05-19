@@ -14,33 +14,33 @@ export class MemoryRepository extends BaseRepository {
    * Inserts or updates a memory entry for the given user.
    * Uses ON CONFLICT to perform an upsert on (user_id, key).
    */
-  async upsertMemory(userId: string, key: string, value: string): Promise<void> {
+  async upsertMemory(userId: string, key: string, value: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<void> {
     await this.execute(
-      `INSERT INTO user_memories (user_id, key, value)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, key)
+      `INSERT INTO user_memories (user_id, key, value, agent_type)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, key, agent_type)
        DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-      [userId, key, value],
+      [userId, key, value, agentType],
     );
   }
 
   /**
-   * Returns all memory entries for the given user.
+   * Returns all memory entries for the given user filtered by agent type.
    */
-  async getMemories(userId: string): Promise<UserMemory[]> {
+  async getMemories(userId: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<UserMemory[]> {
     return this.query<UserMemory>(
-      'SELECT key, value FROM user_memories WHERE user_id = $1 ORDER BY updated_at DESC',
-      [userId],
+      'SELECT key, value FROM user_memories WHERE user_id = $1 AND agent_type = $2 ORDER BY updated_at DESC',
+      [userId, agentType],
     );
   }
 
   /**
-   * Deletes a specific memory entry by key.
+   * Deletes a specific memory entry by key and agent type.
    */
-  async deleteMemory(userId: string, key: string): Promise<void> {
+  async deleteMemory(userId: string, key: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<void> {
     await this.execute(
-      'DELETE FROM user_memories WHERE user_id = $1 AND key = $2',
-      [userId, key],
+      'DELETE FROM user_memories WHERE user_id = $1 AND key = $2 AND agent_type = $3',
+      [userId, key, agentType],
     );
   }
 }

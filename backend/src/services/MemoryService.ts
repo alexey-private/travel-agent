@@ -51,8 +51,8 @@ export class MemoryService {
   /**
    * Returns all stored memories for the given user.
    */
-  async getMemories(userId: string): Promise<UserMemory[]> {
-    return this.repo.getMemories(userId);
+  async getMemories(userId: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<UserMemory[]> {
+    return this.repo.getMemories(userId, agentType);
   }
 
   /**
@@ -111,7 +111,7 @@ export class MemoryService {
     // Persist each extracted preference
     await Promise.all(
       Object.entries(extracted).map(([key, value]) =>
-        this.repo.upsertMemory(userId, key, String(value)),
+        this.repo.upsertMemory(userId, key, String(value), agentType),
       ),
     );
   }

@@ -1,15 +1,21 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
-import { getPool } from '../db/client';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
 import { RAGService } from '../services/RAGService';
-import { EmbeddingService } from '../services/EmbeddingService';
 import { SuggestionService } from '../services/SuggestionService';
 import { buildTravelGraph } from '../graph/travelGraph';
 import { buildShoppingGraph } from '../graph/shoppingGraph';
 import { AgentEvent } from '../types/agent';
+
+interface ChatRouteOptions {
+  userService: UserService;
+  conversationService: ConversationService;
+  memoryService: MemoryService;
+  ragService: RAGService;
+  suggestionService: SuggestionService;
+}
 
 interface ChatBody {
   userId: string;
@@ -40,7 +46,8 @@ interface Source {
  *   on_tool_start        → tool_start
  *   on_tool_end          → tool_end
  */
-export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
+export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
+  const { userService, conversationService, memoryService, ragService, suggestionService } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -49,14 +56,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       if (!sessionId || !message) {
         return reply.status(400).send({ error: 'userId and message are required' });
       }
-
-      const pool = getPool();
-      const embeddingService = new EmbeddingService();
-      const userService = new UserService(pool);
-      const conversationService = new ConversationService(pool);
-      const memoryService = new MemoryService(pool);
-      const ragService = new RAGService(pool, embeddingService);
-      const suggestionService = new SuggestionService();
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
       const conversationId = await conversationService.findOrCreateConversation(

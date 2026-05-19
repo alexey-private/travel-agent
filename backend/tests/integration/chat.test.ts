@@ -11,6 +11,11 @@ import { chatRoutes } from '@/routes/chat';
 import { closePool } from '@/db/client';
 import { AnthropicLLMClient } from '@/llm/AnthropicLLMClient';
 import { EmbeddingService } from '@/services/EmbeddingService';
+import { UserService } from '@/services/UserService';
+import { ConversationService } from '@/services/ConversationService';
+import { MemoryService } from '@/services/MemoryService';
+import { RAGService } from '@/services/RAGService';
+import { SuggestionService } from '@/services/SuggestionService';
 import { ToolRegistry } from '@/tools/ToolRegistry';
 import { WebSearchTool } from '@/tools/WebSearchTool';
 import { WeatherTool } from '@/tools/travel/WeatherTool';
@@ -53,6 +58,9 @@ function parseSseBody(body: string): Array<Record<string, unknown>> {
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  const pool = getTestPool();
+  const llmClient = new AnthropicLLMClient('test-key');
+  const embeddingService = new EmbeddingService();
 
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(new WebSearchTool());
@@ -65,10 +73,14 @@ async function buildApp(): Promise<FastifyInstance> {
   const shoppingToolRegistry = new ToolRegistry();
 
   await app.register(chatRoutes, {
-    llmClient: new AnthropicLLMClient('test-key'),
+    llmClient,
     travelToolRegistry,
     shoppingToolRegistry,
-    embeddingService: new EmbeddingService(),
+    userService: new UserService(pool),
+    conversationService: new ConversationService(pool),
+    memoryService: new MemoryService(pool, llmClient),
+    ragService: new RAGService(pool, llmClient, embeddingService),
+    suggestionService: new SuggestionService(llmClient),
   });
   return app;
 }

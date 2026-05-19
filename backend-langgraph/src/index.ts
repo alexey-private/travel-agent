@@ -2,6 +2,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { env } from './config/env';
 import { getPool, closePool } from './db/client';
+import { EmbeddingService } from './services/EmbeddingService';
+import { UserService } from './services/UserService';
+import { ConversationService } from './services/ConversationService';
+import { MemoryService } from './services/MemoryService';
+import { RAGService } from './services/RAGService';
+import { SuggestionService } from './services/SuggestionService';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
@@ -22,13 +28,20 @@ async function bootstrap(): Promise<void> {
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
   });
 
-  await fastify.register(chatRoutes);
+  // Shared singletons — created once at startup, reused across all requests
+  const pool = getPool();
+  const embeddingService = new EmbeddingService();
+  const userService = new UserService(pool);
+  const conversationService = new ConversationService(pool);
+  const memoryService = new MemoryService(pool);
+  const ragService = new RAGService(pool, embeddingService);
+  const suggestionService = new SuggestionService();
+
+  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
 
   fastify.get('/health', async () => ({ status: 'ok', engine: 'langgraph' }));
-
-  const pool = getPool();
   await pool.query('SELECT 1');
   fastify.log.info('Database connection verified');
 

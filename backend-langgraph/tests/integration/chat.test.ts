@@ -8,6 +8,12 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import { chatRoutes } from '@/routes/chat';
 import { closePool } from '@/db/client';
+import { EmbeddingService } from '@/services/EmbeddingService';
+import { UserService } from '@/services/UserService';
+import { ConversationService } from '@/services/ConversationService';
+import { MemoryService } from '@/services/MemoryService';
+import { RAGService } from '@/services/RAGService';
+import { SuggestionService } from '@/services/SuggestionService';
 import { setupTestDb, clearTestDb, teardownTestDb, getTestPool } from '../helpers/testDb';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -53,7 +59,15 @@ function parseSseBody(body: string): Array<Record<string, unknown>> {
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(chatRoutes);
+  const pool = getTestPool();
+  const embeddingService = new EmbeddingService();
+  await app.register(chatRoutes, {
+    userService: new UserService(pool),
+    conversationService: new ConversationService(pool),
+    memoryService: new MemoryService(pool),
+    ragService: new RAGService(pool, embeddingService),
+    suggestionService: new SuggestionService(),
+  });
   return app;
 }
 

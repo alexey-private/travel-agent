@@ -72,7 +72,7 @@ describe('RAGService', () => {
       const result = await service.retrieve('Tokyo travel', 2);
 
       expect(mockEmbed).toHaveBeenCalledWith('Tokyo travel');
-      expect(mockRepo.findSimilar).toHaveBeenCalledWith(expect.any(Array), 2);
+      expect(mockRepo.findSimilar).toHaveBeenCalledWith(expect.any(Array), 2, undefined);
       expect(result).toEqual(chunks);
     });
 
@@ -81,7 +81,7 @@ describe('RAGService', () => {
 
       await service.retrieve('Tokyo');
 
-      expect(mockRepo.findSimilar).toHaveBeenCalledWith(expect.any(Array), 3);
+      expect(mockRepo.findSimilar).toHaveBeenCalledWith(expect.any(Array), 3, undefined);
     });
   });
 

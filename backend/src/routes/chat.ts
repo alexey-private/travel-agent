@@ -1,11 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { getPool } from '../db/client';
 import { LLMClient } from '../llm/LLMClient';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
 import { RAGService } from '../services/RAGService';
-import { EmbeddingService } from '../services/EmbeddingService';
 import { TravelAgent } from '../agent/TravelAgent';
 import { ShoppingAgent } from '../agent/ShoppingAgent';
 import { AgentContext } from '../agent/AgentContext';
@@ -17,7 +15,11 @@ interface ChatRouteOptions {
   llmClient: LLMClient;
   travelToolRegistry: ToolRegistry;
   shoppingToolRegistry: ToolRegistry;
-  embeddingService: EmbeddingService;
+  userService: UserService;
+  conversationService: ConversationService;
+  memoryService: MemoryService;
+  ragService: RAGService;
+  suggestionService: SuggestionService;
 }
 
 interface Source {
@@ -50,7 +52,7 @@ interface ChatBody {
  * triggers memory extraction in the background.
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { llmClient, travelToolRegistry, shoppingToolRegistry, embeddingService } = options;
+  const { llmClient, travelToolRegistry, shoppingToolRegistry, userService, conversationService, memoryService, ragService, suggestionService } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -59,13 +61,6 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       if (!sessionId || !message) {
         return reply.status(400).send({ error: 'userId and message are required' });
       }
-
-      // Services Initialization 
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const conversationService = new ConversationService(pool);
-      const memoryService = new MemoryService(pool, llmClient);
-      const ragService = new RAGService(pool, llmClient, embeddingService);
 
       // Resolve/create user and conversation
       const internalUserId = await userService.findOrCreateUser(sessionId);
@@ -77,7 +72,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       // Load context in parallel
       const [memories, history, ragContext] = await Promise.all([
-        memoryService.getMemories(internalUserId),
+        memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
       ]);
@@ -119,7 +114,6 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const agent = agentType === 'shopping'
         ? new ShoppingAgent(shoppingToolRegistry, llmClient)
         : new TravelAgent(travelToolRegistry, llmClient);
-      const suggestionService = new SuggestionService(llmClient);
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
       const sources: Source[] = [];

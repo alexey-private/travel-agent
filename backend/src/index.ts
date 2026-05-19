@@ -3,6 +3,10 @@ import cors from '@fastify/cors';
 import { env } from './config/env';
 import { getPool, closePool } from './db/client';
 import { RAGService } from './services/RAGService';
+import { UserService } from './services/UserService';
+import { ConversationService } from './services/ConversationService';
+import { MemoryService } from './services/MemoryService';
+import { SuggestionService } from './services/SuggestionService';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
@@ -40,11 +44,15 @@ async function bootstrap(): Promise<void> {
   const apiKey = env.LLM_PROVIDER === 'openai'
     ? env.OPENAI_API_KEY ?? (() => { throw new Error('OPENAI_API_KEY is required'); })()
     : env.ANTHROPIC_API_KEY ?? (() => { throw new Error('ANTHROPIC_API_KEY is required'); })();
-  // 
+  //
   const llmClient = LLMClientFactory.create({ provider: env.LLM_PROVIDER, apiKey });
   const embeddingService = new EmbeddingService();
   const pool = getPool();
   const ragService = new RAGService(pool, llmClient, embeddingService);
+  const userService = new UserService(pool);
+  const conversationService = new ConversationService(pool);
+  const memoryService = new MemoryService(pool, llmClient);
+  const suggestionService = new SuggestionService(llmClient);
 
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(new WebSearchTool());
@@ -62,7 +70,10 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(new WebSearchTool());
 
   // Routes
-  await fastify.register(chatRoutes, { llmClient, travelToolRegistry, shoppingToolRegistry, embeddingService });
+  await fastify.register(chatRoutes, {
+    llmClient, travelToolRegistry, shoppingToolRegistry,
+    userService, conversationService, memoryService, ragService, suggestionService,
+  });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
 
