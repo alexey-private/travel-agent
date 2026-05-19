@@ -4,16 +4,17 @@ import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 
 export async function conversationRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.get<{ Params: { userId: string } }>(
+  fastify.get<{ Params: { userId: string }; Querystring: { agentType?: string } }>(
     '/api/conversations/:userId',
-    async (request: FastifyRequest<{ Params: { userId: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { userId: string }; Querystring: { agentType?: string } }>, reply: FastifyReply) => {
       const { userId: sessionId } = request.params;
+      const agentType = request.query.agentType === 'shopping' ? 'shopping' : 'travel';
       const pool = getPool();
       const userService = new UserService(pool);
       const conversationService = new ConversationService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
-      const conversations = await conversationService.listConversations(internalUserId);
+      const conversations = await conversationService.listConversations(internalUserId, agentType);
 
       return reply.send({ conversations });
     },

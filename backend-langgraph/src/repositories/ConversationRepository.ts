@@ -29,7 +29,7 @@ export class ConversationRepository extends BaseRepository {
    * Finds an existing conversation by id, or creates a new one for the user.
    * @returns The conversation's UUID
    */
-  async findOrCreateConversation(userId: string, conversationId?: string): Promise<string> {
+  async findOrCreateConversation(userId: string, conversationId?: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<string> {
     if (conversationId) {
       const existing = await this.queryOne<ConversationRow>(
         'SELECT id FROM conversations WHERE id = $1 AND user_id = $2',
@@ -39,8 +39,8 @@ export class ConversationRepository extends BaseRepository {
     }
 
     const created = await this.queryOne<ConversationRow>(
-      'INSERT INTO conversations (user_id) VALUES ($1) RETURNING id',
-      [userId],
+      'INSERT INTO conversations (user_id, agent_type) VALUES ($1, $2) RETURNING id',
+      [userId, agentType],
     );
     return created!.id;
   }
@@ -61,6 +61,7 @@ export class ConversationRepository extends BaseRepository {
    */
   async listConversations(
     userId: string,
+    agentType: 'travel' | 'shopping' = 'travel',
   ): Promise<Array<{ id: string; created_at: string; title: string | null }>> {
     return this.query<ConversationListRow>(
       `SELECT
@@ -72,9 +73,9 @@ export class ConversationRepository extends BaseRepository {
           ORDER BY created_at ASC LIMIT 1
         ) AS title
        FROM conversations c
-       WHERE c.user_id = $1
+       WHERE c.user_id = $1 AND c.agent_type = $2
        ORDER BY c.created_at DESC`,
-      [userId],
+      [userId, agentType],
     );
   }
 

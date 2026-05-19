@@ -62,6 +62,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       const conversationId = await conversationService.findOrCreateConversation(
         internalUserId,
         existingConvId,
+        agentType,
       );
 
       const [memories, history, ragContext] = await Promise.all([
