@@ -72,17 +72,17 @@ export async function streamChat(
   }
 }
 
-/** Fetch all stored memories for a user. */
-export async function fetchMemories(userId: string): Promise<UserMemory[]> {
-  const response = await fetch(`${API_URL}/api/memory/${userId}`);
+/** Fetch all stored memories for a user filtered by agent type. */
+export async function fetchMemories(userId: string, agentType: "travel" | "shopping" = "travel"): Promise<UserMemory[]> {
+  const response = await fetch(`${API_URL}/api/memory/${userId}?agentType=${agentType}`);
   if (!response.ok) throw new Error(`Failed to fetch memories: ${response.status}`);
   const data = (await response.json()) as { memories: UserMemory[] };
   return data.memories;
 }
 
 /** Delete a single memory entry for a user. */
-export async function deleteMemory(userId: string, key: string): Promise<void> {
-  await fetch(`${API_URL}/api/memory/${userId}/${encodeURIComponent(key)}`, {
+export async function deleteMemory(userId: string, key: string, agentType: "travel" | "shopping" = "travel"): Promise<void> {
+  await fetch(`${API_URL}/api/memory/${userId}/${encodeURIComponent(key)}?agentType=${agentType}`, {
     method: "DELETE",
   });
 }

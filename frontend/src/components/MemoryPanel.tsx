@@ -6,6 +6,7 @@ import { fetchMemories, deleteMemory, type UserMemory } from "@/lib/api";
 
 interface MemoryPanelProps {
   userId: string;
+  agentType: "travel" | "shopping";
   /** Incremented by parent whenever new memories may have been saved */
   refreshTrigger?: number;
 }
@@ -13,7 +14,7 @@ interface MemoryPanelProps {
 /**
  * Side panel that displays and manages the user's long-term memories.
  */
-export default function MemoryPanel({ userId, refreshTrigger }: MemoryPanelProps) {
+export default function MemoryPanel({ userId, agentType, refreshTrigger }: MemoryPanelProps) {
   const [memories, setMemories] = useState<UserMemory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,23 +23,23 @@ export default function MemoryPanel({ userId, refreshTrigger }: MemoryPanelProps
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchMemories(userId);
+      const data = await fetchMemories(userId, agentType);
       setMemories(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load memories");
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, agentType]);
 
-  // Load on mount and whenever refreshTrigger changes
+  // Load on mount and whenever refreshTrigger or agentType changes
   useEffect(() => {
     void load();
   }, [load, refreshTrigger]);
 
   const handleDelete = async (key: string) => {
     try {
-      await deleteMemory(userId, key);
+      await deleteMemory(userId, key, agentType);
       setMemories((prev) => prev.filter((m) => m.key !== key));
     } catch {
       setError("Failed to delete memory");

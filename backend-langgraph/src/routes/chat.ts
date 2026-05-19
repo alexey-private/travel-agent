@@ -66,7 +66,7 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       );
 
       const [memories, history, ragContext] = await Promise.all([
-        memoryService.getMemories(internalUserId),
+        memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
       ]);
@@ -170,8 +170,6 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
       } catch (err) {
         sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
         sse({ type: 'done' });
-      } finally {
-        raw.end();
       }
 
       await conversationService.saveMessage(conversationId, 'user', message);
@@ -179,6 +177,8 @@ export async function chatRoutes(fastify: FastifyInstance): Promise<void> {
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
+
+      raw.end();
     },
   );
 }

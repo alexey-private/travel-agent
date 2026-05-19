@@ -48,15 +48,15 @@ export class MemoryService {
   /**
    * Returns all stored memories for the given user.
    */
-  async getMemories(userId: string): Promise<UserMemory[]> {
-    return this.repo.getMemories(userId);
+  async getMemories(userId: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<UserMemory[]> {
+    return this.repo.getMemories(userId, agentType);
   }
 
   /**
    * Deletes a single memory key for the user.
    */
-  async deleteMemory(userId: string, key: string): Promise<void> {
-    return this.repo.deleteMemory(userId, key);
+  async deleteMemory(userId: string, key: string, agentType: 'travel' | 'shopping' = 'travel'): Promise<void> {
+    return this.repo.deleteMemory(userId, key, agentType);
   }
 
   /**
@@ -79,7 +79,7 @@ export class MemoryService {
   ): Promise<void> {
     if (!userMessage.trim()) return;
 
-    const existing = await this.repo.getMemories(userId);
+    const existing = await this.repo.getMemories(userId, agentType);
     const existingSection =
       existing.length > 0
         ? `\nExisting memories:\n${existing.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -100,7 +100,7 @@ export class MemoryService {
 
       await Promise.all(
         Object.entries(extracted).map(([key, value]) =>
-          this.repo.upsertMemory(userId, key, String(value)),
+          this.repo.upsertMemory(userId, key, String(value), agentType),
         ),
       );
     } catch {

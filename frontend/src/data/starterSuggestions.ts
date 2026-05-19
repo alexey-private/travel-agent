@@ -26,7 +26,7 @@ export const ALL_SUGGESTIONS: Record<"travel" | "shopping", string[]> = {
     "Compare prices for the Sony WH-1000XM5",
     "What's the best lightweight laptop for travel?",
     "Find deals on luggage sets for international travel",
-    "Best travel backpacks reviewed — 2024",
+    "Best travel backpacks reviewed — 2026",
     "Compare prices for AirPods Pro vs Samsung Galaxy Buds",
     "Find a portable charger with at least 20000mAh",
     "Best budget smartphones with good cameras",
