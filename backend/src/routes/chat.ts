@@ -111,6 +111,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         memories,
         ragContext,
         history,
+        sessionId,
       );
 
       const agent = agentType === 'shopping'

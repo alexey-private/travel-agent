@@ -107,8 +107,8 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const initialMessages = [...historyMessages, new HumanMessage(userContent)];
 
       const graph = agentType === 'shopping'
-        ? buildShoppingGraph(ragService, memories, calendarProvider)
-        : buildTravelGraph(memories, calendarProvider);
+        ? buildShoppingGraph(ragService, memories, calendarProvider, sessionId)
+        : buildTravelGraph(memories, calendarProvider, sessionId);
 
       let assistantText = '';
       const sources: Source[] = [];

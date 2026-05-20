@@ -13,7 +13,7 @@ import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { RAGService } from '../services/RAGService';
 import { UserMemory } from '../types/memory';
 
-export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider) {
+export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider, sessionId?: string) {
   return buildAgentGraph(
     [
       new ProductSearchTool(ragService),
@@ -26,6 +26,6 @@ export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[
       new PriceAlertTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
     ],
-    buildShoppingAgentSystemPrompt(memories),
+    buildShoppingAgentSystemPrompt(memories, sessionId),
   );
 }

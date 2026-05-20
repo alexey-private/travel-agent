@@ -101,6 +101,9 @@ export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: 
       : '';
 
   const currentDate = new Date().toISOString().split('T')[0];
+  const userIdSection = userId
+    ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_wishlist, manage_price_alerts, or any other tool that accepts userId.\n`
+    : '';
 
   return `You are an expert shopping assistant. You help users find products, compare prices across stores, discover the best deals, and make informed purchase decisions.
 
@@ -179,5 +182,5 @@ ${memories.length > 0
 - Never ask the user to repeat information already stored`
   : 'No preferences stored yet. If the user mentions personal details (preferred brands, budget, favorite stores, sizes, etc.), note them — they will be remembered for future conversations.'}
 
-${memoriesSection}`.trim();
+${userIdSection}${memoriesSection}`.trim();
 }

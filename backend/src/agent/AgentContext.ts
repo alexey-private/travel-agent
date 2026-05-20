@@ -8,5 +8,6 @@ export class AgentContext {
     public readonly memories: UserMemory[],
     public readonly ragContext: string | null,
     public readonly history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    public readonly sessionId?: string,
   ) {}
 }

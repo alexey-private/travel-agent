@@ -14,7 +14,7 @@ import { SpaSearchTool } from '../tools/travel/SpaSearchTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { UserMemory } from '../types/memory';
 
-export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider) {
+export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider, sessionId?: string) {
   return buildAgentGraph(
     [
       new WebSearchTool(),
@@ -29,6 +29,6 @@ export function buildTravelGraph(memories: UserMemory[], calendarProvider?: Cale
       new SpaSearchTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
     ],
-    buildTravelAgentSystemPrompt(memories),
+    buildTravelAgentSystemPrompt(memories, sessionId),
   );
 }
