@@ -36,15 +36,27 @@ Rules:
 Example output:
 {"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes", "current_laptop": "Lenovo IdeaPad Slim 5", "current_phone": "iPhone 15"}`;
 
+const FIRST_PERSON_RE = /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )/i;
+const MIN_EXTRACTABLE_LENGTH = 30;
+const EXTRACTION_EVERY_N = 3;
+
 /**
  * Service for managing user long-term memory.
  * Stores and retrieves key-value preference pairs extracted from conversations.
  */
 export class MemoryService {
   private repo: MemoryRepository;
+  private messageCounters = new Map<string, number>();
 
   constructor(pool: Pool) {
     this.repo = new MemoryRepository(pool);
+  }
+
+  private shouldExtract(userId: string, message: string): boolean {
+    if (message.length < MIN_EXTRACTABLE_LENGTH && !FIRST_PERSON_RE.test(message)) return false;
+    const count = (this.messageCounters.get(userId) ?? 0) + 1;
+    this.messageCounters.set(userId, count);
+    return count % EXTRACTION_EVERY_N === 0 || FIRST_PERSON_RE.test(message);
   }
 
   /**
@@ -80,6 +92,7 @@ export class MemoryService {
     agentType: 'travel' | 'shopping' = 'travel',
   ): Promise<void> {
     if (!userMessage.trim()) return;
+    if (!this.shouldExtract(userId, userMessage)) return;
 
     const existing = await this.repo.getMemories(userId, agentType);
     const existingSection =

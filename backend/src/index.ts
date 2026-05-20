@@ -23,6 +23,8 @@ import { PriceCompareTool } from './tools/shopping/PriceCompareTool';
 import { ProductReviewsTool } from './tools/shopping/ProductReviewsTool';
 import { DealSearchTool } from './tools/shopping/DealSearchTool';
 
+let _reqCounter = 0;
+
 const fastify = Fastify({
   logger: {
     level: env.NODE_ENV === 'production' ? 'warn' : 'info',
@@ -31,6 +33,8 @@ const fastify = Fastify({
         ? { target: 'pino-pretty', options: { colorize: true } }
         : undefined,
   },
+  genReqId: () => `req-${(++_reqCounter).toString().padStart(6, '0')}`,
+  requestIdHeader: 'x-request-id',
 });
 
 async function bootstrap(): Promise<void> {
@@ -54,11 +58,14 @@ async function bootstrap(): Promise<void> {
   const memoryService = new MemoryService(pool, llmClient);
   const suggestionService = new SuggestionService(llmClient);
 
+  const webSearchTool = new WebSearchTool();
+  const currencyTool = new CurrencyTool();
+
   const travelToolRegistry = new ToolRegistry();
-  travelToolRegistry.register(new WebSearchTool());
+  travelToolRegistry.register(webSearchTool);
   travelToolRegistry.register(new WeatherTool());
   travelToolRegistry.register(new CountryInfoTool());
-  travelToolRegistry.register(new CurrencyTool());
+  travelToolRegistry.register(currencyTool);
   travelToolRegistry.register(new FlightSearchTool());
 
   const shoppingToolRegistry = new ToolRegistry();
@@ -66,8 +73,8 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(new PriceCompareTool());
   shoppingToolRegistry.register(new ProductReviewsTool(ragService));
   shoppingToolRegistry.register(new DealSearchTool());
-  shoppingToolRegistry.register(new CurrencyTool());
-  shoppingToolRegistry.register(new WebSearchTool());
+  shoppingToolRegistry.register(currencyTool);
+  shoppingToolRegistry.register(webSearchTool);
 
   // Routes
   await fastify.register(chatRoutes, {

@@ -8,14 +8,10 @@ import {
   LLMToolCall,
   LLMToolDefinition,
 } from './types';
+import { env } from '../config/env';
 
-/**
- * Claude is used in two roles with different cost/capability trade-offs:
- * - Sonnet for the main ReAct loop (complex reasoning + tool orchestration)
- * - Haiku for lightweight single-turn tasks (extraction, classification, suggestions)
- */
-const REASONING_MODEL = 'claude-sonnet-4-6';
-const FAST_MODEL = 'claude-haiku-4-5-20251001';
+const REASONING_MODEL = env.REASONING_MODEL;
+const FAST_MODEL = env.FAST_MODEL;
 
 /**
  * Anthropic implementation of {@link LLMClient}.

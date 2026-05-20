@@ -22,6 +22,8 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  REASONING_MODEL: z.string().optional(),
+  FAST_MODEL: z.string().optional(),
 
   // External tools
   TAVILY_API_KEY: z.string().min(1, 'TAVILY_API_KEY is required'),
@@ -45,6 +47,18 @@ if (!parseResult.success) {
   process.exit(1);
 }
 
-export const env = parseResult.data;
+const MODEL_DEFAULTS = {
+  anthropic: { REASONING_MODEL: 'claude-sonnet-4-6', FAST_MODEL: 'claude-haiku-4-5-20251001' },
+  openai:    { REASONING_MODEL: 'gpt-4o',            FAST_MODEL: 'gpt-4o-mini' },
+};
+
+const _raw = parseResult.data;
+const _defaults = MODEL_DEFAULTS[_raw.LLM_PROVIDER];
+
+export const env = {
+  ..._raw,
+  REASONING_MODEL: _raw.REASONING_MODEL ?? _defaults.REASONING_MODEL,
+  FAST_MODEL:      _raw.FAST_MODEL      ?? _defaults.FAST_MODEL,
+};
 
 export type Env = typeof env;

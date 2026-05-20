@@ -32,10 +32,16 @@ export function createModel(size: ModelSize, maxTokensOrOptions?: number | Model
     }) as BaseChatModel;
   }
 
-  return new ChatAnthropic({
-    model: size === 'full' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001',
+  const model = new ChatAnthropic({
+    model: size === 'full' ? env.REASONING_MODEL : env.FAST_MODEL,
     apiKey: env.ANTHROPIC_API_KEY,
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(streaming !== undefined ? { streaming } : {}),
   }) as BaseChatModel;
+
+  // LangChain sets topP=-1 as a sentinel meaning "not set", but Anthropic API
+  // rejects it for claude-sonnet-4-6+. Force it to undefined so it's omitted.
+  (model as unknown as Record<string, unknown>).topP = undefined;
+
+  return model;
 }

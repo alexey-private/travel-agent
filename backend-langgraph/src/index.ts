@@ -12,6 +12,8 @@ import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
 
+let _reqCounter = 0;
+
 const fastify = Fastify({
   logger: {
     level: env.NODE_ENV === 'production' ? 'warn' : 'info',
@@ -20,6 +22,8 @@ const fastify = Fastify({
         ? { target: 'pino-pretty', options: { colorize: true } }
         : undefined,
   },
+  genReqId: () => `req-${(++_reqCounter).toString().padStart(6, '0')}`,
+  requestIdHeader: 'x-request-id',
 });
 
 async function bootstrap(): Promise<void> {

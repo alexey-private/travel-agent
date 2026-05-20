@@ -77,7 +77,8 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         ragService.buildRagContext(message),
       ]);
 
-      fastify.log.info({ ragContext: ragContext ? ragContext.slice(0, 200) : null }, 'RAG context result');
+      const requestId = request.id as string;
+      request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
 
       // Hijack the connection so Fastify does not finalise the response.
       // CORS headers must be set manually here because reply.hijack() bypasses
@@ -90,6 +91,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         Connection: 'keep-alive',
         'Access-Control-Allow-Origin': request.headers.origin ?? '*',
         'Access-Control-Allow-Credentials': 'true',
+        'X-Request-Id': requestId,
       });
 
       // Send conversationId immediately so the client can track the session
@@ -153,6 +155,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
+        request.log.error({ requestId, err }, 'agent error');
         raw.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
         raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       }
@@ -164,6 +167,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
+      request.log.info({ requestId, conversationId }, 'chat request completed');
 
       raw.end();
     },

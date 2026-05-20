@@ -4,6 +4,13 @@ import { EmbeddingService } from './EmbeddingService';
 import { KnowledgeChunk } from '../types/memory';
 import { LLMClient } from '../llm/LLMClient';
 
+const RAG_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
 const SHOULD_QUERY_PROMPT = `You decide whether a travel-planning query needs factual destination knowledge
 from a knowledge base (visa rules, health tips, cultural guides, etc.).
 
@@ -21,6 +28,8 @@ export class RAGService {
   private knowledgeRepo: KnowledgeRepository;
   private embeddingService: EmbeddingService;
   private llmClient: LLMClient;
+  private shouldQueryCache = new Map<string, CacheEntry<boolean>>();
+  private ragContextCache = new Map<string, CacheEntry<string | null>>();
 
   constructor(pool: Pool, llmClient: LLMClient, embeddingService: EmbeddingService) {
     this.knowledgeRepo = new KnowledgeRepository(pool);
@@ -28,11 +37,31 @@ export class RAGService {
     this.llmClient = llmClient;
   }
 
+  private getCached<T>(cache: Map<string, CacheEntry<T>>, key: string): T | undefined {
+    const entry = cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      cache.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  private setCached<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
+    cache.set(key, { value, expiresAt: Date.now() + RAG_CACHE_TTL_MS });
+  }
+
   /**
    * Asks the LLM whether the given user query needs a knowledge base lookup.
    * Returns true when the model responds with "yes".
    */
   async shouldQueryKnowledgeBase(query: string): Promise<boolean> {
+    const cached = this.getCached(this.shouldQueryCache, query);
+    if (cached !== undefined) {
+      console.log(`[RAG] shouldQueryKnowledgeBase cache hit: ${cached}`);
+      return cached;
+    }
+
     try {
       const text = await this.llmClient.complete({
         system: SHOULD_QUERY_PROMPT,
@@ -42,6 +71,7 @@ export class RAGService {
 
       const result = text.toLowerCase().trim().startsWith('yes');
       console.log(`[RAG] shouldQueryKnowledgeBase: "${text.trim()}" → ${result}`);
+      this.setCached(this.shouldQueryCache, query, result);
       return result;
     } catch (err) {
       console.log(`[RAG] shouldQueryKnowledgeBase error: ${err}`);
@@ -92,14 +122,24 @@ export class RAGService {
    * Returns null if RAG is not needed or no results found.
    */
   async buildRagContext(query: string): Promise<string | null> {
+    const cached = this.getCached(this.ragContextCache, query);
+    if (cached !== undefined) {
+      console.log(`[RAG] buildRagContext cache hit for query: "${query.slice(0, 60)}"`);
+      return cached;
+    }
+
     const needed = await this.shouldQueryKnowledgeBase(query);
-    if (!needed) return null;
+    if (!needed) {
+      this.setCached(this.ragContextCache, query, null);
+      return null;
+    }
 
     const chunks = await this.retrieve(query);
-    if (chunks.length === 0) return null;
+    const result = chunks.length === 0
+      ? null
+      : chunks.map(c => `[${c.topic}]\n${c.content}`).join('\n\n---\n\n');
 
-    return chunks
-      .map(c => `[${c.topic}]\n${c.content}`)
-      .join('\n\n---\n\n');
+    this.setCached(this.ragContextCache, query, result);
+    return result;
   }
 }

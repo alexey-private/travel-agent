@@ -35,6 +35,11 @@ Rules:
 Example output:
 {"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes", "current_laptop": "Lenovo IdeaPad Slim 5", "current_phone": "iPhone 15"}`;
 
+// Patterns that indicate the user is sharing personal facts worth remembering
+const FIRST_PERSON_RE = /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )/i;
+const MIN_EXTRACTABLE_LENGTH = 30;
+const EXTRACTION_EVERY_N = 3; // run extraction once per N messages per user
+
 /**
  * Service for managing user long-term memory.
  * Stores and retrieves key-value preference pairs extracted from conversations.
@@ -42,10 +47,21 @@ Example output:
 export class MemoryService {
   private repo: MemoryRepository;
   private llmClient: LLMClient | null;
+  private messageCounters = new Map<string, number>();
 
   constructor(pool: Pool, llmClient: LLMClient | null = null) {
     this.repo = new MemoryRepository(pool);
     this.llmClient = llmClient;
+  }
+
+  private shouldExtract(userId: string, message: string): boolean {
+    // Skip short purely transactional messages with no personal signals
+    if (message.length < MIN_EXTRACTABLE_LENGTH && !FIRST_PERSON_RE.test(message)) return false;
+
+    // Throttle: only extract every Nth message per user
+    const count = (this.messageCounters.get(userId) ?? 0) + 1;
+    this.messageCounters.set(userId, count);
+    return count % EXTRACTION_EVERY_N === 0 || FIRST_PERSON_RE.test(message);
   }
 
   /**
@@ -81,6 +97,7 @@ export class MemoryService {
     agentType: 'travel' | 'shopping' = 'travel',
   ): Promise<void> {
     if (!userMessage.trim() || !this.llmClient) return;
+    if (!this.shouldExtract(userId, userMessage)) return;
 
     const existing = await this.repo.getMemories(userId);
     const existingSection =

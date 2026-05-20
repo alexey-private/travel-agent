@@ -70,6 +70,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         ragService.buildRagContext(message),
       ]);
 
+      const requestId = request.id as string;
+      request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
+
       reply.hijack();
       const raw = reply.raw;
       raw.writeHead(200, {
@@ -78,6 +81,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         Connection: 'keep-alive',
         'Access-Control-Allow-Origin': request.headers.origin ?? '*',
         'Access-Control-Allow-Credentials': 'true',
+        'X-Request-Id': requestId,
       });
 
       const sse = (payload: AgentEvent | { type: 'error'; message: string } | { type: 'sources'; sources: Source[] }) =>
@@ -167,6 +171,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
         sse({ type: 'done' });
       } catch (err) {
+        request.log.error({ requestId, err }, 'agent error');
         sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
         sse({ type: 'done' });
       }
@@ -176,6 +181,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
+      request.log.info({ requestId, conversationId }, 'chat request completed');
 
       raw.end();
     },
