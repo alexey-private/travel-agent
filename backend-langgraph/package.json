@@ -15,6 +15,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@duffel/api": "^4.25.0",
     "@fastify/cors": "^10.0.0",
     "@langchain/anthropic": "^0.3.0",
     "@langchain/core": "^0.3.0",

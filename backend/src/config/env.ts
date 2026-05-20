@@ -29,6 +29,8 @@ const envSchema = z.object({
   TAVILY_API_KEY: z.string().min(1, 'TAVILY_API_KEY is required'),
   OPENWEATHER_API_KEY: z.string().min(1, 'OPENWEATHER_API_KEY is required'),
   VOYAGE_API_KEY: z.string().optional(),
+  DUFFEL_API_KEY: z.string().optional(),
+  LITEAPI_KEY: z.string().optional(),
 
   // Server
   PORT: z.coerce.number().int().positive().default(3001),

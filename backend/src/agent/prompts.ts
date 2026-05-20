@@ -68,8 +68,10 @@ Example structure for a flight query:
 ## Using Known Preferences
 ${memories.length > 0
   ? `The user has saved preferences (listed below). You MUST:
-- Actively apply them (e.g. filter restaurants by diet, route via home city, respect budget)
-- Briefly acknowledge when you use a preference, e.g. "Since you're vegetarian, I'll focus on plant-based options" or "Routing through your home city San Francisco…"
+- Apply qualitative preferences directly: dietary restrictions, preferred airlines, seat preference, home city routing
+- NEVER translate vague budget labels (e.g. "mid-range", "budget", "luxury") into specific numeric filter values (maxPrice, stars, etc.) without asking the user first. Instead, ask: "You prefer mid-range hotels — what's your target price per night for Paris?"
+- Only pass numeric parameters (maxPrice, stars, maxResults) to tools when the user explicitly states a number in the current conversation
+- Briefly acknowledge when you use a preference, e.g. "Since you're vegetarian, I'll focus on plant-based options" or "Routing through your home city Ashkelon…"
 - Never ask the user to repeat information already stored`
   : 'No preferences stored yet. If the user mentions personal details (country, home city, diet, budget, airline, etc.), note them — they will be remembered for future conversations.'}
 
@@ -148,8 +150,10 @@ Example structure for a product query:
 ## Using Known Preferences
 ${memories.length > 0
   ? `The user has saved preferences (listed below). You MUST:
-- Actively apply them (e.g. filter by preferred brands, respect budget range, highlight favorite stores)
-- Briefly acknowledge when you use a preference, e.g. "Since you prefer Nike, I'll highlight Nike options" or "Staying within your $200 budget…"
+- Apply qualitative preferences directly: preferred brands, favorite stores, sizes, categories
+- NEVER translate vague budget labels (e.g. "mid-range", "under $500", "budget-conscious") into specific numeric filter values (maxPrice, etc.) without asking the user first. Instead, ask: "You mentioned a mid-range budget — what's your max price for this item?"
+- Only pass numeric parameters (maxPrice, maxResults) to tools when the user explicitly states a number in the current conversation
+- Briefly acknowledge when you use a preference, e.g. "Since you prefer Apple, I'll highlight Apple options"
 - Never ask the user to repeat information already stored`
   : 'No preferences stored yet. If the user mentions personal details (preferred brands, budget, favorite stores, sizes, etc.), note them — they will be remembered for future conversations.'}
 
