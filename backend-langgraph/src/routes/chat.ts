@@ -116,8 +116,14 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for await (const event of graph.streamEvents({ messages: initialMessages } as any, { version: 'v2' })) {
           if (event.event === 'on_chat_model_stream') {
-            const text = event.data?.chunk?.content;
-            if (typeof text === 'string' && text) {
+            const raw = event.data?.chunk?.content;
+            // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string
+            const text = typeof raw === 'string'
+              ? raw
+              : Array.isArray(raw)
+                ? raw.filter((b: {type: string}) => b.type === 'text').map((b: {text: string}) => b.text).join('')
+                : '';
+            if (text) {
               assistantText += text;
               const ev: AgentEvent = { type: 'text', content: text };
               sse(ev);
