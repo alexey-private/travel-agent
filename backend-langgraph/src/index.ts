@@ -15,6 +15,8 @@ import { authRoutes } from './routes/auth';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
 import { CalendarProvider } from './tools/providers/CalendarProvider';
+import { GoogleTasksProvider } from './tools/providers/GoogleTasksProvider';
+import { TasksProvider } from './tools/providers/TasksProvider';
 
 let _reqCounter = 0;
 
@@ -46,20 +48,25 @@ async function bootstrap(): Promise<void> {
   const suggestionService = new SuggestionService();
 
   const tokenRepo = new GoogleTokenRepository(pool);
-  const calendarProvider: CalendarProvider | undefined =
-    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
-      ? new GoogleCalendarProvider(tokenRepo, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.GOOGLE_REDIRECT_URI)
-      : undefined;
+  const googleConfig = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
+    ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirectUri: env.GOOGLE_REDIRECT_URI }
+    : undefined;
+  const calendarProvider: CalendarProvider | undefined = googleConfig
+    ? new GoogleCalendarProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+    : undefined;
+  const tasksProvider: TasksProvider | undefined = googleConfig
+    ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+    : undefined;
 
-  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider });
+  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
-  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI) {
+  if (googleConfig) {
     await fastify.register(authRoutes, {
       tokenRepo,
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-      redirectUri: env.GOOGLE_REDIRECT_URI,
+      clientId: googleConfig.clientId,
+      clientSecret: googleConfig.clientSecret,
+      redirectUri: googleConfig.redirectUri,
     });
     fastify.log.info('Google Calendar OAuth2 routes registered');
   }

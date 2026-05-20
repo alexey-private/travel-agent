@@ -13,6 +13,8 @@ import { conversationRoutes } from './routes/conversations';
 import { authRoutes } from './routes/auth';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
+import { GoogleTasksProvider } from './tools/providers/GoogleTasksProvider';
+import { TasksTool } from './tools/TasksTool';
 import { LLMClientFactory } from './llm/LLMClientFactory';
 import { EmbeddingService } from './services/EmbeddingService';
 import { ToolRegistry } from './tools/ToolRegistry';
@@ -73,11 +75,17 @@ async function bootstrap(): Promise<void> {
   const currencyTool = new CurrencyTool();
 
   const tokenRepo = new GoogleTokenRepository(pool);
-  const calendarProvider =
-    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
-      ? new GoogleCalendarProvider(tokenRepo, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.GOOGLE_REDIRECT_URI)
-      : undefined;
+  const googleConfig = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
+    ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirectUri: env.GOOGLE_REDIRECT_URI }
+    : undefined;
+  const calendarProvider = googleConfig
+    ? new GoogleCalendarProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+    : undefined;
   const calendarTool = calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool();
+  const tasksProvider = googleConfig
+    ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+    : undefined;
+  const tasksTool = tasksProvider ? new TasksTool(tasksProvider) : new TasksTool();
 
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(webSearchTool);
@@ -102,6 +110,7 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(new WishlistTool());
   shoppingToolRegistry.register(new PriceAlertTool());
   shoppingToolRegistry.register(calendarTool);
+  shoppingToolRegistry.register(tasksTool);
 
   // Routes
   await fastify.register(chatRoutes, {
@@ -110,12 +119,12 @@ async function bootstrap(): Promise<void> {
   });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
-  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI) {
+  if (googleConfig) {
     await fastify.register(authRoutes, {
       tokenRepo,
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-      redirectUri: env.GOOGLE_REDIRECT_URI,
+      clientId: googleConfig.clientId,
+      clientSecret: googleConfig.clientSecret,
+      redirectUri: googleConfig.redirectUri,
     });
     fastify.log.info('Google Calendar OAuth2 routes registered');
   }

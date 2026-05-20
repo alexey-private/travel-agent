@@ -10,10 +10,12 @@ import { DealSearchTool } from '../tools/shopping/DealSearchTool';
 import { WishlistTool } from '../tools/shopping/WishlistTool';
 import { PriceAlertTool } from '../tools/shopping/PriceAlertTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
+import { TasksProvider } from '../tools/providers/TasksProvider';
+import { TasksTool } from '../tools/TasksTool';
 import { RAGService } from '../services/RAGService';
 import { UserMemory } from '../types/memory';
 
-export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider, sessionId?: string) {
+export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider, tasksProvider?: TasksProvider, sessionId?: string) {
   return buildAgentGraph(
     [
       new ProductSearchTool(ragService),
@@ -25,6 +27,7 @@ export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[
       new WishlistTool(),
       new PriceAlertTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
+      tasksProvider ? new TasksTool(tasksProvider) : new TasksTool(),
     ],
     buildShoppingAgentSystemPrompt(memories, sessionId),
   );
