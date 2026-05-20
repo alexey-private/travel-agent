@@ -238,7 +238,7 @@ export default function ChatWindow({
     setInput(text);
   }, []);
 
-  const suggestions = useMemo(() => getRandomSuggestions(5, agentType), [agentType]);
+  const suggestions = useMemo(() => getRandomSuggestions(6, agentType), [agentType]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
