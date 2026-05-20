@@ -15,7 +15,8 @@ export class CarRentalTool extends BaseTool {
   readonly name = 'search_car_rentals';
   readonly description =
     'Search for available car rentals in a city for specific dates. Returns rental offers with car models, prices, included features, and pickup locations. ' +
-    'Use when the user asks about renting a car, car hire, or transportation at a destination.';
+    'Use when the user asks about renting a car, car hire, or transportation at a destination. ' +
+    'IMPORTANT: pickupDate and returnDate MUST be in YYYY-MM-DD format. If the user gave only a month or vague dates, infer specific dates (e.g. "August" → pickupDate: "2026-08-01", returnDate: "2026-08-08" for a week). Do NOT ask the user to clarify dates — always infer reasonable defaults.';
 
   readonly inputSchema: JSONSchema = {
     type: 'object',
@@ -49,6 +50,17 @@ export class CarRentalTool extends BaseTool {
 
   async execute(input: unknown): Promise<ToolResult> {
     const { city, pickupDate, returnDate, carClass, maxResults = 4 } = input as CarRentalInput;
+
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRe.test(pickupDate) || isNaN(Date.parse(pickupDate))) {
+      return { success: false, error: `Invalid pickupDate "${pickupDate}". Use YYYY-MM-DD format (e.g. "2026-08-01").` };
+    }
+    if (!dateRe.test(returnDate) || isNaN(Date.parse(returnDate))) {
+      return { success: false, error: `Invalid returnDate "${returnDate}". Use YYYY-MM-DD format (e.g. "2026-08-08").` };
+    }
+    if (returnDate <= pickupDate) {
+      return { success: false, error: `returnDate "${returnDate}" must be after pickupDate "${pickupDate}".` };
+    }
 
     const params: CarRentalSearchParams = {
       city, pickupDate, returnDate,
