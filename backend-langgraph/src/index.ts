@@ -11,6 +11,10 @@ import { SuggestionService } from './services/SuggestionService';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
+import { authRoutes } from './routes/auth';
+import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
+import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
+import { CalendarProvider } from './tools/providers/CalendarProvider';
 
 let _reqCounter = 0;
 
@@ -41,9 +45,24 @@ async function bootstrap(): Promise<void> {
   const ragService = new RAGService(pool, embeddingService);
   const suggestionService = new SuggestionService();
 
-  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService });
+  const tokenRepo = new GoogleTokenRepository(pool);
+  const calendarProvider: CalendarProvider | undefined =
+    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
+      ? new GoogleCalendarProvider(tokenRepo, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.GOOGLE_REDIRECT_URI)
+      : undefined;
+
+  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI) {
+    await fastify.register(authRoutes, {
+      tokenRepo,
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+      redirectUri: env.GOOGLE_REDIRECT_URI,
+    });
+    fastify.log.info('Google Calendar OAuth2 routes registered');
+  }
 
   fastify.get('/health', async () => ({ status: 'ok', engine: 'langgraph' }));
   await pool.query('SELECT 1');

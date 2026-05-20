@@ -10,6 +10,9 @@ import { SuggestionService } from './services/SuggestionService';
 import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
+import { authRoutes } from './routes/auth';
+import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
+import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
 import { LLMClientFactory } from './llm/LLMClientFactory';
 import { EmbeddingService } from './services/EmbeddingService';
 import { ToolRegistry } from './tools/ToolRegistry';
@@ -69,7 +72,12 @@ async function bootstrap(): Promise<void> {
   const webSearchTool = new WebSearchTool();
   const currencyTool = new CurrencyTool();
 
-  const calendarTool = new CalendarTool();
+  const tokenRepo = new GoogleTokenRepository(pool);
+  const calendarProvider =
+    env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
+      ? new GoogleCalendarProvider(tokenRepo, env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.GOOGLE_REDIRECT_URI)
+      : undefined;
+  const calendarTool = calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool();
 
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(webSearchTool);
@@ -102,6 +110,15 @@ async function bootstrap(): Promise<void> {
   });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
+  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI) {
+    await fastify.register(authRoutes, {
+      tokenRepo,
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+      redirectUri: env.GOOGLE_REDIRECT_URI,
+    });
+    fastify.log.info('Google Calendar OAuth2 routes registered');
+  }
 
   // Health check
   fastify.get('/health', async () => ({ status: 'ok' }));

@@ -35,8 +35,7 @@ export class CarRentalTool extends BaseTool {
       },
       carClass: {
         type: 'string',
-        enum: ['economy', 'compact', 'midsize', 'suv', 'luxury', 'van'],
-        description: 'Car class preference. Omit to see all classes.',
+        description: 'Car class preference: economy, compact, midsize, suv, SUV, luxury, van. Case-insensitive. Omit to see all classes.',
       },
       maxResults: {
         type: 'number',
@@ -49,7 +48,9 @@ export class CarRentalTool extends BaseTool {
   };
 
   async execute(input: unknown): Promise<ToolResult> {
-    const { city, pickupDate, returnDate, carClass, maxResults = 4 } = input as CarRentalInput;
+    const raw = input as CarRentalInput & { carClass?: string };
+    const { city, pickupDate, returnDate, maxResults = 4 } = raw;
+    const carClass = raw.carClass?.toLowerCase() as CarRentalInput['carClass'] | undefined;
 
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRe.test(pickupDate) || isNaN(Date.parse(pickupDate))) {

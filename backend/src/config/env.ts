@@ -32,6 +32,11 @@ const envSchema = z.object({
   DUFFEL_API_KEY: z.string().optional(),
   LITEAPI_KEY: z.string().optional(),
 
+  // Google OAuth2
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_REDIRECT_URI: z.string().optional(),
+
   // Server
   PORT: z.coerce.number().int().positive().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

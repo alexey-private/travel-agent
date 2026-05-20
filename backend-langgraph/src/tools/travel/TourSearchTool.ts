@@ -3,9 +3,12 @@ import { ToolResult, JSONSchema } from '../../types/tools';
 import { MockTourProvider } from './providers/MockTourProvider';
 import { TourSearchParams } from './providers/TourProvider';
 
+type TourType = 'cultural' | 'adventure' | 'food' | 'nature' | 'historical' | 'cruise' | 'family';
+const VALID_TOUR_TYPES: TourType[] = ['cultural', 'adventure', 'food', 'nature', 'historical', 'cruise', 'family'];
+
 interface TourSearchInput {
   destination: string;
-  tourType?: 'cultural' | 'adventure' | 'food' | 'nature' | 'historical' | 'cruise' | 'family';
+  tourType?: string;
   durationDays?: number;
   maxPrice?: number;
   maxResults?: number;
@@ -26,8 +29,7 @@ export class TourSearchTool extends BaseTool {
       },
       tourType: {
         type: 'string',
-        enum: ['cultural', 'adventure', 'food', 'nature', 'historical', 'cruise', 'family'],
-        description: 'Type of tour. Omit to see all types.',
+        description: 'Type of tour (case-insensitive): cultural, adventure, food, nature, historical, cruise, family. Omit to see all types.',
       },
       durationDays: {
         type: 'number',
@@ -50,7 +52,11 @@ export class TourSearchTool extends BaseTool {
   };
 
   async execute(input: unknown): Promise<ToolResult> {
-    const { destination, tourType, durationDays, maxPrice, maxResults = 4 } = input as TourSearchInput;
+    const raw = input as TourSearchInput;
+    const { destination, durationDays, maxPrice, maxResults = 4 } = raw;
+
+    const normalizedType = raw.tourType?.toLowerCase() as TourType | undefined;
+    const tourType = normalizedType && VALID_TOUR_TYPES.includes(normalizedType) ? normalizedType : undefined;
 
     const params: TourSearchParams = {
       destination, tourType, durationDays, maxPrice,

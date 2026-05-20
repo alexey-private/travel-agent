@@ -11,9 +11,10 @@ import { VisaRequirementsTool } from '../tools/travel/VisaRequirementsTool';
 import { CarRentalTool } from '../tools/travel/CarRentalTool';
 import { TourSearchTool } from '../tools/travel/TourSearchTool';
 import { SpaSearchTool } from '../tools/travel/SpaSearchTool';
+import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { UserMemory } from '../types/memory';
 
-export function buildTravelGraph(memories: UserMemory[]) {
+export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider) {
   return buildAgentGraph(
     [
       new WebSearchTool(),
@@ -26,7 +27,7 @@ export function buildTravelGraph(memories: UserMemory[]) {
       new CarRentalTool(),
       new TourSearchTool(),
       new SpaSearchTool(),
-      new CalendarTool(),
+      calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
     ],
     buildTravelAgentSystemPrompt(memories),
   );

@@ -8,6 +8,7 @@ import { SuggestionService } from '../services/SuggestionService';
 import { buildTravelGraph } from '../graph/travelGraph';
 import { buildShoppingGraph } from '../graph/shoppingGraph';
 import { AgentEvent } from '../types/agent';
+import { CalendarProvider } from '../tools/providers/CalendarProvider';
 
 interface ChatRouteOptions {
   userService: UserService;
@@ -15,6 +16,7 @@ interface ChatRouteOptions {
   memoryService: MemoryService;
   ragService: RAGService;
   suggestionService: SuggestionService;
+  calendarProvider?: CalendarProvider;
 }
 
 interface ChatBody {
@@ -47,7 +49,7 @@ interface Source {
  *   on_tool_end          → tool_end
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { userService, conversationService, memoryService, ragService, suggestionService } = options;
+  const { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -105,8 +107,8 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const initialMessages = [...historyMessages, new HumanMessage(userContent)];
 
       const graph = agentType === 'shopping'
-        ? buildShoppingGraph(ragService, memories)
-        : buildTravelGraph(memories);
+        ? buildShoppingGraph(ragService, memories, calendarProvider)
+        : buildTravelGraph(memories, calendarProvider);
 
       let assistantText = '';
       const sources: Source[] = [];

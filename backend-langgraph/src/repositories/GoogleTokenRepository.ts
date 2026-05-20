@@ -1,0 +1,46 @@
+import { BaseRepository } from './BaseRepository';
+
+interface GoogleTokenRow {
+  user_id: string;
+  access_token: string;
+  refresh_token: string;
+  expiry_date: string;
+}
+
+export interface GoogleTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiryDate: number;
+}
+
+export class GoogleTokenRepository extends BaseRepository {
+  async save(userId: string, tokens: GoogleTokens): Promise<void> {
+    await this.execute(
+      `INSERT INTO google_tokens (user_id, access_token, refresh_token, expiry_date, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (user_id) DO UPDATE
+         SET access_token  = EXCLUDED.access_token,
+             refresh_token = EXCLUDED.refresh_token,
+             expiry_date   = EXCLUDED.expiry_date,
+             updated_at    = NOW()`,
+      [userId, tokens.accessToken, tokens.refreshToken, tokens.expiryDate],
+    );
+  }
+
+  async get(userId: string): Promise<GoogleTokens | null> {
+    const row = await this.queryOne<GoogleTokenRow>(
+      'SELECT access_token, refresh_token, expiry_date FROM google_tokens WHERE user_id = $1',
+      [userId],
+    );
+    if (!row) return null;
+    return {
+      accessToken: row.access_token,
+      refreshToken: row.refresh_token,
+      expiryDate: Number(row.expiry_date),
+    };
+  }
+
+  async delete(userId: string): Promise<void> {
+    await this.execute('DELETE FROM google_tokens WHERE user_id = $1', [userId]);
+  }
+}

@@ -1,12 +1,15 @@
 import { UserMemory } from '../types/memory';
 
-export function buildTravelAgentSystemPrompt(memories: UserMemory[]): string {
+export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
       : '';
 
   const currentDate = new Date().toISOString().split('T')[0];
+  const userIdSection = userId
+    ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_wishlist, manage_price_alerts, or any other tool that accepts userId.\n`
+    : '';
 
   return `You are an expert travel planning assistant. You help users plan trips, find destinations, check visa requirements, get weather forecasts, and provide personalized travel recommendations.
 
@@ -88,10 +91,10 @@ ${memories.length > 0
 - Never ask the user to repeat information already stored`
   : 'No preferences stored yet. If the user mentions personal details (country, home city, diet, budget, airline, etc.), note them — they will be remembered for future conversations.'}
 
-${memoriesSection}`.trim();
+${userIdSection}${memoriesSection}`.trim();
 }
 
-export function buildShoppingAgentSystemPrompt(memories: UserMemory[]): string {
+export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`

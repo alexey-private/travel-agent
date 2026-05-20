@@ -114,6 +114,23 @@ export async function fetchConversations(userId: string, agentType: "travel" | "
   return data.conversations;
 }
 
+/** Check if user has connected Google Calendar. */
+export async function fetchGoogleCalendarStatus(userId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/auth/google/status?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) return false;
+    const data = (await res.json()) as { connected: boolean };
+    return data.connected;
+  } catch {
+    return false;
+  }
+}
+
+/** Disconnect Google Calendar for a user. */
+export async function disconnectGoogleCalendar(userId: string): Promise<void> {
+  await fetch(`${API_URL}/auth/google/disconnect?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' });
+}
+
 /** Generate or retrieve a persistent userId from localStorage. */
 export function getOrCreateUserId(): string {
   const stored = localStorage.getItem("travel_agent_user_id");

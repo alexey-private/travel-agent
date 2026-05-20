@@ -3,9 +3,12 @@ import { ToolResult, JSONSchema } from '../../types/tools';
 import { MockSpaProvider } from './providers/MockSpaProvider';
 import { SpaSearchParams } from './providers/SpaProvider';
 
+type TreatmentType = 'massage' | 'facial' | 'body' | 'wellness' | 'thermal' | 'ayurveda';
+const VALID_TREATMENT_TYPES: TreatmentType[] = ['massage', 'facial', 'body', 'wellness', 'thermal', 'ayurveda'];
+
 interface SpaSearchInput {
   city: string;
-  treatmentType?: 'massage' | 'facial' | 'body' | 'wellness' | 'thermal' | 'ayurveda';
+  treatmentType?: string;
   maxPrice?: number;
   maxResults?: number;
 }
@@ -25,8 +28,7 @@ export class SpaSearchTool extends BaseTool {
       },
       treatmentType: {
         type: 'string',
-        enum: ['massage', 'facial', 'body', 'wellness', 'thermal', 'ayurveda'],
-        description: 'Type of treatment or spa focus. Omit to see all types.',
+        description: 'Type of treatment or spa focus (case-insensitive): massage, facial, body, wellness, thermal, ayurveda. Omit to see all types.',
       },
       maxPrice: {
         type: 'number',
@@ -43,7 +45,11 @@ export class SpaSearchTool extends BaseTool {
   };
 
   async execute(input: unknown): Promise<ToolResult> {
-    const { city, treatmentType, maxPrice, maxResults = 4 } = input as SpaSearchInput;
+    const raw = input as SpaSearchInput;
+    const { city, maxPrice, maxResults = 4 } = raw;
+
+    const normalizedType = raw.treatmentType?.toLowerCase() as TreatmentType | undefined;
+    const treatmentType = normalizedType && VALID_TREATMENT_TYPES.includes(normalizedType) ? normalizedType : undefined;
 
     const params: SpaSearchParams = {
       city, treatmentType, maxPrice,

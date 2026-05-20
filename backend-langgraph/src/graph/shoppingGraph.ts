@@ -9,10 +9,11 @@ import { ProductReviewsTool } from '../tools/shopping/ProductReviewsTool';
 import { DealSearchTool } from '../tools/shopping/DealSearchTool';
 import { WishlistTool } from '../tools/shopping/WishlistTool';
 import { PriceAlertTool } from '../tools/shopping/PriceAlertTool';
+import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { RAGService } from '../services/RAGService';
 import { UserMemory } from '../types/memory';
 
-export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[]) {
+export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider) {
   return buildAgentGraph(
     [
       new ProductSearchTool(ragService),
@@ -23,7 +24,7 @@ export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[
       new WebSearchTool(),
       new WishlistTool(),
       new PriceAlertTool(),
-      new CalendarTool(),
+      calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
     ],
     buildShoppingAgentSystemPrompt(memories),
   );
