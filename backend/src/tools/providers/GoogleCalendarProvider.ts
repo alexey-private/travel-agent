@@ -3,6 +3,8 @@ import { ToolResult } from '../../types/tools';
 import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams } from './CalendarProvider';
 import { GoogleTokenRepository } from '../../repositories/GoogleTokenRepository';
 
+const CALENDAR_NAME = 'Travel Agent';
+
 const CATEGORY_COLORS: Record<string, string> = {
   travel: '11',   // Tomato
   shopping: '5',  // Banana
@@ -29,7 +31,6 @@ export class GoogleCalendarProvider implements CalendarProvider {
       expiry_date: tokens.expiryDate,
     });
 
-    // Auto-refresh and persist new access token if expired
     auth.on('tokens', async (newTokens) => {
       if (newTokens.access_token) {
         await this.tokenRepo.save(userId, {
@@ -40,13 +41,37 @@ export class GoogleCalendarProvider implements CalendarProvider {
       }
     });
 
-    return google.calendar({ version: 'v3', auth });
+    return { calendar: google.calendar({ version: 'v3', auth }), tokens };
+  }
+
+  // Returns the dedicated "Travel Agent" calendarId, creating it if needed.
+  private async getOrCreateCalendarId(userId: string): Promise<string> {
+    const { calendar, tokens } = await this.getClient(userId);
+
+    if (tokens.calendarId) return tokens.calendarId;
+
+    // Check if it already exists (e.g. from a previous run where save failed)
+    const list = await calendar.calendarList.list();
+    const existing = list.data.items?.find(c => c.summary === CALENDAR_NAME);
+    if (existing?.id) {
+      await this.tokenRepo.saveCalendarId(userId, existing.id);
+      return existing.id;
+    }
+
+    // Create a new dedicated calendar
+    const created = await calendar.calendars.insert({
+      requestBody: { summary: CALENDAR_NAME, timeZone: 'UTC' },
+    });
+    const calendarId = created.data.id!;
+    await this.tokenRepo.saveCalendarId(userId, calendarId);
+    return calendarId;
   }
 
   async add(params: CalendarAddParams): Promise<ToolResult> {
     const { userId, title, date, time, description, category } = params;
 
-    const calendar = await this.getClient(userId);
+    const { calendar } = await this.getClient(userId);
+    const calendarId = await this.getOrCreateCalendarId(userId);
 
     const start = time
       ? { dateTime: `${date}T${time}:00`, timeZone: 'UTC' }
@@ -56,7 +81,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       : { date };
 
     const event = await calendar.events.insert({
-      calendarId: 'primary',
+      calendarId,
       requestBody: {
         summary: title,
         description: description ?? '',
@@ -69,7 +94,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
     return {
       success: true,
       data: {
-        message: `Event "${title}" added to Google Calendar for ${date}${time ? ` at ${time}` : ''}.`,
+        message: `Event "${title}" added to "${CALENDAR_NAME}" calendar for ${date}${time ? ` at ${time}` : ''}.`,
         event: {
           id: event.data.id,
           title,
@@ -85,11 +110,12 @@ export class GoogleCalendarProvider implements CalendarProvider {
   }
 
   async list(params: CalendarListParams): Promise<ToolResult> {
-    const calendar = await this.getClient(params.userId);
+    const { calendar } = await this.getClient(params.userId);
+    const calendarId = await this.getOrCreateCalendarId(params.userId);
 
     const now = new Date().toISOString();
     const res = await calendar.events.list({
-      calendarId: 'primary',
+      calendarId,
       timeMin: now,
       maxResults: 20,
       singleEvents: true,
@@ -107,21 +133,19 @@ export class GoogleCalendarProvider implements CalendarProvider {
 
     return {
       success: true,
-      data: { upcoming: events, total: events.length, source: 'google' },
+      data: { upcoming: events, total: events.length, calendarName: CALENDAR_NAME, source: 'google' },
     };
   }
 
   async delete(params: CalendarDeleteParams): Promise<ToolResult> {
-    const calendar = await this.getClient(params.userId);
+    const { calendar } = await this.getClient(params.userId);
+    const calendarId = await this.getOrCreateCalendarId(params.userId);
 
-    await calendar.events.delete({
-      calendarId: 'primary',
-      eventId: params.eventId,
-    });
+    await calendar.events.delete({ calendarId, eventId: params.eventId });
 
     return {
       success: true,
-      data: { message: `Event ${params.eventId} deleted from Google Calendar.`, source: 'google' },
+      data: { message: `Event ${params.eventId} deleted from "${CALENDAR_NAME}" calendar.`, source: 'google' },
     };
   }
 }
