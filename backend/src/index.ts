@@ -15,13 +15,21 @@ import { EmbeddingService } from './services/EmbeddingService';
 import { ToolRegistry } from './tools/ToolRegistry';
 import { WebSearchTool } from './tools/WebSearchTool';
 import { CurrencyTool } from './tools/CurrencyTool';
+import { CalendarTool } from './tools/CalendarTool';
 import { WeatherTool } from './tools/travel/WeatherTool';
 import { CountryInfoTool } from './tools/travel/CountryInfoTool';
 import { FlightSearchTool } from './tools/travel/FlightSearchTool';
+import { HotelSearchTool } from './tools/travel/HotelSearchTool';
+import { VisaRequirementsTool } from './tools/travel/VisaRequirementsTool';
+import { CarRentalTool } from './tools/travel/CarRentalTool';
+import { TourSearchTool } from './tools/travel/TourSearchTool';
+import { SpaSearchTool } from './tools/travel/SpaSearchTool';
 import { ProductSearchTool } from './tools/shopping/ProductSearchTool';
 import { PriceCompareTool } from './tools/shopping/PriceCompareTool';
 import { ProductReviewsTool } from './tools/shopping/ProductReviewsTool';
 import { DealSearchTool } from './tools/shopping/DealSearchTool';
+import { WishlistTool } from './tools/shopping/WishlistTool';
+import { PriceAlertTool } from './tools/shopping/PriceAlertTool';
 
 let _reqCounter = 0;
 
@@ -61,12 +69,20 @@ async function bootstrap(): Promise<void> {
   const webSearchTool = new WebSearchTool();
   const currencyTool = new CurrencyTool();
 
+  const calendarTool = new CalendarTool();
+
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(webSearchTool);
   travelToolRegistry.register(new WeatherTool());
   travelToolRegistry.register(new CountryInfoTool());
   travelToolRegistry.register(currencyTool);
   travelToolRegistry.register(new FlightSearchTool());
+  travelToolRegistry.register(new HotelSearchTool());
+  travelToolRegistry.register(new VisaRequirementsTool());
+  travelToolRegistry.register(new CarRentalTool());
+  travelToolRegistry.register(new TourSearchTool());
+  travelToolRegistry.register(new SpaSearchTool());
+  travelToolRegistry.register(calendarTool);
 
   const shoppingToolRegistry = new ToolRegistry();
   shoppingToolRegistry.register(new ProductSearchTool(ragService));
@@ -75,6 +91,9 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(new DealSearchTool());
   shoppingToolRegistry.register(currencyTool);
   shoppingToolRegistry.register(webSearchTool);
+  shoppingToolRegistry.register(new WishlistTool());
+  shoppingToolRegistry.register(new PriceAlertTool());
+  shoppingToolRegistry.register(calendarTool);
 
   // Routes
   await fastify.register(chatRoutes, {
