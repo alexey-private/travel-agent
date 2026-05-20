@@ -33,12 +33,51 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
 
-      // Verify ownership before reading messages
       const owned = await userService.verifyOwnership(internalUserId, conversationId);
       if (!owned) return reply.status(403).send({ error: 'Forbidden' });
 
       const history = await conversationService.getHistory(conversationId);
       return reply.send({ messages: history });
+    },
+  );
+
+  fastify.delete<{ Params: { userId: string; conversationId: string } }>(
+    '/api/conversations/:userId/:conversationId',
+    async (
+      request: FastifyRequest<{ Params: { userId: string; conversationId: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const { userId: sessionId, conversationId } = request.params;
+      const pool = getPool();
+      const userService = new UserService(pool);
+      const conversationService = new ConversationService(pool);
+
+      const internalUserId = await userService.findOrCreateUser(sessionId);
+      const owned = await userService.verifyOwnership(internalUserId, conversationId);
+      if (!owned) return reply.status(403).send({ error: 'Forbidden' });
+
+      await conversationService.deleteConversation(conversationId);
+      return reply.status(204).send();
+    },
+  );
+
+  fastify.delete<{ Params: { userId: string; conversationId: string } }>(
+    '/api/conversations/:userId/:conversationId/messages',
+    async (
+      request: FastifyRequest<{ Params: { userId: string; conversationId: string } }>,
+      reply: FastifyReply,
+    ) => {
+      const { userId: sessionId, conversationId } = request.params;
+      const pool = getPool();
+      const userService = new UserService(pool);
+      const conversationService = new ConversationService(pool);
+
+      const internalUserId = await userService.findOrCreateUser(sessionId);
+      const owned = await userService.verifyOwnership(internalUserId, conversationId);
+      if (!owned) return reply.status(403).send({ error: 'Forbidden' });
+
+      await conversationService.clearMessages(conversationId);
+      return reply.status(204).send();
     },
   );
 }

@@ -83,6 +83,14 @@ export class ConversationRepository extends BaseRepository {
     );
   }
 
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.execute('DELETE FROM conversations WHERE id = $1', [conversationId]);
+  }
+
+  async clearMessages(conversationId: string): Promise<void> {
+    await this.execute('DELETE FROM messages WHERE conversation_id = $1', [conversationId]);
+  }
+
   /**
    * Saves a single message to the conversation.
    */

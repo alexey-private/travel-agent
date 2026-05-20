@@ -5,6 +5,7 @@ interface GoogleTokenRow {
   refresh_token: string;
   expiry_date: string;
   calendar_id: string | null;
+  shopping_calendar_id: string | null;
 }
 
 export interface GoogleTokens {
@@ -12,6 +13,7 @@ export interface GoogleTokens {
   refreshToken: string;
   expiryDate: number;
   calendarId?: string | null;
+  shoppingCalendarId?: string | null;
 }
 
 export class GoogleTokenRepository extends BaseRepository {
@@ -31,7 +33,7 @@ export class GoogleTokenRepository extends BaseRepository {
 
   async get(userId: string): Promise<GoogleTokens | null> {
     const row = await this.queryOne<GoogleTokenRow>(
-      'SELECT access_token, refresh_token, expiry_date, calendar_id FROM google_tokens WHERE user_id = $1',
+      'SELECT access_token, refresh_token, expiry_date, calendar_id, shopping_calendar_id FROM google_tokens WHERE user_id = $1',
       [userId],
     );
     if (!row) return null;
@@ -40,12 +42,20 @@ export class GoogleTokenRepository extends BaseRepository {
       refreshToken: row.refresh_token,
       expiryDate: Number(row.expiry_date),
       calendarId: row.calendar_id,
+      shoppingCalendarId: row.shopping_calendar_id,
     };
   }
 
   async saveCalendarId(userId: string, calendarId: string): Promise<void> {
     await this.execute(
       'UPDATE google_tokens SET calendar_id = $2, updated_at = NOW() WHERE user_id = $1',
+      [userId, calendarId],
+    );
+  }
+
+  async saveShoppingCalendarId(userId: string, calendarId: string): Promise<void> {
+    await this.execute(
+      'UPDATE google_tokens SET shopping_calendar_id = $2, updated_at = NOW() WHERE user_id = $1',
       [userId, calendarId],
     );
   }

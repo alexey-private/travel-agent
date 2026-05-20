@@ -51,6 +51,13 @@ export default function Home() {
     setConversationListRefresh((n) => n + 1);
   }, []);
 
+  const handleConversationDeleted = useCallback((id: string) => {
+    if (selectedConversationId === id) {
+      setSelectedConversationId(null);
+      setChatKey((k) => k + 1);
+    }
+  }, [selectedConversationId]);
+
   if (!userId) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -81,6 +88,7 @@ export default function Home() {
           refreshTrigger={conversationListRefresh}
           onSelect={handleSelectConversation}
           onNewChat={handleNewChat}
+          onDelete={handleConversationDeleted}
         />
 
         {/* Chat area */}

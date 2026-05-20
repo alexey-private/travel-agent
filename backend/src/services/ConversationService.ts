@@ -40,6 +40,14 @@ export class ConversationService {
     return this.repo.listConversations(userId, agentType);
   }
 
+  async deleteConversation(conversationId: string): Promise<void> {
+    return this.repo.deleteConversation(conversationId);
+  }
+
+  async clearMessages(conversationId: string): Promise<void> {
+    return this.repo.clearMessages(conversationId);
+  }
+
   /**
    * Persists a user or assistant message to the database.
    */

@@ -106,6 +106,18 @@ export async function fetchMessages(
   return data.messages;
 }
 
+/** Delete a conversation and all its messages. */
+export async function deleteConversation(userId: string, conversationId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/conversations/${userId}/${conversationId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Failed to delete conversation: ${res.status}`);
+}
+
+/** Clear all messages from a conversation (keeps the conversation). */
+export async function clearConversationMessages(userId: string, conversationId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/conversations/${userId}/${conversationId}/messages`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Failed to clear messages: ${res.status}`);
+}
+
 /** Fetch all conversations for a user filtered by agent type, newest first. */
 export async function fetchConversations(userId: string, agentType: "travel" | "shopping" = "travel"): Promise<Conversation[]> {
   const response = await fetch(`${API_URL}/api/conversations/${userId}?agentType=${agentType}`);
