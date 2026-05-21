@@ -63,115 +63,133 @@ export class GoogleTasksProvider implements TasksProvider {
 
   async add(params: TasksAddParams): Promise<ToolResult> {
     const { userId, title, notes, due, tasklistName = DEFAULT_TASKLIST } = params;
+    try {
+      const tasksClient = await this.getClient(userId);
+      const tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
 
-    const tasksClient = await this.getClient(userId);
-    const tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
-
-    const task = await tasksClient.tasks.insert({
-      tasklist: tasklistId,
-      requestBody: {
-        title,
-        notes: notes ?? '',
-        // Google Tasks requires RFC 3339 with time, date-only tasks use midnight UTC
-        ...(due ? { due: `${due}T00:00:00.000Z` } : {}),
-        status: 'needsAction',
-      },
-    });
-
-    return {
-      success: true,
-      data: {
-        message: `Task "${title}" added to "${tasklistName}" list${due ? ` (due ${due})` : ''}.`,
-        task: {
-          id: task.data.id,
+      const task = await tasksClient.tasks.insert({
+        tasklist: tasklistId,
+        requestBody: {
           title,
           notes: notes ?? '',
-          due,
+          ...(due ? { due: `${due}T00:00:00.000Z` } : {}),
           status: 'needsAction',
-          selfLink: task.data.selfLink,
         },
-        source: 'google',
-      },
-    };
+      });
+
+      return {
+        success: true,
+        data: {
+          message: `Task "${title}" added to "${tasklistName}" list${due ? ` (due ${due})` : ''}.`,
+          task: {
+            id: task.data.id,
+            title,
+            notes: notes ?? '',
+            due,
+            status: 'needsAction',
+          },
+          source: 'google',
+        },
+      };
+    } catch (err) {
+      return { success: false, error: tasksErrorMessage(err) };
+    }
   }
 
   async list(params: TasksListParams): Promise<ToolResult> {
     const { userId, tasklistName = DEFAULT_TASKLIST, includeCompleted = false } = params;
+    try {
+      const tasksClient = await this.getClient(userId);
+      const tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
 
-    const tasksClient = await this.getClient(userId);
-    const tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
+      const res = await tasksClient.tasks.list({
+        tasklist: tasklistId,
+        showCompleted: includeCompleted,
+        showHidden: false,
+        maxResults: 50,
+      });
 
-    const res = await tasksClient.tasks.list({
-      tasklist: tasklistId,
-      showCompleted: includeCompleted,
-      showHidden: false,
-      maxResults: 50,
-    });
+      const tasks = (res.data.items ?? []).map(t => ({
+        id: t.id,
+        title: t.title ?? '(no title)',
+        notes: t.notes ?? '',
+        due: t.due ? t.due.split('T')[0] : undefined,
+        status: t.status,
+      }));
 
-    const tasks = (res.data.items ?? []).map(t => ({
-      id: t.id,
-      title: t.title ?? '(no title)',
-      notes: t.notes ?? '',
-      due: t.due ? t.due.split('T')[0] : undefined,
-      status: t.status,
-    }));
-
-    return {
-      success: true,
-      data: { tasks, total: tasks.length, tasklist: tasklistName, source: 'google' },
-    };
+      return {
+        success: true,
+        data: { tasks, total: tasks.length, tasklist: tasklistName, source: 'google' },
+      };
+    } catch (err) {
+      return { success: false, error: tasksErrorMessage(err) };
+    }
   }
 
   async complete(params: TasksCompleteParams): Promise<ToolResult> {
     const { userId, taskId, tasklistName = DEFAULT_TASKLIST } = params;
-
-    const tasksClient = await this.getClient(userId);
-    let tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
-
-    // Try the specified list first, then search all lists
     try {
-      await tasksClient.tasks.get({ tasklist: tasklistId, task: taskId });
-    } catch {
-      const found = await this.findTasklistForTask(tasksClient, taskId);
-      if (!found) return { success: false, error: `Task ${taskId} not found.` };
-      tasklistId = found;
+      const tasksClient = await this.getClient(userId);
+      let tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
+
+      try {
+        await tasksClient.tasks.get({ tasklist: tasklistId, task: taskId });
+      } catch {
+        const found = await this.findTasklistForTask(tasksClient, taskId);
+        if (!found) return { success: false, error: `Task ${taskId} not found.` };
+        tasklistId = found;
+      }
+
+      const updated = await tasksClient.tasks.patch({
+        tasklist: tasklistId,
+        task: taskId,
+        requestBody: { status: 'completed' },
+      });
+
+      return {
+        success: true,
+        data: {
+          message: `Task "${updated.data.title}" marked as completed.`,
+          task: { id: updated.data.id, title: updated.data.title, status: 'completed' },
+          source: 'google',
+        },
+      };
+    } catch (err) {
+      return { success: false, error: tasksErrorMessage(err) };
     }
-
-    const updated = await tasksClient.tasks.patch({
-      tasklist: tasklistId,
-      task: taskId,
-      requestBody: { status: 'completed' },
-    });
-
-    return {
-      success: true,
-      data: {
-        message: `Task "${updated.data.title}" marked as completed.`,
-        task: { id: updated.data.id, title: updated.data.title, status: 'completed' },
-        source: 'google',
-      },
-    };
   }
 
   async delete(params: TasksDeleteParams): Promise<ToolResult> {
     const { userId, taskId, tasklistName = DEFAULT_TASKLIST } = params;
-
-    const tasksClient = await this.getClient(userId);
-    let tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
-
     try {
-      await tasksClient.tasks.get({ tasklist: tasklistId, task: taskId });
-    } catch {
-      const found = await this.findTasklistForTask(tasksClient, taskId);
-      if (!found) return { success: false, error: `Task ${taskId} not found.` };
-      tasklistId = found;
+      const tasksClient = await this.getClient(userId);
+      let tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
+
+      try {
+        await tasksClient.tasks.get({ tasklist: tasklistId, task: taskId });
+      } catch {
+        const found = await this.findTasklistForTask(tasksClient, taskId);
+        if (!found) return { success: false, error: `Task ${taskId} not found.` };
+        tasklistId = found;
+      }
+
+      await tasksClient.tasks.delete({ tasklist: tasklistId, task: taskId });
+
+      return {
+        success: true,
+        data: { message: `Task ${taskId} deleted.`, source: 'google' },
+      };
+    } catch (err) {
+      return { success: false, error: tasksErrorMessage(err) };
     }
-
-    await tasksClient.tasks.delete({ tasklist: tasklistId, task: taskId });
-
-    return {
-      success: true,
-      data: { message: `Task ${taskId} deleted.`, source: 'google' },
-    };
   }
+}
+
+function tasksErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  // Google returns 403 when the token was issued before the tasks scope was added.
+  if (msg.includes('insufficient') || msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+    return 'Google Tasks permission missing. Please disconnect and reconnect your Google account in the right panel — the Tasks permission was added recently and requires re-authorization.';
+  }
+  return msg;
 }

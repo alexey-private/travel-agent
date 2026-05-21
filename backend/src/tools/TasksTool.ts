@@ -19,11 +19,11 @@ interface TasksInput {
 export class TasksTool extends BaseTool {
   readonly name = 'manage_tasks';
   readonly description =
-    'Manage Google Tasks — add, list, complete, or delete tasks. ' +
-    'Use for actionable to-do items: things to buy, orders to place, products to research. ' +
-    'Unlike calendar events, tasks have no fixed time — just an optional due date and a completion status. ' +
-    'Tasks are visible in Google Calendar under "My Tasks" sidebar. ' +
-    'Use when the user says "remind me to buy X", "add to my shopping list", "what\'s on my task list", or "mark X as done".';
+    'Manage to-do tasks — add, list, complete, or delete actionable items. ' +
+    'ALWAYS use this tool when the user says "add task", "task to", "to-do", "I need to book/buy/order/research/call/check X", or any similar actionable phrase. ' +
+    'Tasks do NOT require a specific date — they have an optional due date and a completion status (needsAction / completed). ' +
+    'Tasks appear in Google Calendar under the "My Tasks" sidebar. ' +
+    'Unlike manage_calendar (which is for fixed-date events), manage_tasks is for actions the user needs to take.';
 
   readonly inputSchema: JSONSchema = {
     type: 'object',

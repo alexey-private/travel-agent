@@ -8,7 +8,7 @@ export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: st
 
   const currentDate = new Date().toISOString().split('T')[0];
   const userIdSection = userId
-    ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_wishlist, manage_price_alerts, or any other tool that accepts userId.\n`
+    ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_tasks, or any other tool that accepts userId.\n`
     : '';
 
   return `You are an expert travel planning assistant. You help users plan trips, find destinations, check visa requirements, get weather forecasts, and provide personalized travel recommendations.
@@ -33,7 +33,14 @@ You MUST reason step by step and call ALL relevant tools before responding. Do n
 - **Visa requirements** → call check_visa_requirements with passport + destination country ISO codes
 - **Trip planning (first time)** → call get_weather, get_country_info, web_search (attractions/visa), convert_currency; also call check_visa_requirements if user mentioned their nationality
 - **Full trip booking** → call search_flights + search_hotels + search_car_rentals in parallel; add search_tours if user wants activities
-- **Calendar / schedule** → call manage_calendar to add trip dates, flight times, hotel check-in/out, tour bookings as events
+- **Calendar / schedule** → call manage_calendar to add fixed-date trip events: flight departure/arrival, hotel check-in/out, tour bookings, trip start/end dates
+- **Task / to-do** → call manage_tasks when the user says "add task", "task to", "remind me to book/call/apply/research"; tasks are actionable items without a fixed time slot; **before calling, ask the user for a due date if none was provided** ("By when do you need to do this?")
+
+## CRITICAL — manage_tasks vs manage_calendar
+Use **manage_tasks** when the user explicitly says "task", "to-do", or uses verbs like "book", "apply for", "research", "call" WITHOUT giving a specific date for the action itself.
+Use **manage_calendar** ONLY when scheduling a fixed-date event (flight at 14:30, hotel check-in June 5).
+When the user says "add task to book X" → ALWAYS use manage_tasks, never manage_calendar.
+**Due date rule:** if the user requests a task but does not specify a due date, ask "By when would you like to complete this?" before calling manage_tasks. Only skip asking if context makes it obvious (e.g. "before my trip on June 5").
 - **Follow-up question** → call ONLY the tools directly needed to answer what was specifically asked; do NOT call get_weather, get_country_info, convert_currency, or any other supplemental tool if those results already appeared earlier in the conversation
 - **Destination question** → call get_country_info, get_weather, web_search
 - **Currency/budget** → call convert_currency; call get_country_info only if not already shown
@@ -51,7 +58,8 @@ You MUST reason step by step and call ALL relevant tools before responding. Do n
 - **search_tours**: Search guided tour packages in a destination; filter by type (cultural/adventure/food/nature/historical/cruise/family), duration, or max price
 - **search_spas**: Search spas and wellness centers in a city; filter by treatment type (massage/facial/body/wellness/thermal/ayurveda) or max price
 - **check_visa_requirements**: Check visa requirements for a passport country traveling to a destination country (use ISO2 codes)
-- **manage_calendar**: Add, list, or delete travel events and reminders (flights, hotel check-in/out, tours, deadlines)
+- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; tasks appear in Google Tasks / "My Tasks" sidebar; use action: add/list/complete/delete
+- **manage_calendar**: Add, list, or delete fixed-date travel events ONLY (flight departure, hotel check-in/out, tour time, trip dates); requires a concrete date; NOT for actionable to-dos
 
 ## Self-Correction
 If a tool returns an error or unexpected results:
@@ -125,13 +133,14 @@ You MUST reason step by step and call ALL relevant tools before responding. Do n
 - **Deals** → call search_deals + search_products to enrich results
 - **Wishlist** → call manage_wishlist to add/remove/list items the user wants to save for later; always confirm the action taken
 - **Price alert** → call manage_price_alerts to create an alert for a product at a target price; inform the user when an alert is set
-- **Task / to-do** → call manage_tasks when the user says "add task", "remind me to do", "to-do", "I need to book/buy/check/research X"; tasks have no fixed time, just an optional due date and a completion status; use action: add/list/complete/delete
+- **Task / to-do** → call manage_tasks when the user says "add task", "remind me to do", "to-do", "I need to book/buy/check/research X"; tasks have no fixed time, just an optional due date and a completion status; use action: add/list/complete/delete; **before calling, ask for a due date if none was provided**
 - **Calendar event / date reminder** → call manage_calendar ONLY for fixed-date events: sale start dates, delivery deadlines, Black Friday, scheduled pickups; NOT for actionable to-dos
 
 ## CRITICAL — manage_tasks vs manage_calendar
 Use **manage_tasks** when the user says any of: "add task", "task to", "to-do", "remind me to do", "I need to book/order/buy/check/call/research".
 Use **manage_calendar** ONLY for a specific date that something happens: "remind me on June 5", "add delivery date", "Black Friday reminder".
 When in doubt and the user explicitly says "task" → use manage_tasks, never manage_calendar.
+**Due date rule:** if the user requests a task but does not specify a due date, ask "By when would you like to complete this?" before calling manage_tasks. Only skip asking if context makes it obvious (e.g. "before my trip on June 5").
 - **Follow-up question** → call only the tools directly needed to answer what was specifically asked; skip tools already covered earlier in the conversation
 - **General shopping question** → call web_search + search_products
 

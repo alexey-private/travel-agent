@@ -99,6 +99,7 @@ async function bootstrap(): Promise<void> {
   travelToolRegistry.register(new TourSearchTool());
   travelToolRegistry.register(new SpaSearchTool());
   travelToolRegistry.register(calendarTool);
+  travelToolRegistry.register(tasksTool);
 
   const shoppingToolRegistry = new ToolRegistry();
   shoppingToolRegistry.register(new ProductSearchTool(ragService));

@@ -18,11 +18,14 @@ interface CalendarInput {
 
 const VALID_CATEGORIES = ['travel', 'shopping', 'reminder', 'other'] as const;
 
+
 export class CalendarTool extends BaseTool {
   readonly name = 'manage_calendar';
   readonly description =
-    'Manage calendar events and reminders — add, list, or delete events. Useful for saving travel dates, flight reminders, hotel check-in/check-out, shopping delivery dates, or any personal reminder. ' +
-    'Use when the user wants to save a date, set a reminder, see upcoming events, or organize their schedule.';
+    'Manage calendar events — add, list, or delete events tied to a SPECIFIC DATE. ' +
+    'Use ONLY for fixed-date occurrences: flight departure/arrival, hotel check-in/check-out, tour booking, delivery date, sale start date, trip dates. ' +
+    'Do NOT use for actionable to-do items (things to book, buy, research, or call) — use manage_tasks for those. ' +
+    'A calendar event requires a concrete date (date parameter is mandatory for add).';
 
   readonly inputSchema: JSONSchema = {
     type: 'object',

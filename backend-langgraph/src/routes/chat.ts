@@ -110,7 +110,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       const graph = agentType === 'shopping'
         ? buildShoppingGraph(ragService, memories, calendarProvider, tasksProvider, sessionId)
-        : buildTravelGraph(memories, calendarProvider, sessionId);
+        : buildTravelGraph(memories, calendarProvider, tasksProvider, sessionId);
 
       let assistantText = '';
       const sources: Source[] = [];

@@ -12,9 +12,11 @@ import { CarRentalTool } from '../tools/travel/CarRentalTool';
 import { TourSearchTool } from '../tools/travel/TourSearchTool';
 import { SpaSearchTool } from '../tools/travel/SpaSearchTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
+import { TasksProvider } from '../tools/providers/TasksProvider';
+import { TasksTool } from '../tools/TasksTool';
 import { UserMemory } from '../types/memory';
 
-export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider, sessionId?: string) {
+export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider, tasksProvider?: TasksProvider, sessionId?: string) {
   return buildAgentGraph(
     [
       new WebSearchTool(),
@@ -28,6 +30,7 @@ export function buildTravelGraph(memories: UserMemory[], calendarProvider?: Cale
       new TourSearchTool(),
       new SpaSearchTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
+      tasksProvider ? new TasksTool(tasksProvider) : new TasksTool(),
     ],
     buildTravelAgentSystemPrompt(memories, sessionId),
   );
