@@ -138,7 +138,7 @@ export class ICloudCalendarProvider implements CalendarProvider {
   }
 
   async add(params: CalendarAddParams): Promise<ToolResult> {
-    const { userId, title, date, time, description, category } = params;
+    const { userId, title, date, endDate, time, description, category } = params;
     try {
       const client = await this.getClient(userId);
       const prefs = await this.prefRepo.get(userId);
@@ -161,12 +161,14 @@ export class ICloudCalendarProvider implements CalendarProvider {
         dtstart = `DTSTART:${dt}`;
         dtend = `DTEND:${dt}`;
       } else {
-        const dateOnly = date.replace(/-/g, '');
-        dtstart = `DTSTART;VALUE=DATE:${dateOnly}`;
-        const next = new Date(date);
-        next.setDate(next.getDate() + 1);
-        const endDate = next.toISOString().slice(0, 10).replace(/-/g, '');
-        dtend = `DTEND;VALUE=DATE:${endDate}`;
+        dtstart = `DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`;
+        if (endDate) {
+          dtend = `DTEND;VALUE=DATE:${endDate.replace(/-/g, '')}`;
+        } else {
+          const next = new Date(date);
+          next.setDate(next.getDate() + 1);
+          dtend = `DTEND;VALUE=DATE:${next.toISOString().slice(0, 10).replace(/-/g, '')}`;
+        }
       }
 
       const icsData = [

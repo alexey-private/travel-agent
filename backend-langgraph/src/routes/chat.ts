@@ -10,6 +10,7 @@ import { buildShoppingGraph } from '../graph/shoppingGraph';
 import { AgentEvent } from '../types/agent';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
+import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
 
 interface ChatRouteOptions {
   userService: UserService;
@@ -19,6 +20,7 @@ interface ChatRouteOptions {
   suggestionService: SuggestionService;
   calendarProvider?: CalendarProvider;
   tasksProvider?: TasksProvider;
+  prefRepo: UserPreferencesRepository;
 }
 
 interface ChatBody {
@@ -51,7 +53,7 @@ interface Source {
  *   on_tool_end          → tool_end
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider } = options;
+  const { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider, prefRepo } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -68,10 +70,11 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         agentType,
       );
 
-      const [memories, history, ragContext] = await Promise.all([
+      const [memories, history, ragContext, userPrefs] = await Promise.all([
         memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
+        prefRepo.get(sessionId),
       ]);
 
       const requestId = request.id as string;
@@ -108,9 +111,10 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       const initialMessages = [...historyMessages, new HumanMessage(userContent)];
 
+      const taskListName = agentType === 'shopping' ? userPrefs.shoppingTaskListName : userPrefs.taskListName;
       const graph = agentType === 'shopping'
-        ? buildShoppingGraph(ragService, memories, calendarProvider, tasksProvider, sessionId)
-        : buildTravelGraph(memories, calendarProvider, tasksProvider, sessionId);
+        ? buildShoppingGraph(ragService, memories, calendarProvider, tasksProvider, sessionId, taskListName)
+        : buildTravelGraph(memories, calendarProvider, tasksProvider, sessionId, taskListName);
 
       let assistantText = '';
       const sources: Source[] = [];

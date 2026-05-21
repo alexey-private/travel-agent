@@ -14,7 +14,10 @@ import {
   saveSettings,
   connectApple,
   disconnectApple,
+  getAppleReminderLists,
+  saveAppleReminderList,
   SettingsData,
+  ReminderList,
 } from "@/lib/settingsApi";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -29,6 +32,28 @@ export default function SettingsPage() {
   const [appPassword, setAppPassword] = useState("");
   const [appleConnecting, setAppleConnecting] = useState(false);
   const [appleError, setAppleError] = useState<string | null>(null);
+  const [reminderLists, setReminderLists] = useState<ReminderList[]>([]);
+  const [reminderListsLoading, setReminderListsLoading] = useState(false);
+  const [selectedReminderUrl, setSelectedReminderUrl] = useState("");
+  const [selectedShoppingReminderUrl, setSelectedShoppingReminderUrl] = useState("");
+
+  const loadReminderLists = useCallback(async (uid: string, savedHref?: string | null, savedShoppingHref?: string | null) => {
+    setReminderListsLoading(true);
+    try {
+      const lists = await getAppleReminderLists(uid);
+      setReminderLists(lists);
+      if (savedHref) setSelectedReminderUrl(savedHref);
+      if (savedShoppingHref) setSelectedShoppingReminderUrl(savedShoppingHref);
+    } catch { /* non-critical */ }
+    finally { setReminderListsLoading(false); }
+  }, []);
+
+  const reload = useCallback(async (uid: string) => {
+    const updated = await getSettings(uid);
+    setSettings(updated);
+    if (updated.appleId) setAppleId(updated.appleId);
+    if (updated.appleConnected) void loadReminderLists(uid, updated.reminderHref, updated.shoppingReminderHref);
+  }, [loadReminderLists]);
 
   useEffect(() => {
     const uid = getOrCreateUserId();
@@ -37,15 +62,10 @@ export default function SettingsPage() {
       .then((s) => {
         setSettings(s);
         if (s.appleId) setAppleId(s.appleId);
+        if (s.appleConnected) void loadReminderLists(uid, s.reminderHref, s.shoppingReminderHref);
       })
       .catch(console.error);
-  }, []);
-
-  const reload = useCallback(async (uid: string) => {
-    const updated = await getSettings(uid);
-    setSettings(updated);
-    if (updated.appleId) setAppleId(updated.appleId);
-  }, []);
+  }, [loadReminderLists]);
 
   const handleSelectProvider = useCallback((provider: "google" | "apple") => {
     if (!settings) return;
@@ -91,8 +111,15 @@ export default function SettingsPage() {
   const handleDisconnectApple = useCallback(async () => {
     if (!userId) return;
     await disconnectApple(userId);
+    setReminderLists([]);
     await reload(userId);
   }, [userId, reload]);
+
+  const handleSelectReminderList = useCallback(async (url: string, isShoppingList: boolean) => {
+    if (!userId) return;
+    await saveAppleReminderList(userId, url, isShoppingList);
+    setSaveMsg("Reminder list saved.");
+  }, [userId]);
 
   const handleDisconnectGoogle = useCallback(async () => {
     if (!userId) return;
@@ -304,25 +331,88 @@ export default function SettingsPage() {
 
         {/* ── Task List Names ──────────────────────────────────── */}
         <section className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">Task List Names</h2>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-base font-semibold text-gray-800">Task List Names</h2>
+            {isApple && settings.appleConnected && (
+              <button
+                onClick={() => userId && void loadReminderLists(userId)}
+                disabled={reminderListsLoading}
+                className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 flex items-center gap-1"
+              >
+                <Loader2 size={11} className={reminderListsLoading ? "animate-spin" : "hidden"} />
+                Refresh lists
+              </button>
+            )}
+          </div>
+          {isApple && settings.appleConnected && (
+            <p className="text-xs text-gray-500 mb-4">Select existing Reminders lists from your iCloud account. If you just created a new list, click Refresh.</p>
+          )}
+          {isApple && !settings.appleConnected && (
+            <p className="text-xs text-gray-500 mb-4">Connect Apple iCloud above to select Reminders lists.</p>
+          )}
+          {!isApple && <div className="mb-4" />}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Travel task list name</label>
-              <input
-                type="text"
-                value={settings.taskListName}
-                onChange={(e) => setSettings({ ...settings, taskListName: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Travel task list</label>
+              {isApple && settings.appleConnected ? (
+                reminderListsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400"><Loader2 size={12} className="animate-spin" /> Loading lists…</div>
+                ) : (
+                  <select
+                    value={selectedReminderUrl}
+                    onChange={(e) => {
+                      const selected = reminderLists.find(l => l.url === e.target.value);
+                      if (selected) {
+                        setSelectedReminderUrl(selected.url);
+                        setSettings({ ...settings, taskListName: selected.name });
+                        void handleSelectReminderList(selected.url, false);
+                      }
+                    }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">— select a list —</option>
+                    {reminderLists.map(l => <option key={l.url} value={l.url}>{l.name}</option>)}
+                  </select>
+                )
+              ) : (
+                <input
+                  type="text"
+                  value={settings.taskListName}
+                  onChange={(e) => setSettings({ ...settings, taskListName: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Shopping task list name</label>
-              <input
-                type="text"
-                value={settings.shoppingTaskListName}
-                onChange={(e) => setSettings({ ...settings, shoppingTaskListName: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Shopping task list</label>
+              {isApple && settings.appleConnected ? (
+                reminderListsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400"><Loader2 size={12} className="animate-spin" /> Loading lists…</div>
+                ) : (
+                  <select
+                    value={selectedShoppingReminderUrl}
+                    onChange={(e) => {
+                      const selected = reminderLists.find(l => l.url === e.target.value);
+                      if (selected) {
+                        setSelectedShoppingReminderUrl(selected.url);
+                        setSettings({ ...settings, shoppingTaskListName: selected.name });
+                        void handleSelectReminderList(selected.url, true);
+                      }
+                    }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">— select a list —</option>
+                    {reminderLists.map(l => <option key={l.url} value={l.url}>{l.name}</option>)}
+                  </select>
+                )
+              ) : (
+                <input
+                  type="text"
+                  value={settings.shoppingTaskListName}
+                  onChange={(e) => setSettings({ ...settings, shoppingTaskListName: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
             </div>
           </div>
         </section>

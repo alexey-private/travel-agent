@@ -23,10 +23,13 @@ export async function settingsRoutes(
 
     const prefs = await prefRepo.get(userId);
     const googleConnected = !!(await googleTokenRepo.get(userId));
-    const appleConnected = !!(await icloudTokenRepo.get(userId));
-    const appleId = appleConnected ? (await icloudTokenRepo.get(userId))?.appleId : null;
+    const icloudCreds = await icloudTokenRepo.get(userId);
+    const appleConnected = !!icloudCreds;
+    const appleId = icloudCreds?.appleId ?? null;
+    const reminderHref = icloudCreds?.reminderHref ?? null;
+    const shoppingReminderHref = icloudCreds?.shoppingRemHref ?? null;
 
-    return { ...prefs, googleConnected, appleConnected, appleId };
+    return { ...prefs, googleConnected, appleConnected, appleId, reminderHref, shoppingReminderHref };
   });
 
   // POST /api/settings?userId=xxx  — update preferences
@@ -101,5 +104,51 @@ export async function settingsRoutes(
     if (!userId) return reply.code(400).send({ error: 'userId required' });
     const creds = await icloudTokenRepo.get(userId);
     return { connected: !!creds, appleId: creds?.appleId ?? null };
+  });
+
+  // GET /auth/apple/reminder-lists?userId=xxx — returns VTODO collections visible in Reminders.app
+  fastify.get<{ Querystring: { userId?: string } }>('/auth/apple/reminder-lists', async (req, reply) => {
+    const { userId } = req.query;
+    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    const creds = await icloudTokenRepo.get(userId);
+    if (!creds) return reply.code(400).send({ error: 'Apple iCloud not connected' });
+
+    try {
+      const client = new DAVClient({
+        serverUrl: 'https://caldav.icloud.com',
+        credentials: { username: creds.appleId, password: creds.appPassword },
+        authMethod: 'Basic',
+        defaultAccountType: 'caldav',
+      });
+      await client.login();
+      const cals = await client.fetchCalendars();
+      // Exclude VTODO collections we created via CalDAV (stored as calendar_href/shopping_cal_href)
+      // Those are not real Reminders lists and won't appear in the Reminders app
+      const ownCalHrefs = new Set([creds.calendarHref, creds.shoppingCalHref].filter(Boolean));
+      const lists = cals
+        .filter((c) => c.components?.includes('VTODO') && !ownCalHrefs.has(c.url))
+        .map((c) => ({ name: String(c.displayName ?? ''), url: c.url }));
+      return { lists };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
+  // POST /auth/apple/reminder-list?userId=xxx — save selected reminder list href
+  fastify.post<{
+    Querystring: { userId?: string };
+    Body: { url?: string; isShoppingList?: boolean };
+  }>('/auth/apple/reminder-list', async (req, reply) => {
+    const { userId } = req.query;
+    const { url, isShoppingList = false } = req.body ?? {};
+    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    if (!url) return reply.code(400).send({ error: 'url required' });
+
+    if (isShoppingList) {
+      await icloudTokenRepo.saveShoppingReminderHref(userId, url);
+    } else {
+      await icloudTokenRepo.saveReminderHref(userId, url);
+    }
+    return { saved: true };
   });
 }

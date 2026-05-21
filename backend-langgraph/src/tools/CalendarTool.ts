@@ -10,6 +10,7 @@ interface CalendarInput {
   userId: string;
   title?: string;
   date?: string;
+  endDate?: string;
   time?: string;
   description?: string;
   category?: string;
@@ -44,7 +45,11 @@ export class CalendarTool extends BaseTool {
       },
       date: {
         type: 'string',
-        description: 'Event date in YYYY-MM-DD format (required for add)',
+        description: 'Event start date in YYYY-MM-DD format (required for add)',
+      },
+      endDate: {
+        type: 'string',
+        description: 'Event end date in YYYY-MM-DD format (optional). Use for multi-day events like trips (e.g. date: "2026-06-05", endDate: "2026-06-12" for a June 5–12 trip). If omitted, event is single-day.',
       },
       time: {
         type: 'string',
@@ -72,7 +77,7 @@ export class CalendarTool extends BaseTool {
 
   async execute(input: unknown): Promise<ToolResult> {
     const raw = input as CalendarInput;
-    const { userId, title, date, time, description, eventId } = raw;
+    const { userId, title, date, endDate, time, description, eventId } = raw;
     const action = raw.action?.toLowerCase() as CalendarAction | undefined;
     const category = VALID_CATEGORIES.includes(raw.category as typeof VALID_CATEGORIES[number])
       ? (raw.category as string)
@@ -87,7 +92,10 @@ export class CalendarTool extends BaseTool {
         if (!dateRe.test(date) || isNaN(Date.parse(date))) {
           return { success: false, error: `Invalid date "${date}". Use YYYY-MM-DD format.` };
         }
-        return this.provider.add({ userId, title, date, time, description, category });
+        if (endDate && (!dateRe.test(endDate) || isNaN(Date.parse(endDate)))) {
+          return { success: false, error: `Invalid endDate "${endDate}". Use YYYY-MM-DD format.` };
+        }
+        return this.provider.add({ userId, title, date, endDate, time, description, category });
       }
 
       case 'list':

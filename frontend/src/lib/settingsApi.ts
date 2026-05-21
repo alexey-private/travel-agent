@@ -12,6 +12,8 @@ export interface SettingsData extends UserPreferences {
   googleConnected: boolean;
   appleConnected: boolean;
   appleId: string | null;
+  reminderHref: string | null;
+  shoppingReminderHref: string | null;
 }
 
 export async function getSettings(userId: string): Promise<SettingsData> {
@@ -56,4 +58,22 @@ export async function getAppleStatus(userId: string): Promise<{ connected: boole
   } catch {
     return { connected: false, appleId: null };
   }
+}
+
+export interface ReminderList { name: string; url: string; }
+
+export async function getAppleReminderLists(userId: string): Promise<ReminderList[]> {
+  const res = await fetch(`${API_URL}/auth/apple/reminder-lists?userId=${encodeURIComponent(userId)}`);
+  if (!res.ok) return [];
+  const data = await res.json() as { lists: ReminderList[] };
+  return data.lists ?? [];
+}
+
+export async function saveAppleReminderList(userId: string, url: string, isShoppingList: boolean): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/apple/reminder-list?userId=${encodeURIComponent(userId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, isShoppingList }),
+  });
+  if (!res.ok) throw new Error(`Failed to save reminder list: ${res.status}`);
 }

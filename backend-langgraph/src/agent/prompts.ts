@@ -1,6 +1,6 @@
 import { UserMemory } from '../types/memory';
 
-export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string): string {
+export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans'): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -58,8 +58,8 @@ When the user says "add task to book X" → ALWAYS use manage_tasks, never manag
 - **search_tours**: Search guided tour packages in a destination; filter by type (cultural/adventure/food/nature/historical/cruise/family), duration, or max price
 - **search_spas**: Search spas and wellness centers in a city; filter by treatment type (massage/facial/body/wellness/thermal/ayurveda) or max price
 - **check_visa_requirements**: Check visa requirements for a passport country traveling to a destination country (use ISO2 codes)
-- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; tasks appear in Google Tasks / "My Tasks" sidebar; use action: add/list/complete/delete; ALWAYS pass tasklistName: "Travel Plans" (exact spelling); when a task is added successfully, always show the viewUrl from the result as a "[View in Google Tasks](url)" link
-- **manage_calendar**: Add, list, or delete fixed-date travel events ONLY (flight departure, hotel check-in/out, tour time, trip dates); requires a concrete date; NOT for actionable to-dos
+- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; use action: add/list/complete/delete; ALWAYS pass tasklistName: "${taskListName}" (exact spelling); when a task is added successfully: if result contains viewUrl show "[View task](url)" link, otherwise tell the user "Task added — view it in the Reminders app on your iPhone or Mac" (Apple) or "Task added to Google Tasks" (Google); do NOT invent a URL
+- **manage_calendar**: Add, list, or delete fixed-date travel events ONLY (flight departure, hotel check-in/out, tour time, trip dates); requires a concrete date; NOT for actionable to-dos; for multi-day trips pass both date (start) and endDate (end, inclusive)
 
 ## Self-Correction
 If a tool returns an error or unexpected results:
@@ -102,7 +102,7 @@ ${memories.length > 0
 ${userIdSection}${memoriesSection}`.trim();
 }
 
-export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string): string {
+export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping'): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -163,7 +163,7 @@ If search_products returns no results:
 - **convert_currency**: Convert an amount between currencies (use when user mentions a non-USD budget)
 - **manage_wishlist**: Add, remove, list, or clear items in the user's personal wishlist; use action: add/remove/list/clear
 - **manage_price_alerts**: Create, list, delete, or check price alerts for products at a target price; use action: create/list/delete/check
-- **manage_tasks**: Add, list, complete, or delete actionable to-do tasks (things to buy, book, research, call); tasks appear in Google Tasks / "My Tasks" sidebar in Google Calendar; use action: add/list/complete/delete; when a task is added successfully, always show the viewUrl from the result as a "[View in Google Tasks](url)" link
+- **manage_tasks**: Add, list, complete, or delete actionable to-do tasks (things to buy, book, research, call); use action: add/list/complete/delete; ALWAYS pass tasklistName: "${taskListName}" (exact spelling); when a task is added successfully: if result contains viewUrl show "[View task](url)" link, otherwise tell the user "Task added — view it in the Reminders app on your iPhone or Mac" (Apple) or "Task added to Google Tasks" (Google); do NOT invent a URL
 - **manage_calendar**: Add, list, or delete fixed-date calendar events (sale dates, delivery deadlines, Black Friday, scheduled pickups); NOT for to-do tasks
 
 ## Response Formatting — ALWAYS apply

@@ -12,10 +12,11 @@ import { PriceAlertTool } from '../tools/shopping/PriceAlertTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
 import { TasksTool } from '../tools/TasksTool';
+import { MockTasksProvider } from '../tools/providers/MockTasksProvider';
 import { RAGService } from '../services/RAGService';
 import { UserMemory } from '../types/memory';
 
-export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider, tasksProvider?: TasksProvider, sessionId?: string) {
+export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[], calendarProvider?: CalendarProvider, tasksProvider?: TasksProvider, sessionId?: string, taskListName = 'Shopping') {
   return buildAgentGraph(
     [
       new ProductSearchTool(ragService),
@@ -27,8 +28,8 @@ export function buildShoppingGraph(ragService: RAGService, memories: UserMemory[
       new WishlistTool(),
       new PriceAlertTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
-      tasksProvider ? new TasksTool(tasksProvider) : new TasksTool(),
+      tasksProvider ? new TasksTool(tasksProvider, taskListName) : new TasksTool(new MockTasksProvider(), taskListName),
     ],
-    buildShoppingAgentSystemPrompt(memories, sessionId),
+    buildShoppingAgentSystemPrompt(memories, sessionId, taskListName),
   );
 }

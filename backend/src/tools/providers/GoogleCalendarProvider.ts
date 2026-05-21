@@ -86,7 +86,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
   }
 
   async add(params: CalendarAddParams): Promise<ToolResult> {
-    const { userId, title, date, time, description, category } = params;
+    const { userId, title, date, endDate, time, description, category } = params;
 
     const { calendar } = await this.getClient(userId);
     const isShopping = category === 'shopping';
@@ -100,7 +100,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
       : { date };
     const end = time
       ? { dateTime: `${date}T${padTime(time, 1)}:00`, timeZone: 'UTC' }
-      : { date };
+      : { date: endDate ?? date };
 
     const event = await calendar.events.insert({
       calendarId,
@@ -136,7 +136,6 @@ export class GoogleCalendarProvider implements CalendarProvider {
 
     const now = new Date().toISOString();
 
-    // Fetch from both calendars in parallel
     const [travelId, shoppingId] = await Promise.all([
       this.getOrCreateCalendarId(params.userId),
       this.getOrCreateShoppingCalendarId(params.userId),
@@ -184,7 +183,6 @@ export class GoogleCalendarProvider implements CalendarProvider {
   async delete(params: CalendarDeleteParams): Promise<ToolResult> {
     const { calendar } = await this.getClient(params.userId);
 
-    // Try travel calendar first, then shopping
     const [travelId, shoppingId] = await Promise.all([
       this.getOrCreateCalendarId(params.userId),
       this.getOrCreateShoppingCalendarId(params.userId),

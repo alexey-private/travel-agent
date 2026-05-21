@@ -75,7 +75,7 @@ async function bootstrap(): Promise<void> {
   const calendarProvider = new UserAwareCalendarProvider(googleCalendarProvider, icloudCalendarProvider, prefRepo);
   const tasksProvider = new UserAwareTasksProvider(googleTasksProvider, icloudRemindersProvider, prefRepo);
 
-  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider });
+  await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider, prefRepo });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);
   if (googleConfig) {

@@ -42,12 +42,19 @@ export class ICloudRemindersProvider implements TasksProvider {
 
   private async getVtodoCals(client: DAVClient): Promise<DAVCalendar[]> {
     const all: DAVCalendar[] = await client.fetchCalendars();
-    return all.filter((c) =>
-      c.components?.includes('VTODO'),
-    );
+    return all.filter((c) => c.components?.includes('VTODO'));
   }
 
-  private async getOrCreateReminderListHref(
+  private vtodoFilter() {
+    return {
+      'comp-filter': {
+        _attributes: { name: 'VCALENDAR' },
+        'comp-filter': { _attributes: { name: 'VTODO' } },
+      },
+    };
+  }
+
+  private async getReminderListHref(
     client: DAVClient,
     userId: string,
     name: string,
@@ -57,28 +64,14 @@ export class ICloudRemindersProvider implements TasksProvider {
     const cachedHref = isShoppingList ? creds?.shoppingRemHref : creds?.reminderHref;
     if (cachedHref) return cachedHref;
 
+    // Fall back to first available VTODO collection
     const vtodoCals = await this.getVtodoCals(client);
-    const existing = vtodoCals.find(
-      (c) => String(c.displayName ?? '').toLowerCase() === name.toLowerCase(),
-    );
-
-    let href: string;
-    if (existing) {
-      href = existing.url;
-    } else {
-      const newUrl = `${client.account?.homeUrl ?? ''}${randomUUID()}/`;
-      await client.makeCalendar({
-        url: newUrl,
-        props: {
-          'd:displayname': name,
-          'c:supported-calendar-component-set': {
-            'c:comp': { _attributes: { name: 'VTODO' } },
-          },
-        },
-      });
-      href = newUrl;
+    if (vtodoCals.length === 0) {
+      throw new Error('No Reminders lists found in your iCloud account. Please create a list in the Reminders app on your iPhone or Mac first.');
     }
-
+    const fallback = vtodoCals[0];
+    const href = fallback.url;
+    // Cache it so future calls are fast
     if (isShoppingList) {
       await this.tokenRepo.saveShoppingReminderHref(userId, href);
     } else {
@@ -131,7 +124,7 @@ export class ICloudRemindersProvider implements TasksProvider {
       const prefs = await this.prefRepo.get(userId);
       const listName = tasklistName ?? prefs.taskListName;
       const isShopping = listName.toLowerCase() === prefs.shoppingTaskListName.toLowerCase();
-      const listHref = await this.getOrCreateReminderListHref(client, userId, listName, isShopping);
+      const listHref = await this.getReminderListHref(client, userId, listName, isShopping);
 
       const uid = randomUUID();
       const icsData = this.buildVTODO(uid, title, notes, due);
@@ -167,7 +160,7 @@ export class ICloudRemindersProvider implements TasksProvider {
 
       for (const cal of vtodoCals) {
         if (tasklistName && (String(cal.displayName ?? '')).toLowerCase() !== tasklistName.toLowerCase()) continue;
-        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal, filters: this.vtodoFilter() });
         for (const obj of objects) {
           const parsed = this.parseVTODO(obj.data as string, obj.url, String(cal.displayName ?? ''));
           if (!parsed) continue;
@@ -202,7 +195,7 @@ export class ICloudRemindersProvider implements TasksProvider {
       const vtodoCals = await this.getVtodoCals(client);
 
       for (const cal of vtodoCals) {
-        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal, filters: this.vtodoFilter() });
         const target = objects.find((o) => {
           const uid = (o.data as string)
             .split('\n')
@@ -234,7 +227,7 @@ export class ICloudRemindersProvider implements TasksProvider {
       const vtodoCals = await this.getVtodoCals(client);
 
       for (const cal of vtodoCals) {
-        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal, filters: this.vtodoFilter() });
         const target = objects.find((o) => {
           const uid = (o.data as string)
             .split('\n')

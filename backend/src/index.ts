@@ -137,7 +137,7 @@ async function bootstrap(): Promise<void> {
   // Routes
   await fastify.register(chatRoutes, {
     llmClient, travelToolRegistry, shoppingToolRegistry,
-    userService, conversationService, memoryService, ragService, suggestionService,
+    userService, conversationService, memoryService, ragService, suggestionService, prefRepo,
   });
   await fastify.register(memoryRoutes);
   await fastify.register(conversationRoutes);

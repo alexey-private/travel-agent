@@ -17,7 +17,7 @@ import { MockTasksProvider } from '../tools/providers/MockTasksProvider';
 import { TasksTool } from '../tools/TasksTool';
 import { UserMemory } from '../types/memory';
 
-export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider, tasksProvider?: TasksProvider, sessionId?: string) {
+export function buildTravelGraph(memories: UserMemory[], calendarProvider?: CalendarProvider, tasksProvider?: TasksProvider, sessionId?: string, taskListName = 'Travel Plans') {
   return buildAgentGraph(
     [
       new WebSearchTool(),
@@ -31,8 +31,8 @@ export function buildTravelGraph(memories: UserMemory[], calendarProvider?: Cale
       new TourSearchTool(),
       new SpaSearchTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
-      tasksProvider ? new TasksTool(tasksProvider, 'Travel Plans') : new TasksTool(new MockTasksProvider(), 'Travel Plans'),
+      tasksProvider ? new TasksTool(tasksProvider, taskListName) : new TasksTool(new MockTasksProvider(), taskListName),
     ],
-    buildTravelAgentSystemPrompt(memories, sessionId),
+    buildTravelAgentSystemPrompt(memories, sessionId, taskListName),
   );
 }

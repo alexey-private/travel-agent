@@ -4,6 +4,7 @@ export interface CalendarAddParams {
   userId: string;
   title: string;
   date: string;
+  endDate?: string;
   time?: string;
   description?: string;
   category: string;

@@ -10,6 +10,7 @@ import { AgentContext } from '../agent/AgentContext';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { SuggestionService } from '../services/SuggestionService';
 import { AgentEvent } from '../types/agent';
+import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
 
 interface ChatRouteOptions {
   llmClient: LLMClient;
@@ -20,6 +21,7 @@ interface ChatRouteOptions {
   memoryService: MemoryService;
   ragService: RAGService;
   suggestionService: SuggestionService;
+  prefRepo: UserPreferencesRepository;
 }
 
 interface Source {
@@ -52,7 +54,7 @@ interface ChatBody {
  * triggers memory extraction in the background.
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { llmClient, travelToolRegistry, shoppingToolRegistry, userService, conversationService, memoryService, ragService, suggestionService } = options;
+  const { llmClient, travelToolRegistry, shoppingToolRegistry, userService, conversationService, memoryService, ragService, suggestionService, prefRepo } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -71,11 +73,14 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       );
 
       // Load context in parallel
-      const [memories, history, ragContext] = await Promise.all([
+      const [memories, history, ragContext, userPrefs] = await Promise.all([
         memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
+        prefRepo.get(sessionId),
       ]);
+
+      const taskListName = agentType === 'shopping' ? userPrefs.shoppingTaskListName : userPrefs.taskListName;
 
       const requestId = request.id as string;
       request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
@@ -112,6 +117,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         ragContext,
         history,
         sessionId,
+        taskListName,
       );
 
       const agent = agentType === 'shopping'
