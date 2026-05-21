@@ -14,6 +14,7 @@ import { conversationRoutes } from './routes/conversations';
 import { authRoutes } from './routes/auth';
 import { settingsRoutes } from './routes/settings';
 import { calendarRoutes } from './routes/calendar';
+import { exportRoutes } from './routes/export';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -99,6 +100,8 @@ async function bootstrap(): Promise<void> {
 
   await fastify.register(calendarRoutes, { calendarProvider, tasksProvider });
   fastify.log.info('Calendar routes registered');
+
+  await fastify.register(exportRoutes);
 
   fastify.get('/health', async () => ({ status: 'ok', engine: 'langgraph' }));
   await pool.query('SELECT 1');

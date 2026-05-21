@@ -3,8 +3,9 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import AgentThoughts, { type ToolStep } from "./AgentThoughts";
+import { exportToPdf } from "../lib/api";
 
 export interface Message {
   id: string;
@@ -34,6 +35,16 @@ const SOURCES_PREVIEW = 5;
 export default function MessageBubble({ message, onSuggestionClick }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExportPdf() {
+    setExporting(true);
+    try {
+      await exportToPdf(message.content);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
@@ -101,6 +112,21 @@ export default function MessageBubble({ message, onSuggestionClick }: MessageBub
             {!isUser && message.streaming && (
               <span className="inline-block w-0.5 h-4 bg-gray-400 animate-pulse ml-0.5 align-text-bottom" />
             )}
+          </div>
+        )}
+
+        {/* Export to PDF — shown for completed assistant messages with content */}
+        {!isUser && !message.streaming && message.content && (
+          <div className="mt-1 flex justify-end">
+            <button
+              onClick={handleExportPdf}
+              disabled={exporting}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+              title="Download as PDF"
+            >
+              <Download size={12} />
+              {exporting ? "Exporting…" : "PDF"}
+            </button>
           </div>
         )}
 

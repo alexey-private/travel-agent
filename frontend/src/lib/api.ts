@@ -151,6 +151,23 @@ export async function disconnectGoogleCalendar(userId: string): Promise<void> {
   await fetch(`${API_URL}/auth/google/disconnect?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' });
 }
 
+/** Download an assistant message as a PDF file. */
+export async function exportToPdf(text: string, filename?: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/export/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, filename }),
+  });
+  if (!response.ok) throw new Error(`Export failed: ${response.status}`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filename ?? 'agent-response'}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Generate or retrieve a persistent userId from localStorage. */
 export function getOrCreateUserId(): string {
   const stored = localStorage.getItem("travel_agent_user_id");
