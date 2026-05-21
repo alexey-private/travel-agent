@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { ToolResult } from '../../types/tools';
-import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams } from './CalendarProvider';
+import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams, CalendarUpdateParams } from './CalendarProvider';
 import { GoogleTokenRepository } from '../../repositories/GoogleTokenRepository';
 
 const TRAVEL_CALENDAR_NAME = 'Travel Agent';
@@ -200,6 +200,64 @@ export class GoogleCalendarProvider implements CalendarProvider {
         success: true,
         data: { message: `Event ${params.eventId} deleted from "${SHOPPING_CALENDAR_NAME}" calendar.`, source: 'google' },
       };
+    }
+  }
+
+  async update(params: CalendarUpdateParams): Promise<ToolResult> {
+    const { userId, eventId, title, date, endDate, time, description, category } = params;
+    try {
+      const { calendar } = await this.getClient(userId);
+
+      const requestBody: Record<string, unknown> = {};
+      if (title) requestBody.summary = title;
+      if (description !== undefined) requestBody.description = description;
+      if (category) requestBody.colorId = CATEGORY_COLORS[category] ?? '1';
+      if (date) {
+        requestBody.start = time
+          ? { dateTime: `${date}T${time}:00`, timeZone: 'UTC' }
+          : { date };
+        requestBody.end = time
+          ? { dateTime: `${date}T${padTime(time, 1)}:00`, timeZone: 'UTC' }
+          : { date: endDate ?? date };
+      }
+
+      const [travelId, shoppingId] = await Promise.all([
+        this.getOrCreateCalendarId(userId),
+        this.getOrCreateShoppingCalendarId(userId),
+      ]);
+
+      let updated;
+      let calendarName: string;
+      try {
+        updated = await calendar.events.patch({ calendarId: travelId, eventId, requestBody });
+        calendarName = TRAVEL_CALENDAR_NAME;
+      } catch {
+        try {
+          updated = await calendar.events.patch({ calendarId: shoppingId, eventId, requestBody });
+          calendarName = SHOPPING_CALENDAR_NAME;
+        } catch (err2) {
+          return {
+            success: false,
+            error: `Event not found in any Google calendar: ${err2 instanceof Error ? err2.message : String(err2)}`,
+          };
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          message: `Event updated in "${calendarName}" calendar.`,
+          event: {
+            id: updated.data.id,
+            title: updated.data.summary,
+            date: updated.data.start?.date ?? updated.data.start?.dateTime?.split('T')[0],
+            htmlLink: updated.data.htmlLink,
+          },
+          source: 'google',
+        },
+      };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 }

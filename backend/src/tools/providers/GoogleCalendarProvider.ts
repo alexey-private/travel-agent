@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { ToolResult } from '../../types/tools';
-import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams } from './CalendarProvider';
+import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams, CalendarUpdateParams } from './CalendarProvider';
 import { GoogleTokenRepository } from '../../repositories/GoogleTokenRepository';
 
 const TRAVEL_CALENDAR_NAME = 'Travel Agent';
@@ -180,26 +180,84 @@ export class GoogleCalendarProvider implements CalendarProvider {
     };
   }
 
+  private async findCalendarForEvent(
+    calendar: ReturnType<typeof google.calendar>,
+    eventId: string,
+  ): Promise<{ calendarId: string; calendarName: string } | null> {
+    const allCalendars = await calendar.calendarList.list({ maxResults: 100 });
+    for (const cal of allCalendars.data.items ?? []) {
+      if (!cal.id) continue;
+      try {
+        await calendar.events.get({ calendarId: cal.id, eventId });
+        return { calendarId: cal.id, calendarName: cal.summary ?? cal.id };
+      } catch {
+        // not in this calendar
+      }
+    }
+    return null;
+  }
+
   async delete(params: CalendarDeleteParams): Promise<ToolResult> {
-    const { calendar } = await this.getClient(params.userId);
-
-    const [travelId, shoppingId] = await Promise.all([
-      this.getOrCreateCalendarId(params.userId),
-      this.getOrCreateShoppingCalendarId(params.userId),
-    ]);
-
     try {
-      await calendar.events.delete({ calendarId: travelId, eventId: params.eventId });
+      const { calendar } = await this.getClient(params.userId);
+      const found = await this.findCalendarForEvent(calendar, params.eventId);
+      if (!found) {
+        return { success: false, error: `Event ${params.eventId} not found in any Google calendar.` };
+      }
+      await calendar.events.delete({ calendarId: found.calendarId, eventId: params.eventId });
       return {
         success: true,
-        data: { message: `Event ${params.eventId} deleted from "${TRAVEL_CALENDAR_NAME}" calendar.`, source: 'google' },
+        data: { message: `Event deleted from "${found.calendarName}" calendar.`, source: 'google' },
       };
-    } catch {
-      await calendar.events.delete({ calendarId: shoppingId, eventId: params.eventId });
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  async update(params: CalendarUpdateParams): Promise<ToolResult> {
+    const { userId, eventId, title, date, endDate, time, description, category } = params;
+    try {
+      const { calendar } = await this.getClient(userId);
+
+      const requestBody: Record<string, unknown> = {};
+      if (title) requestBody.summary = title;
+      if (description !== undefined) requestBody.description = description;
+      if (category) requestBody.colorId = CATEGORY_COLORS[category] ?? '1';
+      if (date) {
+        requestBody.start = time
+          ? { dateTime: `${date}T${time}:00`, timeZone: 'UTC' }
+          : { date };
+        requestBody.end = time
+          ? { dateTime: `${date}T${padTime(time, 1)}:00`, timeZone: 'UTC' }
+          : { date: endDate ?? date };
+      }
+
+      const found = await this.findCalendarForEvent(calendar, eventId);
+      if (!found) {
+        return { success: false, error: 'Event not found in any Google calendar.' };
+      }
+
+      const updated = await calendar.events.patch({
+        calendarId: found.calendarId,
+        eventId,
+        requestBody,
+      });
+
       return {
         success: true,
-        data: { message: `Event ${params.eventId} deleted from "${SHOPPING_CALENDAR_NAME}" calendar.`, source: 'google' },
+        data: {
+          message: `Event updated in "${found.calendarName}" calendar.`,
+          event: {
+            id: updated.data.id,
+            title: updated.data.summary,
+            date: updated.data.start?.date ?? updated.data.start?.dateTime?.split('T')[0],
+            htmlLink: updated.data.htmlLink,
+          },
+          source: 'google',
+        },
       };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 }

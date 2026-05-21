@@ -3,7 +3,7 @@ import { ToolResult, JSONSchema } from '../types/tools';
 import { TasksProvider } from './providers/TasksProvider';
 import { MockTasksProvider } from './providers/MockTasksProvider';
 
-type TaskAction = 'add' | 'list' | 'complete' | 'delete';
+type TaskAction = 'add' | 'list' | 'complete' | 'delete' | 'update';
 
 interface TasksInput {
   action: TaskAction;
@@ -19,7 +19,7 @@ interface TasksInput {
 export class TasksTool extends BaseTool {
   readonly name = 'manage_tasks';
   readonly description =
-    'Manage to-do tasks — add, list, complete, or delete actionable items. ' +
+    'Manage to-do tasks — add, list, complete, delete, or update actionable items. ' +
     'ALWAYS use this tool when the user says "add task", "task to", "to-do", "I need to book/buy/order/research/call/check X", or any similar actionable phrase. ' +
     'Tasks do NOT require a specific date — they have an optional due date and a completion status (needsAction / completed). ' +
     'Tasks appear in Google Calendar under the "My Tasks" sidebar. ' +
@@ -34,7 +34,7 @@ export class TasksTool extends BaseTool {
       properties: {
         action: {
           type: 'string',
-          description: '"add" a task, "list" tasks, "complete" a task by id, or "delete" a task by id',
+          description: '"add" a task, "list" tasks, "complete" a task by id, "delete" a task by id, or "update" a task by id',
         },
         userId: {
           type: 'string',
@@ -58,7 +58,7 @@ export class TasksTool extends BaseTool {
         },
         taskId: {
           type: 'string',
-          description: 'Task ID (required for complete and delete)',
+          description: 'Task ID (required for complete, delete, and update)',
         },
         includeCompleted: {
           type: 'boolean',
@@ -102,8 +102,19 @@ export class TasksTool extends BaseTool {
         return this.provider.delete({ userId, taskId, tasklistName });
       }
 
+      case 'update': {
+        if (!taskId) return { success: false, error: 'taskId is required for update action' };
+        if (due) {
+          const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+          if (!dateRe.test(due) || isNaN(Date.parse(due))) {
+            return { success: false, error: `Invalid due date "${due}". Use YYYY-MM-DD format.` };
+          }
+        }
+        return this.provider.update({ userId, taskId, title, notes, due, tasklistName });
+      }
+
       default:
-        return { success: false, error: `Unknown action: "${raw.action}". Use add, list, complete, or delete.` };
+        return { success: false, error: `Unknown action: "${raw.action}". Use add, list, complete, delete, or update.` };
     }
   }
 }

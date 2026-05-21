@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { ToolResult } from '../../types/tools';
-import { TasksProvider, TasksAddParams, TasksListParams, TasksCompleteParams, TasksDeleteParams } from './TasksProvider';
+import { TasksProvider, TasksAddParams, TasksListParams, TasksCompleteParams, TasksDeleteParams, TasksUpdateParams } from './TasksProvider';
 import { GoogleTokenRepository } from '../../repositories/GoogleTokenRepository';
 
 const DEFAULT_TASKLIST = 'Shopping';
@@ -98,30 +98,55 @@ export class GoogleTasksProvider implements TasksProvider {
   }
 
   async list(params: TasksListParams): Promise<ToolResult> {
-    const { userId, tasklistName = DEFAULT_TASKLIST, includeCompleted = false } = params;
+    const { userId, tasklistName, includeCompleted = false } = params;
     try {
       const tasksClient = await this.getClient(userId);
-      const tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
 
-      const res = await tasksClient.tasks.list({
-        tasklist: tasklistId,
-        showCompleted: includeCompleted,
-        showHidden: false,
-        maxResults: 50,
-      });
+      if (tasklistName) {
+        const tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
+        const res = await tasksClient.tasks.list({
+          tasklist: tasklistId,
+          showCompleted: includeCompleted,
+          showHidden: false,
+          maxResults: 50,
+        });
+        const tasks = (res.data.items ?? []).map(t => ({
+          id: t.id,
+          title: t.title ?? '(no title)',
+          notes: t.notes ?? '',
+          due: t.due ? t.due.split('T')[0] : undefined,
+          status: t.status,
+        }));
+        return { success: true, data: { tasks, total: tasks.length, tasklist: tasklistName, source: 'google' } };
+      }
 
-      const tasks = (res.data.items ?? []).map(t => ({
-        id: t.id,
-        title: t.title ?? '(no title)',
-        notes: t.notes ?? '',
-        due: t.due ? t.due.split('T')[0] : undefined,
-        status: t.status,
-      }));
-
-      return {
-        success: true,
-        data: { tasks, total: tasks.length, tasklist: tasklistName, source: 'google' },
-      };
+      // No specific list requested — fetch from all tasklists
+      const lists = await tasksClient.tasklists.list({ maxResults: 100 });
+      const results = await Promise.all(
+        (lists.data.items ?? []).map(async (list) => {
+          if (!list.id) return [];
+          try {
+            const res = await tasksClient.tasks.list({
+              tasklist: list.id,
+              showCompleted: includeCompleted,
+              showHidden: false,
+              maxResults: 50,
+            });
+            return (res.data.items ?? []).map(t => ({
+              id: t.id,
+              title: t.title ?? '(no title)',
+              notes: t.notes ?? '',
+              due: t.due ? t.due.split('T')[0] : undefined,
+              status: t.status,
+              tasklist: list.title ?? '',
+            }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+      const tasks = results.flat();
+      return { success: true, data: { tasks, total: tasks.length, source: 'google' } };
     } catch (err) {
       return { success: false, error: tasksErrorMessage(err) };
     }
@@ -179,6 +204,50 @@ export class GoogleTasksProvider implements TasksProvider {
       return {
         success: true,
         data: { message: `Task ${taskId} deleted.`, source: 'google' },
+      };
+    } catch (err) {
+      return { success: false, error: tasksErrorMessage(err) };
+    }
+  }
+
+  async update(params: TasksUpdateParams): Promise<ToolResult> {
+    const { userId, taskId, title, notes, due, tasklistName = DEFAULT_TASKLIST } = params;
+    try {
+      const tasksClient = await this.getClient(userId);
+      let tasklistId = await this.getOrCreateTasklistId(tasksClient, tasklistName);
+
+      try {
+        await tasksClient.tasks.get({ tasklist: tasklistId, task: taskId });
+      } catch {
+        const found = await this.findTasklistForTask(tasksClient, taskId);
+        if (!found) return { success: false, error: `Task ${taskId} not found.` };
+        tasklistId = found;
+      }
+
+      const requestBody: Record<string, unknown> = {};
+      if (title) requestBody.title = title;
+      if (notes !== undefined) requestBody.notes = notes;
+      if (due) requestBody.due = `${due}T00:00:00.000Z`;
+
+      const updated = await tasksClient.tasks.patch({
+        tasklist: tasklistId,
+        task: taskId,
+        requestBody,
+      });
+
+      return {
+        success: true,
+        data: {
+          message: `Task "${updated.data.title}" updated.`,
+          task: {
+            id: updated.data.id,
+            title: updated.data.title,
+            notes: updated.data.notes ?? '',
+            due: updated.data.due ? updated.data.due.split('T')[0] : undefined,
+            status: updated.data.status,
+          },
+          source: 'google',
+        },
       };
     } catch (err) {
       return { success: false, error: tasksErrorMessage(err) };

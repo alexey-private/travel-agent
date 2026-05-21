@@ -26,9 +26,19 @@ export interface TasksDeleteParams {
   tasklistName?: string;
 }
 
+export interface TasksUpdateParams {
+  userId: string;
+  taskId: string;
+  title?: string;
+  notes?: string;
+  due?: string;         // YYYY-MM-DD
+  tasklistName?: string;
+}
+
 export interface TasksProvider {
   add(params: TasksAddParams): Promise<ToolResult>;
   list(params: TasksListParams): Promise<ToolResult>;
   complete(params: TasksCompleteParams): Promise<ToolResult>;
   delete(params: TasksDeleteParams): Promise<ToolResult>;
+  update(params: TasksUpdateParams): Promise<ToolResult>;
 }

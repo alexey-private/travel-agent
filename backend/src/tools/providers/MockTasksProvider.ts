@@ -1,5 +1,5 @@
 import { ToolResult } from '../../types/tools';
-import { TasksProvider, TasksAddParams, TasksListParams, TasksCompleteParams, TasksDeleteParams } from './TasksProvider';
+import { TasksProvider, TasksAddParams, TasksListParams, TasksCompleteParams, TasksDeleteParams, TasksUpdateParams } from './TasksProvider';
 
 interface MockTask {
   id: string;
@@ -68,6 +68,18 @@ export class MockTasksProvider implements TasksProvider {
     return {
       success: true,
       data: { message: `Task "${deleted.title}" deleted.`, source: 'mock' },
+    };
+  }
+
+  async update(params: TasksUpdateParams): Promise<ToolResult> {
+    const task = this.tasks(params.userId).find(t => t.id === params.taskId);
+    if (!task) return { success: false, error: `Task ${params.taskId} not found.` };
+    if (params.title) task.title = params.title;
+    if (params.notes !== undefined) task.notes = params.notes;
+    if (params.due !== undefined) task.due = params.due;
+    return {
+      success: true,
+      data: { message: `Task "${task.title}" updated.`, task, source: 'mock' },
     };
   }
 }

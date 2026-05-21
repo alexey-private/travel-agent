@@ -7,6 +7,7 @@ import {
   CalendarAddParams,
   CalendarListParams,
   CalendarDeleteParams,
+  CalendarUpdateParams,
 } from './CalendarProvider';
 import { ToolResult } from '../../types/tools';
 
@@ -282,6 +283,80 @@ export class ICloudCalendarProvider implements CalendarProvider {
             },
           };
         }
+      }
+
+      return { success: false, error: `Event not found: ${eventId}` };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  async update(params: CalendarUpdateParams): Promise<ToolResult> {
+    const { userId, eventId, title, date, endDate, time, description, category } = params;
+    try {
+      const client = await this.getClient(userId);
+      const calendars: DAVCalendar[] = await client.fetchCalendars();
+      const veventCals = calendars.filter((c) => c.components?.includes('VEVENT'));
+
+      for (const cal of veventCals) {
+        const objects = await client.fetchCalendarObjects({ calendar: cal });
+        const target = objects.find((o) => {
+          const uid = (o.data as string).split('\n').find((l) => l.startsWith('UID:'))?.slice(4).trim();
+          return uid === eventId || o.url.includes(eventId);
+        });
+        if (!target) continue;
+
+        const existing = this.parseICS(target.data as string, target.url);
+        if (!existing) continue;
+
+        const mergedTitle = title ?? existing.title;
+        const mergedDate = date ?? existing.date;
+        const mergedTime = time !== undefined ? time : existing.time;
+        const mergedDesc = description !== undefined ? description : existing.description;
+        const mergedCat = category ?? existing.category;
+        const mergedEndDate = endDate ?? mergedDate;
+
+        let dtstart: string;
+        let dtend: string;
+        if (mergedTime) {
+          const dt = `${mergedDate.replace(/-/g, '')}T${mergedTime.replace(':', '')}00`;
+          dtstart = `DTSTART:${dt}`;
+          dtend = `DTEND:${dt}`;
+        } else {
+          dtstart = `DTSTART;VALUE=DATE:${mergedDate.replace(/-/g, '')}`;
+          const nextDay = new Date(mergedEndDate);
+          nextDay.setDate(nextDay.getDate() + 1);
+          dtend = `DTEND;VALUE=DATE:${nextDay.toISOString().slice(0, 10).replace(/-/g, '')}`;
+        }
+
+        const newICS = [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//TravelAgent//EN',
+          'BEGIN:VEVENT',
+          `UID:${existing.id}`,
+          `SUMMARY:${mergedTitle}`,
+          dtstart,
+          dtend,
+          mergedDesc ? `DESCRIPTION:${mergedDesc}` : '',
+          `CATEGORIES:${mergedCat}`,
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].filter(Boolean).join('\r\n');
+
+        await client.updateCalendarObject({ calendarObject: { ...target, data: newICS } });
+
+        return {
+          success: true,
+          data: {
+            source: 'icloud',
+            eventId: existing.id,
+            title: mergedTitle,
+            date: mergedDate,
+            time: mergedTime,
+            message: `Event "${mergedTitle}" updated in Apple Calendar.`,
+          },
+        };
       }
 
       return { success: false, error: `Event not found: ${eventId}` };

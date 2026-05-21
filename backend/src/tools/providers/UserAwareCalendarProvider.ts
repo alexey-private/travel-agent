@@ -4,6 +4,7 @@ import {
   CalendarAddParams,
   CalendarListParams,
   CalendarDeleteParams,
+  CalendarUpdateParams,
 } from './CalendarProvider';
 import { ToolResult } from '../../types/tools';
 
@@ -29,5 +30,9 @@ export class UserAwareCalendarProvider implements CalendarProvider {
 
   async delete(params: CalendarDeleteParams): Promise<ToolResult> {
     return (await this.resolve(params.userId)).delete(params);
+  }
+
+  async update(params: CalendarUpdateParams): Promise<ToolResult> {
+    return (await this.resolve(params.userId)).update(params);
   }
 }

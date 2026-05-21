@@ -8,6 +8,7 @@ import {
   TasksListParams,
   TasksCompleteParams,
   TasksDeleteParams,
+  TasksUpdateParams,
 } from './TasksProvider';
 import { ToolResult } from '../../types/tools';
 
@@ -228,6 +229,49 @@ export class ICloudRemindersProvider implements TasksProvider {
           await client.deleteCalendarObject({ calendarObject: target });
           return { success: true, data: { source: 'icloud', message: `Task deleted from Apple Calendar.` } };
         }
+      }
+
+      return { success: false, error: `Task not found: ${taskId}` };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  async update(params: TasksUpdateParams): Promise<ToolResult> {
+    const { userId, taskId, title, notes, due } = params;
+    try {
+      const client = await this.getClient(userId);
+      const calendars: DAVCalendar[] = await client.fetchCalendars();
+      const veventCals = calendars.filter((c) => (c.components ?? []).includes('VEVENT'));
+
+      for (const cal of veventCals) {
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
+        const target = objects.find((o) => {
+          const uid = (o.data as string).split('\n').find((l) => l.startsWith('UID:'))?.slice(4).trim();
+          return uid === taskId || o.url.includes(taskId);
+        });
+        if (!target) continue;
+
+        const parsed = this.parseTaskEvent(target.data as string, target.url);
+        if (!parsed) continue;
+
+        const mergedTitle = title ?? parsed.title;
+        const mergedNotes = notes !== undefined ? notes : parsed.notes;
+        const mergedDue = due ?? parsed.due ?? new Date().toISOString().slice(0, 10);
+
+        const updatedICS = this.buildVEVENT(parsed.id, mergedTitle, mergedDue, mergedNotes, parsed.status);
+        await client.updateCalendarObject({ calendarObject: { ...target, data: updatedICS } });
+
+        return {
+          success: true,
+          data: {
+            source: 'icloud',
+            taskId: parsed.id,
+            title: mergedTitle,
+            due: mergedDue,
+            message: `Task "${mergedTitle}" updated in Apple Calendar.`,
+          },
+        };
       }
 
       return { success: false, error: `Task not found: ${taskId}` };

@@ -1,5 +1,5 @@
 import { ToolResult } from '../../types/tools';
-import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams } from './CalendarProvider';
+import { CalendarProvider, CalendarAddParams, CalendarListParams, CalendarDeleteParams, CalendarUpdateParams } from './CalendarProvider';
 
 interface CalendarEvent {
   id: string;
@@ -74,6 +74,21 @@ export class MockCalendarProvider implements CalendarProvider {
         remaining: remaining.length,
         source: 'mock',
       },
+    };
+  }
+
+  async update(params: CalendarUpdateParams): Promise<ToolResult> {
+    const { userId, eventId, title, date, time, description, category } = params;
+    const event = this.events(userId).find(e => e.id === eventId);
+    if (!event) return { success: false, error: `Event ${eventId} not found.` };
+    if (title) event.title = title;
+    if (date) event.date = date;
+    if (time !== undefined) event.time = time || 'All day';
+    if (description !== undefined) event.description = description;
+    if (category) event.category = category;
+    return {
+      success: true,
+      data: { message: `Event "${event.title}" updated.`, event, source: 'mock' },
     };
   }
 }

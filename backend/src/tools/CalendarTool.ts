@@ -3,7 +3,7 @@ import { ToolResult, JSONSchema } from '../types/tools';
 import { CalendarProvider } from './providers/CalendarProvider';
 import { MockCalendarProvider } from './providers/MockCalendarProvider';
 
-type CalendarAction = 'add' | 'list' | 'delete';
+type CalendarAction = 'add' | 'list' | 'delete' | 'update';
 
 interface CalendarInput {
   action: CalendarAction;
@@ -23,7 +23,7 @@ const VALID_CATEGORIES = ['travel', 'shopping', 'reminder', 'other'] as const;
 export class CalendarTool extends BaseTool {
   readonly name = 'manage_calendar';
   readonly description =
-    'Manage calendar events — add, list, or delete events tied to a SPECIFIC DATE. ' +
+    'Manage calendar events — add, list, delete, or update events tied to a SPECIFIC DATE. ' +
     'Use ONLY for fixed-date occurrences: flight departure/arrival, hotel check-in/check-out, tour booking, delivery date, sale start date, trip dates. ' +
     'Do NOT use for actionable to-do items (things to book, buy, research, or call) — use manage_tasks for those. ' +
     'A calendar event requires a concrete date (date parameter is mandatory for add).';
@@ -33,7 +33,7 @@ export class CalendarTool extends BaseTool {
     properties: {
       action: {
         type: 'string',
-        description: '"add" a new event/reminder, "list" upcoming events, or "delete" an event by id',
+        description: '"add" a new event, "list" upcoming events, "delete" an event by id, or "update" an existing event by id',
       },
       userId: {
         type: 'string',
@@ -65,7 +65,7 @@ export class CalendarTool extends BaseTool {
       },
       eventId: {
         type: 'string',
-        description: 'Event ID to delete (required for delete)',
+        description: 'Event ID (required for delete and update)',
       },
     },
     required: ['action', 'userId'],
@@ -108,8 +108,22 @@ export class CalendarTool extends BaseTool {
         return this.provider.delete({ userId, eventId });
       }
 
+      case 'update': {
+        if (!eventId) {
+          return { success: false, error: 'eventId is required for update action' };
+        }
+        const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+        if (date && (!dateRe.test(date) || isNaN(Date.parse(date)))) {
+          return { success: false, error: `Invalid date "${date}". Use YYYY-MM-DD format.` };
+        }
+        if (endDate && (!dateRe.test(endDate) || isNaN(Date.parse(endDate)))) {
+          return { success: false, error: `Invalid endDate "${endDate}". Use YYYY-MM-DD format.` };
+        }
+        return this.provider.update({ userId, eventId, title, date, endDate, time, description, category });
+      }
+
       default:
-        return { success: false, error: `Unknown action: "${raw.action}". Use add, list, or delete.` };
+        return { success: false, error: `Unknown action: "${raw.action}". Use add, list, delete, or update.` };
     }
   }
 }

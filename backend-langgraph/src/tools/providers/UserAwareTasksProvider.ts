@@ -5,6 +5,7 @@ import {
   TasksListParams,
   TasksCompleteParams,
   TasksDeleteParams,
+  TasksUpdateParams,
 } from './TasksProvider';
 import { ToolResult } from '../../types/tools';
 
@@ -34,5 +35,9 @@ export class UserAwareTasksProvider implements TasksProvider {
 
   async delete(params: TasksDeleteParams): Promise<ToolResult> {
     return (await this.resolve(params.userId)).delete(params);
+  }
+
+  async update(params: TasksUpdateParams): Promise<ToolResult> {
+    return (await this.resolve(params.userId)).update(params);
   }
 }

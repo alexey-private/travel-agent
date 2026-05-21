@@ -12,6 +12,7 @@ import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
 import { authRoutes } from './routes/auth';
 import { settingsRoutes } from './routes/settings';
+import { calendarRoutes } from './routes/calendar';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -63,7 +64,7 @@ async function bootstrap(): Promise<void> {
   // CORS — allow the Next.js dev server and any configured frontend origin
   await fastify.register(cors, {
     origin: true,
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
   });
 
   // Shared singletons — created once at startup, reused across all requests
@@ -157,6 +158,9 @@ async function bootstrap(): Promise<void> {
     googleTokenRepo: tokenRepo,
   });
   fastify.log.info('Settings routes registered');
+
+  await fastify.register(calendarRoutes, { calendarProvider, tasksProvider });
+  fastify.log.info('Calendar routes registered');
 
   // Health check
   fastify.get('/health', async () => ({ status: 'ok' }));
