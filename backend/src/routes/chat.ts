@@ -29,6 +29,13 @@ interface Source {
   url: string;
 }
 
+interface Attachment {
+  name: string;
+  mimeType: string;
+  base64: string;
+  size: number;
+}
+
 interface ChatBody {
   /** Client-side session ID stored in localStorage */
   userId: string;
@@ -36,6 +43,7 @@ interface ChatBody {
   /** Pass to continue an existing conversation */
   conversationId?: string;
   agentType?: 'travel' | 'shopping';
+  attachments?: Attachment[];
 }
 
 /**
@@ -58,10 +66,10 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
-      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel' } = request.body;
+      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel', attachments } = request.body;
 
-      if (!sessionId || !message) {
-        return reply.status(400).send({ error: 'userId and message are required' });
+      if (!sessionId || (!message && !(attachments && attachments.length > 0))) {
+        return reply.status(400).send({ error: 'userId and message (or attachment) are required' });
       }
 
       // Resolve/create user and conversation
@@ -108,7 +116,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         raw.write(`data: ${JSON.stringify({ type: 'tool_end', tool: 'knowledge_base', output: ragContext })}\n\n`);
       }
 
-      // 
+      //
       const context = new AgentContext(
         internalUserId,
         conversationId,
@@ -118,6 +126,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         history,
         sessionId,
         taskListName,
+        attachments,
       );
 
       const agent = agentType === 'shopping'

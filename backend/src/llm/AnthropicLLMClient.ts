@@ -147,8 +147,17 @@ export class AnthropicLLMClient implements LLMClient {
         };
       }
 
-      // Plain user or assistant text
-      return { role: msg.role as 'user' | 'assistant', content: msg.content };
+      // User turn: plain text or multimodal content blocks
+      if (msg.role === 'user') {
+        return {
+          role: 'user' as const,
+          // UserContentBlock[] is structurally compatible with Anthropic.ContentBlockParam[]
+          content: msg.content as Anthropic.MessageParam['content'],
+        };
+      }
+
+      // Plain assistant text
+      return { role: 'assistant' as const, content: msg.content as string };
     });
   }
 }

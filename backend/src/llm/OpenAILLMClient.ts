@@ -166,8 +166,25 @@ export class OpenAILLMClient implements LLMClient {
         continue;
       }
 
-      // Plain user or assistant text
-      result.push({ role: msg.role as 'user' | 'assistant', content: msg.content });
+      // User or assistant text — convert Anthropic-style content blocks to OpenAI format when needed
+      if (msg.role === 'user' && Array.isArray(msg.content)) {
+        result.push({
+          role: 'user',
+          content: msg.content.map(block => {
+            if (block.type === 'text') return { type: 'text' as const, text: block.text };
+            if (block.type === 'image') {
+              return {
+                type: 'image_url' as const,
+                image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` },
+              };
+            }
+            // PDF documents: OpenAI doesn't support natively; embed as text notice
+            return { type: 'text' as const, text: `[Attached document: ${block.source.media_type}]` };
+          }),
+        });
+        continue;
+      }
+      result.push({ role: msg.role as 'user' | 'assistant', content: msg.content as string });
     }
 
     return result;

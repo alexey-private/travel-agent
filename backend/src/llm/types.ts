@@ -21,17 +21,23 @@ export interface LLMToolResult {
   isError?: boolean;
 }
 
+/** A single content block in a multimodal user message. */
+export type UserContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } };
+
 /**
  * Provider-agnostic conversation message.
  *
- * - 'user'      — plain text from the human turn
+ * - 'user'      — plain text or multimodal content (text + images + documents)
  * - 'assistant' — model response; may include tool calls when the model chose
  *                 to invoke tools in that turn
  * - 'tool'      — the results for every tool call in the preceding assistant turn;
  *                 mapped to provider-specific tool_result format by each LLMClient
  */
 export type LLMMessage =
-  | { role: 'user'; content: string }
+  | { role: 'user'; content: string | UserContentBlock[] }
   | { role: 'assistant'; content: string; toolCalls?: LLMToolCall[] }
   | { role: 'tool'; results: LLMToolResult[] };
 

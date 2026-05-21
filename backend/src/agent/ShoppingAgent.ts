@@ -44,11 +44,12 @@ export class ShoppingAgent {
 
     // Prepend RAG context to the user message when the knowledge base returned
     // relevant chunks, giving the LLM grounded facts before it reasons.
-    const userContent = context.ragContext
+    const userText = context.ragContext
       ? `Relevant shopping knowledge:\n${context.ragContext}\n\nUser request: ${context.userMessage}`
       : context.userMessage;
 
-    messages.push({ role: 'user', content: userContent });
+    // Use multimodal content blocks when the user attached files; plain text otherwise.
+    messages.push({ role: 'user', content: context.buildUserContent(userText) });
 
     // -- ReAct loop --
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
