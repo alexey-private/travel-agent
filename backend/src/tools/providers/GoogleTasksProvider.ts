@@ -87,6 +87,7 @@ export class GoogleTasksProvider implements TasksProvider {
             notes: notes ?? '',
             due,
             status: 'needsAction',
+            viewUrl: 'https://tasks.google.com',
           },
           source: 'google',
         },

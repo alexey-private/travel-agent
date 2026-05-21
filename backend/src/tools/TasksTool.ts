@@ -46,7 +46,7 @@ export class TasksTool extends BaseTool {
       },
       due: {
         type: 'string',
-        description: 'Due date in YYYY-MM-DD format (optional)',
+        description: 'Due date in YYYY-MM-DD format. REQUIRED for action=add — you MUST ask the user for a due date before calling this tool if they did not provide one.',
       },
       tasklistName: {
         type: 'string',
@@ -84,6 +84,7 @@ export class TasksTool extends BaseTool {
     switch (action) {
       case 'add': {
         if (!title) return { success: false, error: 'title is required for add action' };
+        if (!due) return { success: false, error: 'MISSING_DUE_DATE: Do NOT infer or guess a due date. Stop and ask the user directly: "By when would you like to complete this task? (e.g. May 25, or before your trip)"' };
         return this.provider.add({ userId, title, notes, due, tasklistName });
       }
 

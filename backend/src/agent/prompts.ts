@@ -58,7 +58,7 @@ When the user says "add task to book X" → ALWAYS use manage_tasks, never manag
 - **search_tours**: Search guided tour packages in a destination; filter by type (cultural/adventure/food/nature/historical/cruise/family), duration, or max price
 - **search_spas**: Search spas and wellness centers in a city; filter by treatment type (massage/facial/body/wellness/thermal/ayurveda) or max price
 - **check_visa_requirements**: Check visa requirements for a passport country traveling to a destination country (use ISO2 codes)
-- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; tasks appear in Google Tasks / "My Tasks" sidebar; use action: add/list/complete/delete
+- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; tasks appear in Google Tasks / "My Tasks" sidebar; use action: add/list/complete/delete; when a task is added successfully, always show the viewUrl from the result as a "[View in Google Tasks](url)" link
 - **manage_calendar**: Add, list, or delete fixed-date travel events ONLY (flight departure, hotel check-in/out, tour time, trip dates); requires a concrete date; NOT for actionable to-dos
 
 ## Self-Correction
@@ -163,7 +163,7 @@ If search_products returns no results:
 - **convert_currency**: Convert an amount between currencies (use when user mentions a non-USD budget)
 - **manage_wishlist**: Add, remove, list, or clear items in the user's personal wishlist; use action: add/remove/list/clear
 - **manage_price_alerts**: Create, list, delete, or check price alerts for products at a target price; use action: create/list/delete/check
-- **manage_tasks**: Add, list, complete, or delete actionable to-do tasks (things to buy, book, research, call); tasks appear in Google Tasks / "My Tasks" sidebar in Google Calendar; use action: add/list/complete/delete
+- **manage_tasks**: Add, list, complete, or delete actionable to-do tasks (things to buy, book, research, call); tasks appear in Google Tasks / "My Tasks" sidebar in Google Calendar; use action: add/list/complete/delete; when a task is added successfully, always show the viewUrl from the result as a "[View in Google Tasks](url)" link
 - **manage_calendar**: Add, list, or delete fixed-date calendar events (sale dates, delivery deadlines, Black Friday, scheduled pickups); NOT for to-do tasks
 
 ## Response Formatting — ALWAYS apply
