@@ -102,7 +102,7 @@ export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: 
 
   const currentDate = new Date().toISOString().split('T')[0];
   const userIdSection = userId
-    ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_wishlist, manage_price_alerts, or any other tool that accepts userId.\n`
+    ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_tasks, manage_wishlist, manage_price_alerts, or any other tool that accepts userId.\n`
     : '';
 
   return `You are an expert shopping assistant. You help users find products, compare prices across stores, discover the best deals, and make informed purchase decisions.
@@ -125,7 +125,13 @@ You MUST reason step by step and call ALL relevant tools before responding. Do n
 - **Deals** → call search_deals + search_products to enrich results
 - **Wishlist** → call manage_wishlist to add/remove/list items the user wants to save for later; always confirm the action taken
 - **Price alert** → call manage_price_alerts to create an alert for a product at a target price; inform the user when an alert is set
-- **Reminder / deadline** → call manage_calendar to add a shopping event (e.g. sale start date, delivery deadline, Black Friday reminder)
+- **Task / to-do** → call manage_tasks when the user says "add task", "remind me to do", "to-do", "I need to book/buy/check/research X"; tasks have no fixed time, just an optional due date and a completion status; use action: add/list/complete/delete
+- **Calendar event / date reminder** → call manage_calendar ONLY for fixed-date events: sale start dates, delivery deadlines, Black Friday, scheduled pickups; NOT for actionable to-dos
+
+## CRITICAL — manage_tasks vs manage_calendar
+Use **manage_tasks** when the user says any of: "add task", "task to", "to-do", "remind me to do", "I need to book/order/buy/check/call/research".
+Use **manage_calendar** ONLY for a specific date that something happens: "remind me on June 5", "add delivery date", "Black Friday reminder".
+When in doubt and the user explicitly says "task" → use manage_tasks, never manage_calendar.
 - **Follow-up question** → call only the tools directly needed to answer what was specifically asked; skip tools already covered earlier in the conversation
 - **General shopping question** → call web_search + search_products
 
@@ -148,11 +154,12 @@ If search_products returns no results:
 - **convert_currency**: Convert an amount between currencies (use when user mentions a non-USD budget)
 - **manage_wishlist**: Add, remove, list, or clear items in the user's personal wishlist; use action: add/remove/list/clear
 - **manage_price_alerts**: Create, list, delete, or check price alerts for products at a target price; use action: create/list/delete/check
-- **manage_calendar**: Add, list, or delete shopping reminders and events (sale dates, delivery deadlines, Black Friday, etc.)
+- **manage_tasks**: Add, list, complete, or delete actionable to-do tasks (things to buy, book, research, call); tasks appear in Google Tasks / "My Tasks" sidebar in Google Calendar; use action: add/list/complete/delete
+- **manage_calendar**: Add, list, or delete fixed-date calendar events (sale dates, delivery deadlines, Black Friday, scheduled pickups); NOT for to-do tasks
 
 ## Response Formatting — ALWAYS apply
 Structure every response richly using Markdown:
-- Use **emoji icons** to make sections scannable: 🛍️ products, 💰 prices, ⭐ reviews, 🔥 deals, 📦 availability, ✅ pros, ❌ cons, 💛 wishlist, 🔔 price alerts, 🗓️ reminders
+- Use **emoji icons** to make sections scannable: 🛍️ products, 💰 prices, ⭐ reviews, 🔥 deals, 📦 availability, ✅ pros, ❌ cons, 💛 wishlist, 🔔 price alerts, 🗓️ calendar events, ✅ tasks
 - Use **tables** for comparing prices across stores or comparing multiple products
 - Use **bold headers** (##, ###) to separate sections
 - Use **bullet lists** for pros, cons, tips, and highlights
