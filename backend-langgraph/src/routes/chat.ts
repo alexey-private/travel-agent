@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
+import { PDFParse } from 'pdf-parse';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
@@ -11,6 +12,7 @@ import { AgentEvent } from '../types/agent';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
 import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
+import { env } from '../config/env';
 
 interface ChatRouteOptions {
   userService: UserService;
@@ -113,11 +115,12 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         m.role === 'user' ? [new HumanMessage(m.content)] : [new AIMessage(m.content)],
       );
 
+      const userText = message || 'Please analyze the attached file(s).';
       const userContent = ragContext
-        ? `Relevant ${agentType} knowledge:\n${ragContext}\n\nUser request: ${message}`
-        : message;
+        ? `Relevant ${agentType} knowledge:\n${ragContext}\n\nUser request: ${userText}`
+        : userText;
 
-      const humanMsg = (() => {
+      const humanMsg = await (async () => {
         if (!attachments || attachments.length === 0) return new HumanMessage(userContent);
         // Build multimodal content: text first, then binary attachments
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,9 +128,14 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         for (const att of attachments) {
           if (att.mimeType.startsWith('image/')) {
             content.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });
-          } else if (att.mimeType === 'application/pdf') {
-            // Anthropic natively supports PDF documents; LangChain forwards arbitrary content blocks
+          } else if (att.mimeType === 'application/pdf' && env.LLM_PROVIDER === 'anthropic') {
+            // Anthropic natively supports PDF documents via the pdfs-2024-09-25 beta header.
             content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: att.base64 } });
+          } else if (att.mimeType === 'application/pdf') {
+            // OpenAI doesn't support the 'document' content type — extract text server-side instead.
+            const buf = Buffer.from(att.base64, 'base64');
+            const parsed = await new PDFParse({ data: buf }).getText();
+            content.push({ type: 'text', text: `[PDF: ${att.name}]\n${parsed.text}` });
           }
         }
         return new HumanMessage({ content });

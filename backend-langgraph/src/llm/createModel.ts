@@ -37,6 +37,8 @@ export function createModel(size: ModelSize, maxTokensOrOptions?: number | Model
     apiKey: env.ANTHROPIC_API_KEY,
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(streaming !== undefined ? { streaming } : {}),
+    // Enable PDF document support (document content blocks)
+    clientOptions: { defaultHeaders: { 'anthropic-beta': 'pdfs-2024-09-25' } },
   }) as BaseChatModel;
 
   // LangChain sets topP=-1 as a sentinel meaning "not set", but Anthropic API

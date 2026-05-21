@@ -38,6 +38,7 @@ const fastify = Fastify({
   },
   genReqId: () => `req-${(++_reqCounter).toString().padStart(6, '0')}`,
   requestIdHeader: 'x-request-id',
+  bodyLimit: 25 * 1024 * 1024, // 25 MB — accommodate base64-encoded file attachments
 });
 
 async function bootstrap(): Promise<void> {

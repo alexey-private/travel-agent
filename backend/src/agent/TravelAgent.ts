@@ -49,7 +49,7 @@ export class TravelAgent {
       : context.userMessage;
 
     // Use multimodal content blocks when the user attached files; plain text otherwise.
-    messages.push({ role: 'user', content: context.buildUserContent(userText) });
+    messages.push({ role: 'user', content: await context.buildUserContent(userText) });
 
     // -- ReAct loop --
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {

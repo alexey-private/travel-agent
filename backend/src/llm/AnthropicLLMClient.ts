@@ -24,7 +24,7 @@ export class AnthropicLLMClient implements LLMClient {
   private client: Anthropic;
 
   constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({ apiKey, defaultHeaders: { 'anthropic-beta': 'pdfs-2024-09-25' } });
   }
 
   async *stream(params: LLMStreamParams): AsyncIterable<LLMStreamEvent> {
