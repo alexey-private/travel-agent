@@ -21,6 +21,7 @@ type Tab = "events" | "tasks";
 interface EventEditState {
   title: string;
   date: string;
+  endDate: string;
   time: string;
   description: string;
   category: string;
@@ -49,7 +50,7 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [editingEvent, setEditingEvent] = useState<string | null>(null);
-  const [eventForm, setEventForm] = useState<EventEditState>({ title: "", date: "", time: "", description: "", category: "other" });
+  const [eventForm, setEventForm] = useState<EventEditState>({ title: "", date: "", endDate: "", time: "", description: "", category: "other" });
 
   const [editingTask, setEditingTask] = useState<string | null>(null);
   const [taskForm, setTaskForm] = useState<TaskEditState>({ title: "", notes: "", due: "" });
@@ -83,7 +84,8 @@ export default function CalendarPage() {
     setEventForm({
       title: evt.title,
       date: evt.date,
-      time: evt.time ?? "",
+      endDate: evt.endDate ?? "",
+      time: evt.time && evt.time !== "All day" ? evt.time : "",
       description: evt.description ?? "",
       category: evt.category ?? "other",
     });
@@ -96,6 +98,7 @@ export default function CalendarPage() {
       await updateEvent(userId, editingEvent, {
         title: eventForm.title || undefined,
         date: eventForm.date || undefined,
+        endDate: eventForm.endDate || undefined,
         time: eventForm.time || undefined,
         description: eventForm.description,
         category: eventForm.category || undefined,
@@ -248,6 +251,14 @@ export default function CalendarPage() {
                       onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })}
                     />
                   </div>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    placeholder="End date (optional)"
+                    value={eventForm.endDate}
+                    min={eventForm.date}
+                    onChange={(e) => setEventForm({ ...eventForm, endDate: e.target.value })}
+                  />
                   <select
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                     value={eventForm.category}
@@ -288,7 +299,7 @@ export default function CalendarPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{evt.title}</p>
                     <p className="text-xs text-gray-400">
-                      {evt.date}{evt.time && evt.time !== "All day" ? ` · ${evt.time}` : ""}
+                      {evt.date}{evt.endDate ? ` – ${evt.endDate}` : ""}{evt.time && evt.time !== "All day" ? ` · ${evt.time}` : ""}
                       {evt.calendar ? ` · ${evt.calendar}` : ""}
                     </p>
                   </div>

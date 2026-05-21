@@ -16,6 +16,7 @@ interface ParsedEvent {
   href: string;
   title: string;
   date: string;
+  endDate?: string;
   time?: string;
   description?: string;
   category: string;
@@ -107,6 +108,11 @@ export class ICloudCalendarProvider implements CalendarProvider {
         .find((l) => l.startsWith('DTSTART'))
         ?.replace(/^DTSTART[^:]*:/, '')
         .trim() ?? '';
+    const dtendRaw =
+      lines
+        .find((l) => l.startsWith('DTEND'))
+        ?.replace(/^DTEND[^:]*:/, '')
+        .trim() ?? '';
     const description = lines
       .find((l) => l.startsWith('DESCRIPTION:'))
       ?.slice(12)
@@ -127,11 +133,26 @@ export class ICloudCalendarProvider implements CalendarProvider {
       ? `${dtstart.slice(9, 11)}:${dtstart.slice(11, 13)}`
       : undefined;
 
+    let endDate: string | undefined;
+    if (dtendRaw.length >= 8) {
+      const rawDate = `${dtendRaw.slice(0, 4)}-${dtendRaw.slice(4, 6)}-${dtendRaw.slice(6, 8)}`;
+      if (!dtendRaw.includes('T')) {
+        // DATE-type DTEND is exclusive in iCal — subtract 1 day for display
+        const d = new Date(rawDate);
+        d.setUTCDate(d.getUTCDate() - 1);
+        endDate = d.toISOString().slice(0, 10);
+      } else {
+        endDate = rawDate;
+      }
+      if (endDate === date) endDate = undefined;
+    }
+
     return {
       id: uid,
       href,
       title: summary,
       date,
+      endDate,
       time,
       description,
       category: categories,
@@ -243,6 +264,7 @@ export class ICloudCalendarProvider implements CalendarProvider {
             id: e.id,
             title: e.title,
             date: e.date,
+            endDate: e.endDate,
             time: e.time,
             description: e.description,
             category: e.category,
@@ -314,7 +336,7 @@ export class ICloudCalendarProvider implements CalendarProvider {
         const mergedTime = time !== undefined ? time : existing.time;
         const mergedDesc = description !== undefined ? description : existing.description;
         const mergedCat = category ?? existing.category;
-        const mergedEndDate = endDate ?? mergedDate;
+        const mergedEndDate = endDate ?? existing.endDate ?? mergedDate;
 
         let dtstart: string;
         let dtend: string;
