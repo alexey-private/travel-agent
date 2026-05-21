@@ -151,6 +151,77 @@ describe('ICloudCalendarProvider', () => {
       expect(result.success).toBe(true);
       expect((result.data as { events: unknown[] }).events).toHaveLength(0);
     });
+
+    it('parses multi-day event endDate (DATE-type DTEND is exclusive)', async () => {
+      mockDAVClient.fetchCalendarObjects.mockResolvedValue([{
+        url: 'https://caldav.icloud.com/.../trip.ics',
+        data: [
+          'BEGIN:VCALENDAR',
+          'BEGIN:VEVENT',
+          'UID:trip-paris',
+          'SUMMARY:Trip to Paris',
+          'DTSTART;VALUE=DATE:20260605',
+          'DTEND;VALUE=DATE:20260612', // exclusive → inclusive end = 2026-06-11
+          'CATEGORIES:travel',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\n'),
+      }]);
+
+      const result = await provider.list({ userId });
+      expect(result.success).toBe(true);
+      type Evt = { title: string; date: string; endDate?: string };
+      const events = (result.data as { events: Evt[] }).events;
+      expect(events).toHaveLength(1);
+      expect(events[0].date).toBe('2026-06-05');
+      expect(events[0].endDate).toBe('2026-06-11');
+    });
+
+    it('does not set endDate for single-day events', async () => {
+      mockDAVClient.fetchCalendarObjects.mockResolvedValue([{
+        url: 'https://caldav.icloud.com/.../single.ics',
+        data: [
+          'BEGIN:VCALENDAR',
+          'BEGIN:VEVENT',
+          'UID:single-day',
+          'SUMMARY:Quick Meeting',
+          'DTSTART;VALUE=DATE:20260610',
+          'DTEND;VALUE=DATE:20260611', // exclusive next-day → inclusive = 2026-06-10 = start → omitted
+          'CATEGORIES:other',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\n'),
+      }]);
+
+      const result = await provider.list({ userId });
+      type Evt = { date: string; endDate?: string };
+      const events = (result.data as { events: Evt[] }).events;
+      expect(events[0].endDate).toBeUndefined();
+    });
+
+    it('parses timed event endDate from DTEND datetime', async () => {
+      mockDAVClient.fetchCalendarObjects.mockResolvedValue([{
+        url: 'https://caldav.icloud.com/.../timed.ics',
+        data: [
+          'BEGIN:VCALENDAR',
+          'BEGIN:VEVENT',
+          'UID:timed-evt',
+          'SUMMARY:Conference',
+          'DTSTART:20260610T090000Z',
+          'DTEND:20260612T180000Z',
+          'CATEGORIES:travel',
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ].join('\n'),
+      }]);
+
+      const result = await provider.list({ userId });
+      type Evt = { date: string; endDate?: string; time?: string };
+      const events = (result.data as { events: Evt[] }).events;
+      expect(events[0].date).toBe('2026-06-10');
+      expect(events[0].endDate).toBe('2026-06-12');
+      expect(events[0].time).toBe('09:00');
+    });
   });
 
   describe('delete()', () => {
@@ -176,6 +247,62 @@ describe('ICloudCalendarProvider', () => {
     it('returns error when event not found', async () => {
       mockDAVClient.fetchCalendarObjects.mockResolvedValue([]);
       const result = await provider.delete({ userId, eventId: 'nonexistent' });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+  });
+
+  describe('update()', () => {
+    const MULTI_DAY_ICS = [
+      'BEGIN:VCALENDAR',
+      'BEGIN:VEVENT',
+      'UID:trip-paris',
+      'SUMMARY:Trip to Paris',
+      'DTSTART;VALUE=DATE:20260605',
+      'DTEND;VALUE=DATE:20260612',
+      'CATEGORIES:travel',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\n');
+
+    beforeEach(() => {
+      mockDAVClient.fetchCalendarObjects.mockResolvedValue([{
+        url: 'https://caldav.icloud.com/.../trip-paris.ics',
+        data: MULTI_DAY_ICS,
+        etag: '"abc"',
+      }]);
+      (mockDAVClient as Record<string, unknown>).updateCalendarObject = jest.fn().mockResolvedValue(undefined);
+    });
+
+    it('preserves existing endDate when not provided in update', async () => {
+      const result = await provider.update({
+        userId,
+        eventId: 'trip-paris',
+        title: 'Trip to Paris (Updated)',
+      });
+
+      expect(result.success).toBe(true);
+      const updatedICS: string = ((mockDAVClient as Record<string, unknown>).updateCalendarObject as jest.Mock).mock.calls[0][0].calendarObject.data;
+      // endDate was 2026-06-11 (inclusive) → stored as DTEND 2026-06-12 (exclusive)
+      expect(updatedICS).toContain('DTEND;VALUE=DATE:20260612');
+      expect(updatedICS).toContain('SUMMARY:Trip to Paris (Updated)');
+    });
+
+    it('uses new endDate when provided', async () => {
+      const result = await provider.update({
+        userId,
+        eventId: 'trip-paris',
+        endDate: '2026-06-15',
+      });
+
+      expect(result.success).toBe(true);
+      const updatedICS: string = ((mockDAVClient as Record<string, unknown>).updateCalendarObject as jest.Mock).mock.calls[0][0].calendarObject.data;
+      expect(updatedICS).toContain('DTEND;VALUE=DATE:20260616'); // 15 + 1 exclusive
+    });
+
+    it('returns error when event not found', async () => {
+      mockDAVClient.fetchCalendarObjects.mockResolvedValue([]);
+      const result = await provider.update({ userId, eventId: 'nonexistent', title: 'X' });
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found');
     });

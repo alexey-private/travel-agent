@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Paperclip, X, FileText } from "lucide-react";
 import MessageBubble, { type Message } from "./MessageBubble";
 import { getRandomSuggestions } from "../data/starterSuggestions";
 import { type AgentType } from "./AgentSelector";
-import { streamChat, fetchMessages, type AgentEvent, type ChatMessage } from "@/lib/api";
+import { streamChat, fetchMessages, type AgentEvent, type ChatMessage, type Attachment } from "@/lib/api";
 import { type ToolStep } from "./AgentThoughts";
 
 interface ChatWindowProps {
@@ -52,6 +52,53 @@ function historyToMessage(m: ChatMessage) {
   };
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const BINARY_MIME_TYPES = ["application/pdf"];
+const TEXT_EXTENSIONS = [".txt", ".md", ".csv", ".json"];
+
+function isTextFile(file: File): boolean {
+  return file.type.startsWith("text/") || TEXT_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
+}
+
+function isBinaryAttachment(file: File): boolean {
+  return file.type.startsWith("image/") || BINARY_MIME_TYPES.includes(file.type);
+}
+
+/** Reads a file as base64 (data URI → strip prefix). */
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Reads a file as UTF-8 text. */
+function readAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+interface PendingTextFile {
+  name: string;
+  content: string;
+}
+
 /**
  * Main chat window: renders message list + input bar.
  * Manages SSE streaming and incremental AgentThoughts updates.
@@ -69,8 +116,11 @@ export default function ChatWindow({
   const [conversationId, setConversationId] = useState<string | null>(
     initialConversationId ?? null,
   );
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [textFiles, setTextFiles] = useState<PendingTextFile[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load history when opening an existing conversation
   useEffect(() => {
@@ -90,18 +140,65 @@ export default function ChatWindow({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+
+    for (const file of files) {
+      if (file.size > MAX_FILE_BYTES) {
+        alert(`"${file.name}" is ${formatBytes(file.size)} — files over 5 MB may be slow to process.`);
+      }
+
+      if (isBinaryAttachment(file)) {
+        const base64 = await readAsBase64(file);
+        setAttachments((prev) => [...prev, { name: file.name, mimeType: file.type, base64, size: file.size }]);
+      } else if (isTextFile(file)) {
+        const content = await readAsText(file);
+        setTextFiles((prev) => [...prev, { name: file.name, content }]);
+      }
+    }
+  }, []);
+
+  const removeAttachment = useCallback((name: string) => {
+    setAttachments((prev) => prev.filter((a) => a.name !== name));
+  }, []);
+
+  const removeTextFile = useCallback((name: string) => {
+    setTextFiles((prev) => prev.filter((f) => f.name !== name));
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    const hasContent = text || attachments.length > 0 || textFiles.length > 0;
+    if (!hasContent || loading) return;
+
+    // Prepend text file contents to the message string
+    let fullText = text;
+    for (const tf of textFiles) {
+      fullText = `[File: ${tf.name}]\n${tf.content}\n---\n${fullText}`;
+    }
+
+    const pendingAttachments = [...attachments];
 
     setInput("");
+    setAttachments([]);
+    setTextFiles([]);
     setLoading(true);
+
+    // Build display label for user bubble
+    const displayText = [
+      text,
+      ...attachments.map((a) => `📎 ${a.name}`),
+      ...textFiles.map((f) => `📄 ${f.name}`),
+    ].filter(Boolean).join("\n");
 
     // Append user bubble
     const userMsgId = newId();
     setMessages((prev) => [
       ...prev,
-      { id: userMsgId, role: "user", content: text },
+      { id: userMsgId, role: "user", content: displayText },
     ]);
 
     // Placeholder for streaming assistant reply
@@ -122,7 +219,7 @@ export default function ChatWindow({
     try {
       await streamChat(
         userId,
-        text,
+        fullText,
         conversationId,
         (event: AgentEvent) => {
           switch (event.type) {
@@ -217,6 +314,7 @@ export default function ChatWindow({
         },
         controller.signal,
         agentType,
+        pendingAttachments.length > 0 ? pendingAttachments : undefined,
       );
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -232,7 +330,7 @@ export default function ChatWindow({
       setLoading(false);
       onReplyComplete?.();
     }
-  }, [input, loading, userId, conversationId, agentType, onConversationCreated, onReplyComplete]);
+  }, [input, attachments, textFiles, loading, userId, conversationId, agentType, onConversationCreated, onReplyComplete]);
 
   const handleSuggestionClick = useCallback((text: string) => {
     setInput(text);
@@ -246,6 +344,8 @@ export default function ChatWindow({
       void sendMessage();
     }
   };
+
+  const hasContent = input.trim() || attachments.length > 0 || textFiles.length > 0;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -282,7 +382,67 @@ export default function ChatWindow({
             ))}
           </div>
         )}
-        <div className="flex items-end gap-3 max-w-full">
+
+        {/* Attachment previews */}
+        {(attachments.length > 0 || textFiles.length > 0) && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {attachments.map((att) => (
+              <div key={att.name} className="relative flex items-center gap-1.5 bg-gray-100 rounded-lg px-2 py-1 text-xs text-gray-700 max-w-[180px]">
+                {att.mimeType.startsWith("image/") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`data:${att.mimeType};base64,${att.base64}`}
+                    alt={att.name}
+                    className="h-8 w-8 object-cover rounded"
+                  />
+                ) : (
+                  <FileText size={16} className="text-red-500 shrink-0" />
+                )}
+                <span className="truncate">{att.name}</span>
+                <button
+                  onClick={() => removeAttachment(att.name)}
+                  className="ml-0.5 text-gray-400 hover:text-gray-600 shrink-0"
+                  aria-label={`Remove ${att.name}`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            {textFiles.map((tf) => (
+              <div key={tf.name} className="relative flex items-center gap-1.5 bg-gray-100 rounded-lg px-2 py-1 text-xs text-gray-700 max-w-[180px]">
+                <FileText size={16} className="text-blue-500 shrink-0" />
+                <span className="truncate">{tf.name}</span>
+                <button
+                  onClick={() => removeTextFile(tf.name)}
+                  className="ml-0.5 text-gray-400 hover:text-gray-600 shrink-0"
+                  aria-label={`Remove ${tf.name}`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-end gap-2 max-w-full">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.txt,.md,.csv,.json"
+            className="hidden"
+            onChange={(e) => void handleFileChange(e)}
+          />
+          {/* Paperclip button */}
+          <button
+            aria-label="Attach file"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="h-11 w-11 rounded-xl border border-gray-300 text-gray-500 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            <Paperclip size={18} />
+          </button>
           <textarea
             className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
             placeholder="Ask me to plan a trip…  (Shift+Enter for new line)"
@@ -295,7 +455,7 @@ export default function ChatWindow({
           <button
             aria-label="Send"
             onClick={() => void sendMessage()}
-            disabled={loading || !input.trim()}
+            disabled={loading || !hasContent}
             className="h-11 w-11 rounded-xl bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {loading ? (

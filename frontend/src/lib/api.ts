@@ -1,5 +1,12 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+export interface Attachment {
+  name: string;
+  mimeType: string;
+  base64: string;
+  size: number;
+}
+
 export type AgentEvent =
   | { type: "conversation_id"; conversationId: string }
   | { type: "text"; content: string }
@@ -31,11 +38,12 @@ export async function streamChat(
   onEvent: (event: AgentEvent) => void,
   signal?: AbortSignal,
   agentType?: "travel" | "shopping",
+  attachments?: Attachment[],
 ): Promise<void> {
   const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, message, conversationId, agentType }),
+    body: JSON.stringify({ userId, message, conversationId, agentType, attachments }),
     signal,
   });
 

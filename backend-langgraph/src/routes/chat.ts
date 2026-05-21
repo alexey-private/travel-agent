@@ -23,11 +23,19 @@ interface ChatRouteOptions {
   prefRepo: UserPreferencesRepository;
 }
 
+interface Attachment {
+  name: string;
+  mimeType: string;
+  base64: string;
+  size: number;
+}
+
 interface ChatBody {
   userId: string;
   message: string;
   conversationId?: string;
   agentType?: 'travel' | 'shopping';
+  attachments?: Attachment[];
 }
 
 interface Source {
@@ -57,10 +65,10 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
-      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel' } = request.body;
+      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel', attachments } = request.body;
 
-      if (!sessionId || !message) {
-        return reply.status(400).send({ error: 'userId and message are required' });
+      if (!sessionId || (!message && !(attachments && attachments.length > 0))) {
+        return reply.status(400).send({ error: 'userId and message (or attachment) are required' });
       }
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
@@ -109,7 +117,23 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         ? `Relevant ${agentType} knowledge:\n${ragContext}\n\nUser request: ${message}`
         : message;
 
-      const initialMessages = [...historyMessages, new HumanMessage(userContent)];
+      const humanMsg = (() => {
+        if (!attachments || attachments.length === 0) return new HumanMessage(userContent);
+        // Build multimodal content: text first, then binary attachments
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const content: any[] = [{ type: 'text', text: userContent }];
+        for (const att of attachments) {
+          if (att.mimeType.startsWith('image/')) {
+            content.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });
+          } else if (att.mimeType === 'application/pdf') {
+            // Anthropic natively supports PDF documents; LangChain forwards arbitrary content blocks
+            content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: att.base64 } });
+          }
+        }
+        return new HumanMessage({ content });
+      })();
+
+      const initialMessages = [...historyMessages, humanMsg];
 
       const taskListName = agentType === 'shopping' ? userPrefs.shoppingTaskListName : userPrefs.taskListName;
       const graph = agentType === 'shopping'
