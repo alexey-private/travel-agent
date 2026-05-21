@@ -13,6 +13,7 @@ import { TourSearchTool } from '../tools/travel/TourSearchTool';
 import { SpaSearchTool } from '../tools/travel/SpaSearchTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
+import { MockTasksProvider } from '../tools/providers/MockTasksProvider';
 import { TasksTool } from '../tools/TasksTool';
 import { UserMemory } from '../types/memory';
 
@@ -30,7 +31,7 @@ export function buildTravelGraph(memories: UserMemory[], calendarProvider?: Cale
       new TourSearchTool(),
       new SpaSearchTool(),
       calendarProvider ? new CalendarTool(calendarProvider) : new CalendarTool(),
-      tasksProvider ? new TasksTool(tasksProvider) : new TasksTool(),
+      tasksProvider ? new TasksTool(tasksProvider, 'Travel Plans') : new TasksTool(new MockTasksProvider(), 'Travel Plans'),
     ],
     buildTravelAgentSystemPrompt(memories, sessionId),
   );

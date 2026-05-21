@@ -25,47 +25,48 @@ export class TasksTool extends BaseTool {
     'Tasks appear in Google Calendar under the "My Tasks" sidebar. ' +
     'Unlike manage_calendar (which is for fixed-date events), manage_tasks is for actions the user needs to take.';
 
-  readonly inputSchema: JSONSchema = {
-    type: 'object',
-    properties: {
-      action: {
-        type: 'string',
-        description: '"add" a task, "list" tasks, "complete" a task by id, or "delete" a task by id',
-      },
-      userId: {
-        type: 'string',
-        description: 'User identifier to scope the task list',
-      },
-      title: {
-        type: 'string',
-        description: 'Task title (required for add), e.g. "Buy Sony WH-1000XM5 headphones"',
-      },
-      notes: {
-        type: 'string',
-        description: 'Additional details or notes for the task (optional)',
-      },
-      due: {
-        type: 'string',
-        description: 'Due date in YYYY-MM-DD format. REQUIRED for action=add — you MUST ask the user for a due date before calling this tool if they did not provide one.',
-      },
-      tasklistName: {
-        type: 'string',
-        description: 'Name of the task list to use (default: "Shopping")',
-      },
-      taskId: {
-        type: 'string',
-        description: 'Task ID (required for complete and delete)',
-      },
-      includeCompleted: {
-        type: 'boolean',
-        description: 'Whether to include completed tasks in list results (default: false)',
-      },
-    },
-    required: ['action', 'userId'],
-  };
+  readonly inputSchema: JSONSchema;
 
-  constructor(private provider: TasksProvider = new MockTasksProvider()) {
+  constructor(private provider: TasksProvider = new MockTasksProvider(), defaultTasklist: string = 'Shopping') {
     super();
+    this.inputSchema = {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          description: '"add" a task, "list" tasks, "complete" a task by id, or "delete" a task by id',
+        },
+        userId: {
+          type: 'string',
+          description: 'User identifier to scope the task list',
+        },
+        title: {
+          type: 'string',
+          description: 'Task title (required for add), e.g. "Buy Sony WH-1000XM5 headphones"',
+        },
+        notes: {
+          type: 'string',
+          description: 'Additional details or notes for the task (optional)',
+        },
+        due: {
+          type: 'string',
+          description: 'Due date in YYYY-MM-DD format. REQUIRED for action=add — you MUST ask the user for a due date before calling this tool if they did not provide one.',
+        },
+        tasklistName: {
+          type: 'string',
+          description: `Name of the task list to use (default: "${defaultTasklist}")`,
+        },
+        taskId: {
+          type: 'string',
+          description: 'Task ID (required for complete and delete)',
+        },
+        includeCompleted: {
+          type: 'boolean',
+          description: 'Whether to include completed tasks in list results (default: false)',
+        },
+      },
+      required: ['action', 'userId'],
+    };
   }
 
   async execute(input: unknown): Promise<ToolResult> {

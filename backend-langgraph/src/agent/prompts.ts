@@ -58,7 +58,7 @@ When the user says "add task to book X" → ALWAYS use manage_tasks, never manag
 - **search_tours**: Search guided tour packages in a destination; filter by type (cultural/adventure/food/nature/historical/cruise/family), duration, or max price
 - **search_spas**: Search spas and wellness centers in a city; filter by treatment type (massage/facial/body/wellness/thermal/ayurveda) or max price
 - **check_visa_requirements**: Check visa requirements for a passport country traveling to a destination country (use ISO2 codes)
-- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; tasks appear in Google Tasks / "My Tasks" sidebar; use action: add/list/complete/delete; when a task is added successfully, always show the viewUrl from the result as a "[View in Google Tasks](url)" link
+- **manage_tasks**: Add, list, complete, or delete actionable to-do items (things to book, apply for, research, call); use when the user says "add task", "task to", "I need to book/apply/research"; tasks appear in Google Tasks / "My Tasks" sidebar; use action: add/list/complete/delete; ALWAYS pass tasklistName: "Travel Plans" (exact spelling); when a task is added successfully, always show the viewUrl from the result as a "[View in Google Tasks](url)" link
 - **manage_calendar**: Add, list, or delete fixed-date travel events ONLY (flight departure, hotel check-in/out, tour time, trip dates); requires a concrete date; NOT for actionable to-dos
 
 ## Self-Correction

@@ -14,6 +14,7 @@ import { authRoutes } from './routes/auth';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
 import { GoogleTasksProvider } from './tools/providers/GoogleTasksProvider';
+import { MockTasksProvider } from './tools/providers/MockTasksProvider';
 import { TasksTool } from './tools/TasksTool';
 import { LLMClientFactory } from './llm/LLMClientFactory';
 import { EmbeddingService } from './services/EmbeddingService';
@@ -85,7 +86,8 @@ async function bootstrap(): Promise<void> {
   const tasksProvider = googleConfig
     ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
     : undefined;
-  const tasksTool = tasksProvider ? new TasksTool(tasksProvider) : new TasksTool();
+  const travelTasksTool = tasksProvider ? new TasksTool(tasksProvider, 'Travel Plans') : new TasksTool(new MockTasksProvider(), 'Travel Plans');
+  const shoppingTasksTool = tasksProvider ? new TasksTool(tasksProvider) : new TasksTool();
 
   const travelToolRegistry = new ToolRegistry();
   travelToolRegistry.register(webSearchTool);
@@ -99,7 +101,7 @@ async function bootstrap(): Promise<void> {
   travelToolRegistry.register(new TourSearchTool());
   travelToolRegistry.register(new SpaSearchTool());
   travelToolRegistry.register(calendarTool);
-  travelToolRegistry.register(tasksTool);
+  travelToolRegistry.register(travelTasksTool);
 
   const shoppingToolRegistry = new ToolRegistry();
   shoppingToolRegistry.register(new ProductSearchTool(ragService));
@@ -111,7 +113,7 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(new WishlistTool());
   shoppingToolRegistry.register(new PriceAlertTool());
   shoppingToolRegistry.register(calendarTool);
-  shoppingToolRegistry.register(tasksTool);
+  shoppingToolRegistry.register(shoppingTasksTool);
 
   // Routes
   await fastify.register(chatRoutes, {
