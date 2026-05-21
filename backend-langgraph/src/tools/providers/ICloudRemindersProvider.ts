@@ -21,6 +21,8 @@ interface ParsedTask {
   listName: string;
 }
 
+// Tasks are stored as VEVENT in Apple Calendar with [Task] prefix and CATEGORIES:TASK.
+// This bypasses unreliable VTODO CalDAV sync on iCloud and uses the proven VEVENT path.
 export class ICloudRemindersProvider implements TasksProvider {
   constructor(
     private tokenRepo: ICloudTokenRepository,
@@ -40,97 +42,91 @@ export class ICloudRemindersProvider implements TasksProvider {
     return client;
   }
 
-  private async getVtodoCals(client: DAVClient): Promise<DAVCalendar[]> {
-    const all: DAVCalendar[] = await client.fetchCalendars();
-    return all.filter((c) => c.components?.includes('VTODO'));
-  }
-
-  private vtodoFilter() {
-    return {
-      'comp-filter': {
-        _attributes: { name: 'VCALENDAR' },
-        'comp-filter': { _attributes: { name: 'VTODO' } },
-      },
-    };
-  }
-
-  private async getReminderListHref(
+  private async getCalendarHref(
     client: DAVClient,
     userId: string,
-    name: string,
     isShoppingList: boolean,
   ): Promise<string> {
     const creds = await this.tokenRepo.get(userId);
-    const cachedHref = isShoppingList ? creds?.shoppingRemHref : creds?.reminderHref;
-    if (cachedHref) return cachedHref;
+    // Tasks are stored as VEVENT — reuse the same calendar as regular events
+    const eventHref = isShoppingList ? creds?.shoppingCalHref : creds?.calendarHref;
+    if (eventHref) return eventHref;
 
-    // Fall back to first available VTODO collection
-    const vtodoCals = await this.getVtodoCals(client);
-    if (vtodoCals.length === 0) {
-      throw new Error('No Reminders lists found in your iCloud account. Please create a list in the Reminders app on your iPhone or Mac first.');
+    // Fallback: first available VEVENT calendar
+    const calendars: DAVCalendar[] = await client.fetchCalendars();
+    const veventCals = calendars.filter((c) => (c.components ?? []).includes('VEVENT'));
+    if (veventCals.length === 0) {
+      throw new Error('No Apple Calendar found. Please create a calendar in the Calendar app on your iPhone or Mac.');
     }
-    const fallback = vtodoCals[0];
-    const href = fallback.url;
-    // Cache it so future calls are fast
-    if (isShoppingList) {
-      await this.tokenRepo.saveShoppingReminderHref(userId, href);
-    } else {
-      await this.tokenRepo.saveReminderHref(userId, href);
-    }
-    return href;
+    return veventCals[0].url;
   }
 
-  private parseVTODO(icsString: string, href: string, listName: string): ParsedTask | null {
-    if (!icsString.includes('BEGIN:VTODO')) return null;
-    const lines = icsString.replace(/\r\n/g, '\n').split('\n');
-    const uid = lines.find((l) => l.startsWith('UID:'))?.slice(4).trim() ?? href;
-    const summary = lines.find((l) => l.startsWith('SUMMARY:'))?.slice(8).trim() ?? '';
-    const notes = lines.find((l) => l.startsWith('DESCRIPTION:'))?.slice(12).trim();
-    const dueLine = lines.find((l) => l.startsWith('DUE'));
-    const status = (lines.find((l) => l.startsWith('STATUS:'))?.slice(7).trim() ?? 'NEEDS-ACTION') as ParsedTask['status'];
+  private buildVEVENT(uid: string, title: string, due: string, notes?: string, status = 'NEEDS-ACTION'): string {
+    // Use the due date as an all-day event date; if completed set a special category
+    const dateStr = due.replace(/-/g, '');
+    const nextDay = new Date(due);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDateStr = nextDay.toISOString().slice(0, 10).replace(/-/g, '');
 
-    let due: string | undefined;
-    if (dueLine) {
-      const dateStr = dueLine.replace(/^DUE[^:]*:/, '').trim();
-      if (dateStr.length >= 8) {
-        due = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;
-      }
-    }
-
-    return { id: uid, href, title: summary, notes, due, status, listName };
-  }
-
-  private buildVTODO(uid: string, title: string, notes?: string, due?: string, status = 'NEEDS-ACTION'): string {
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
       'PRODID:-//TravelAgent//EN',
-      'BEGIN:VTODO',
+      'BEGIN:VEVENT',
       `UID:${uid}`,
-      `SUMMARY:${title}`,
+      `SUMMARY:[Task] ${title}`,
+      `DTSTART;VALUE=DATE:${dateStr}`,
+      `DTEND;VALUE=DATE:${nextDateStr}`,
       notes ? `DESCRIPTION:${notes}` : '',
-      due ? `DUE;VALUE=DATE:${due.replace(/-/g, '')}` : '',
-      `STATUS:${status}`,
-      'END:VTODO',
+      `CATEGORIES:TASK${status === 'COMPLETED' ? ',COMPLETED' : ''}`,
+      status === 'COMPLETED' ? 'STATUS:COMPLETED' : 'STATUS:TENTATIVE',
+      'END:VEVENT',
       'END:VCALENDAR',
     ].filter(Boolean);
     return lines.join('\r\n');
   }
 
+  private parseTaskEvent(icsString: string, href: string): ParsedTask | null {
+    if (!icsString.includes('BEGIN:VEVENT')) return null;
+    const lines = icsString.replace(/\r\n/g, '\n').split('\n');
+
+    const summary = lines.find((l) => l.startsWith('SUMMARY:'))?.slice(8).trim() ?? '';
+    // Only handle events we created as tasks
+    if (!summary.startsWith('[Task] ')) return null;
+
+    const uid = lines.find((l) => l.startsWith('UID:'))?.slice(4).trim() ?? href;
+    const title = summary.slice(7); // strip "[Task] "
+    const notes = lines.find((l) => l.startsWith('DESCRIPTION:'))?.slice(12).trim();
+    const categories = lines.find((l) => l.startsWith('CATEGORIES:'))?.slice(11).trim() ?? '';
+    const statusLine = lines.find((l) => l.startsWith('STATUS:'))?.slice(7).trim();
+    const dtstart = lines.find((l) => l.startsWith('DTSTART'))?.replace(/^DTSTART[^:]*:/, '').trim() ?? '';
+
+    let due: string | undefined;
+    if (dtstart.length >= 8) {
+      due = `${dtstart.slice(0, 4)}-${dtstart.slice(4, 6)}-${dtstart.slice(6, 8)}`;
+    }
+
+    const isCompleted = categories.includes('COMPLETED') || statusLine === 'COMPLETED';
+    const status: ParsedTask['status'] = isCompleted ? 'COMPLETED' : 'NEEDS-ACTION';
+
+    return { id: uid, href, title, notes, due, status, listName: '' };
+  }
+
   async add(params: TasksAddParams): Promise<ToolResult> {
     const { userId, title, notes, due, tasklistName } = params;
+    if (!due) return { success: false, error: 'MISSING_DUE_DATE: Ask the user for a due date before calling this tool.' };
     try {
       const client = await this.getClient(userId);
       const prefs = await this.prefRepo.get(userId);
       const listName = tasklistName ?? prefs.taskListName;
       const isShopping = listName.toLowerCase() === prefs.shoppingTaskListName.toLowerCase();
-      const listHref = await this.getReminderListHref(client, userId, listName, isShopping);
+      const calHref = await this.getCalendarHref(client, userId, isShopping);
 
       const uid = randomUUID();
-      const icsData = this.buildVTODO(uid, title, notes, due);
+      const icsData = this.buildVEVENT(uid, title, due, notes);
 
       await client.createCalendarObject({
-        calendar: { url: listHref } as DAVCalendar,
+        calendar: { url: calHref } as DAVCalendar,
         filename: `${uid}.ics`,
         iCalString: icsData,
       });
@@ -143,7 +139,8 @@ export class ICloudRemindersProvider implements TasksProvider {
           title,
           due,
           list: listName,
-          message: `Task "${title}" added to Apple Reminders (${listName}).`,
+          viewUrl: 'https://www.icloud.com/calendar/',
+          message: `Task "${title}" added to Apple Calendar on ${due} — look for "[Task] ${title}" on that date.`,
         },
       };
     } catch (err) {
@@ -152,17 +149,17 @@ export class ICloudRemindersProvider implements TasksProvider {
   }
 
   async list(params: TasksListParams): Promise<ToolResult> {
-    const { userId, tasklistName, includeCompleted = false } = params;
+    const { userId, includeCompleted = false } = params;
     try {
       const client = await this.getClient(userId);
-      const vtodoCals = await this.getVtodoCals(client);
+      const calendars: DAVCalendar[] = await client.fetchCalendars();
+      const veventCals = calendars.filter((c) => (c.components ?? []).includes('VEVENT'));
       const tasks: ParsedTask[] = [];
 
-      for (const cal of vtodoCals) {
-        if (tasklistName && (String(cal.displayName ?? '')).toLowerCase() !== tasklistName.toLowerCase()) continue;
-        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal, filters: this.vtodoFilter() });
+      for (const cal of veventCals) {
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
         for (const obj of objects) {
-          const parsed = this.parseVTODO(obj.data as string, obj.url, String(cal.displayName ?? ''));
+          const parsed = this.parseTaskEvent(obj.data as string, obj.url);
           if (!parsed) continue;
           if (!includeCompleted && parsed.status === 'COMPLETED') continue;
           tasks.push(parsed);
@@ -179,7 +176,6 @@ export class ICloudRemindersProvider implements TasksProvider {
             notes: t.notes,
             due: t.due,
             status: t.status,
-            list: t.listName,
           })),
         },
       };
@@ -192,26 +188,21 @@ export class ICloudRemindersProvider implements TasksProvider {
     const { userId, taskId } = params;
     try {
       const client = await this.getClient(userId);
-      const vtodoCals = await this.getVtodoCals(client);
+      const calendars: DAVCalendar[] = await client.fetchCalendars();
+      const veventCals = calendars.filter((c) => (c.components ?? []).includes('VEVENT'));
 
-      for (const cal of vtodoCals) {
-        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal, filters: this.vtodoFilter() });
+      for (const cal of veventCals) {
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
         const target = objects.find((o) => {
-          const uid = (o.data as string)
-            .split('\n')
-            .find((l) => l.startsWith('UID:'))
-            ?.slice(4).trim();
+          const uid = (o.data as string).split('\n').find((l) => l.startsWith('UID:'))?.slice(4).trim();
           return uid === taskId || o.url.includes(taskId);
         });
-        if (target) {
-          const parsed = this.parseVTODO(target.data as string, target.url, String(cal.displayName ?? ''));
-          if (!parsed) continue;
-          const updatedICS = this.buildVTODO(parsed.id, parsed.title, parsed.notes, parsed.due, 'COMPLETED');
-          await client.updateCalendarObject({
-            calendarObject: { ...target, data: updatedICS },
-          });
-          return { success: true, data: { source: 'icloud', message: `Task "${parsed.title}" marked as completed.` } };
-        }
+        if (!target) continue;
+        const parsed = this.parseTaskEvent(target.data as string, target.url);
+        if (!parsed) continue;
+        const updatedICS = this.buildVEVENT(parsed.id, parsed.title, parsed.due ?? new Date().toISOString().slice(0, 10), parsed.notes, 'COMPLETED');
+        await client.updateCalendarObject({ calendarObject: { ...target, data: updatedICS } });
+        return { success: true, data: { source: 'icloud', message: `Task "${parsed.title}" marked as completed.` } };
       }
 
       return { success: false, error: `Task not found: ${taskId}` };
@@ -224,20 +215,18 @@ export class ICloudRemindersProvider implements TasksProvider {
     const { userId, taskId } = params;
     try {
       const client = await this.getClient(userId);
-      const vtodoCals = await this.getVtodoCals(client);
+      const calendars: DAVCalendar[] = await client.fetchCalendars();
+      const veventCals = calendars.filter((c) => (c.components ?? []).includes('VEVENT'));
 
-      for (const cal of vtodoCals) {
-        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal, filters: this.vtodoFilter() });
+      for (const cal of veventCals) {
+        const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({ calendar: cal });
         const target = objects.find((o) => {
-          const uid = (o.data as string)
-            .split('\n')
-            .find((l) => l.startsWith('UID:'))
-            ?.slice(4).trim();
+          const uid = (o.data as string).split('\n').find((l) => l.startsWith('UID:'))?.slice(4).trim();
           return uid === taskId || o.url.includes(taskId);
         });
         if (target) {
           await client.deleteCalendarObject({ calendarObject: target });
-          return { success: true, data: { source: 'icloud', message: `Task deleted from Apple Reminders.` } };
+          return { success: true, data: { source: 'icloud', message: `Task deleted from Apple Calendar.` } };
         }
       }
 

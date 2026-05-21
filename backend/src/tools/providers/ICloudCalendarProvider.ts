@@ -203,6 +203,7 @@ export class ICloudCalendarProvider implements CalendarProvider {
           time,
           calendar: calName,
           source: 'icloud',
+          viewUrl: 'https://www.icloud.com/calendar/',
           message: `Event "${title}" added to Apple Calendar (${calName}).`,
         },
       };
