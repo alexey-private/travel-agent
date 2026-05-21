@@ -68,6 +68,9 @@ export async function clearTestDb(): Promise<void> {
   await p.query('DELETE FROM conversations');
   await p.query('DELETE FROM users');
   await p.query('DELETE FROM knowledge_base');
+  await p.query('DELETE FROM google_tokens');
+  await p.query('DELETE FROM icloud_tokens');
+  await p.query('DELETE FROM user_service_preferences');
 }
 
 /**

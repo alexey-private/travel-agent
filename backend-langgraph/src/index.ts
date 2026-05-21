@@ -12,11 +12,18 @@ import { chatRoutes } from './routes/chat';
 import { memoryRoutes } from './routes/memory';
 import { conversationRoutes } from './routes/conversations';
 import { authRoutes } from './routes/auth';
+import { settingsRoutes } from './routes/settings';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
+import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
+import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
 import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
-import { CalendarProvider } from './tools/providers/CalendarProvider';
 import { GoogleTasksProvider } from './tools/providers/GoogleTasksProvider';
-import { TasksProvider } from './tools/providers/TasksProvider';
+import { MockCalendarProvider } from './tools/providers/MockCalendarProvider';
+import { MockTasksProvider } from './tools/providers/MockTasksProvider';
+import { ICloudCalendarProvider } from './tools/providers/ICloudCalendarProvider';
+import { ICloudRemindersProvider } from './tools/providers/ICloudRemindersProvider';
+import { UserAwareCalendarProvider } from './tools/providers/UserAwareCalendarProvider';
+import { UserAwareTasksProvider } from './tools/providers/UserAwareTasksProvider';
 
 let _reqCounter = 0;
 
@@ -48,15 +55,25 @@ async function bootstrap(): Promise<void> {
   const suggestionService = new SuggestionService();
 
   const tokenRepo = new GoogleTokenRepository(pool);
+  const icloudTokenRepo = new ICloudTokenRepository(pool, env.ENCRYPTION_KEY ?? 'default-dev-key-change-in-prod!!');
+  const prefRepo = new UserPreferencesRepository(pool);
+
   const googleConfig = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
     ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirectUri: env.GOOGLE_REDIRECT_URI }
     : undefined;
-  const calendarProvider: CalendarProvider | undefined = googleConfig
+
+  const googleCalendarProvider = googleConfig
     ? new GoogleCalendarProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
-    : undefined;
-  const tasksProvider: TasksProvider | undefined = googleConfig
+    : new MockCalendarProvider();
+  const googleTasksProvider = googleConfig
     ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
-    : undefined;
+    : new MockTasksProvider();
+
+  const icloudCalendarProvider = new ICloudCalendarProvider(icloudTokenRepo, prefRepo);
+  const icloudRemindersProvider = new ICloudRemindersProvider(icloudTokenRepo, prefRepo);
+
+  const calendarProvider = new UserAwareCalendarProvider(googleCalendarProvider, icloudCalendarProvider, prefRepo);
+  const tasksProvider = new UserAwareTasksProvider(googleTasksProvider, icloudRemindersProvider, prefRepo);
 
   await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider });
   await fastify.register(memoryRoutes);
@@ -70,6 +87,13 @@ async function bootstrap(): Promise<void> {
     });
     fastify.log.info('Google Calendar OAuth2 routes registered');
   }
+
+  await fastify.register(settingsRoutes, {
+    icloudTokenRepo,
+    prefRepo,
+    googleTokenRepo: tokenRepo,
+  });
+  fastify.log.info('Settings routes registered');
 
   fastify.get('/health', async () => ({ status: 'ok', engine: 'langgraph' }));
   await pool.query('SELECT 1');

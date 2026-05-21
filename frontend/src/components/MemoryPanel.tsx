@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Trash2, RefreshCw, Brain, Calendar, CheckCircle2, XCircle } from "lucide-react";
-import { fetchMemories, deleteMemory, fetchGoogleCalendarStatus, disconnectGoogleCalendar, type UserMemory } from "@/lib/api";
+import { Trash2, RefreshCw, Brain, Calendar, CheckCircle2, XCircle, Settings } from "lucide-react";
+import Link from "next/link";
+import { fetchMemories, deleteMemory, disconnectGoogleCalendar, type UserMemory } from "@/lib/api";
+import { getSettings, disconnectApple, type SettingsData } from "@/lib/settingsApi";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -20,8 +22,8 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
   const [memories, setMemories] = useState<UserMemory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [providerSettings, setProviderSettings] = useState<SettingsData | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,33 +43,50 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
     void load();
   }, [load, refreshTrigger]);
 
-  useEffect(() => {
-    fetchGoogleCalendarStatus(userId).then(setGoogleConnected);
+  const loadProviderSettings = useCallback(async () => {
+    try {
+      const s = await getSettings(userId);
+      setProviderSettings(s);
+    } catch {
+      // non-critical, don't block UI
+    }
   }, [userId]);
+
+  useEffect(() => {
+    void loadProviderSettings();
+  }, [loadProviderSettings]);
 
   // Handle ?google_auth=success|error redirect from OAuth callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("google_auth");
-    if (status === "success") {
-      setGoogleConnected(true);
+    if (status === "success" || status === "error") {
       window.history.replaceState({}, "", window.location.pathname);
-    } else if (status === "error") {
-      window.history.replaceState({}, "", window.location.pathname);
+      void loadProviderSettings();
     }
-  }, []);
+  }, [loadProviderSettings]);
 
   const handleGoogleConnect = () => {
     window.location.href = `${API_URL}/auth/google/start?userId=${encodeURIComponent(userId)}`;
   };
 
   const handleGoogleDisconnect = async () => {
-    setGoogleLoading(true);
+    setProviderLoading(true);
     try {
       await disconnectGoogleCalendar(userId);
-      setGoogleConnected(false);
+      await loadProviderSettings();
     } finally {
-      setGoogleLoading(false);
+      setProviderLoading(false);
+    }
+  };
+
+  const handleAppleDisconnect = async () => {
+    setProviderLoading(true);
+    try {
+      await disconnectApple(userId);
+      await loadProviderSettings();
+    } finally {
+      setProviderLoading(false);
     }
   };
 
@@ -135,36 +154,78 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
           </div>
         ))}
       </div>
-      {/* Google Calendar */}
+      {/* Active provider status */}
       <div className="border-t border-gray-200 p-3 bg-white">
-        <div className="flex items-center gap-2 mb-2">
-          <Calendar size={13} className="text-gray-500" />
-          <span className="text-xs font-semibold text-gray-600">Google Calendar</span>
-        </div>
-        {googleConnected === null ? (
+        {providerSettings === null ? (
           <p className="text-xs text-gray-400">Checking…</p>
-        ) : googleConnected ? (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-green-600">
-              <CheckCircle2 size={12} />
-              Connected
+        ) : providerSettings.calendarProvider === "apple" ? (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Calendar size={13} className="text-gray-500" />
+                <span className="text-xs font-semibold text-gray-600">Apple iCloud</span>
+              </div>
+              <Link href="/settings" className="text-gray-400 hover:text-gray-600">
+                <Settings size={12} />
+              </Link>
             </div>
-            <button
-              onClick={() => void handleGoogleDisconnect()}
-              disabled={googleLoading}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
-            >
-              Disconnect
-            </button>
-          </div>
+            {providerSettings.appleConnected ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-green-600">
+                  <CheckCircle2 size={12} /> Connected
+                </div>
+                <button
+                  onClick={() => void handleAppleDisconnect()}
+                  disabled={providerLoading}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/settings"
+                className="w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                <XCircle size={12} className="text-gray-400" />
+                Connect Apple iCloud
+              </Link>
+            )}
+          </>
         ) : (
-          <button
-            onClick={handleGoogleConnect}
-            className="w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
-          >
-            <XCircle size={12} className="text-gray-400" />
-            Connect Google Calendar
-          </button>
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Calendar size={13} className="text-gray-500" />
+                <span className="text-xs font-semibold text-gray-600">Google Calendar</span>
+              </div>
+              <Link href="/settings" className="text-gray-400 hover:text-gray-600">
+                <Settings size={12} />
+              </Link>
+            </div>
+            {providerSettings.googleConnected ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-green-600">
+                  <CheckCircle2 size={12} /> Connected
+                </div>
+                <button
+                  onClick={() => void handleGoogleDisconnect()}
+                  disabled={providerLoading}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleGoogleConnect}
+                className="w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                <XCircle size={12} className="text-gray-400" />
+                Connect Google Calendar
+              </button>
+            )}
+          </>
         )}
       </div>
     </aside>

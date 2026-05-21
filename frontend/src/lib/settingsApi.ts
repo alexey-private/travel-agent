@@ -1,0 +1,59 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+export interface UserPreferences {
+  calendarProvider: "google" | "apple";
+  calendarName: string;
+  shoppingCalendarName: string;
+  taskListName: string;
+  shoppingTaskListName: string;
+}
+
+export interface SettingsData extends UserPreferences {
+  googleConnected: boolean;
+  appleConnected: boolean;
+  appleId: string | null;
+}
+
+export async function getSettings(userId: string): Promise<SettingsData> {
+  const res = await fetch(`${API_URL}/api/settings?userId=${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`);
+  return res.json() as Promise<SettingsData>;
+}
+
+export async function saveSettings(userId: string, prefs: Partial<UserPreferences>): Promise<void> {
+  const res = await fetch(`${API_URL}/api/settings?userId=${encodeURIComponent(userId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(prefs),
+  });
+  if (!res.ok) throw new Error(`Failed to save settings: ${res.status}`);
+}
+
+export async function connectApple(userId: string, appleId: string, appPassword: string): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/apple/connect?userId=${encodeURIComponent(userId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ appleId, appPassword }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `Failed to connect Apple iCloud: ${res.status}`);
+  }
+}
+
+export async function disconnectApple(userId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/auth/apple/disconnect?userId=${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Failed to disconnect Apple iCloud: ${res.status}`);
+}
+
+export async function getAppleStatus(userId: string): Promise<{ connected: boolean; appleId: string | null }> {
+  try {
+    const res = await fetch(`${API_URL}/auth/apple/status?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) return { connected: false, appleId: null };
+    return res.json() as Promise<{ connected: boolean; appleId: string | null }>;
+  } catch {
+    return { connected: false, appleId: null };
+  }
+}

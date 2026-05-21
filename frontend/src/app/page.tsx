@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plane } from "lucide-react";
+import Link from "next/link";
+import { Plane, Settings } from "lucide-react";
 import ChatWindow from "@/components/ChatWindow";
 import MemoryPanel from "@/components/MemoryPanel";
 import ConversationList from "@/components/ConversationList";
@@ -75,7 +76,12 @@ export default function Home() {
           <span className="font-semibold text-gray-800">AI Agent</span>
         </div>
         <AgentSelector value={agentType} onChange={handleAgentChange} />
-        <span className="text-xs text-gray-400 font-mono">{userId.slice(0, 8)}…</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-400 font-mono">{userId.slice(0, 8)}…</span>
+          <Link href="/settings" title="Settings" className="text-gray-400 hover:text-gray-700 transition-colors">
+            <Settings size={18} />
+          </Link>
+        </div>
       </header>
 
       {/* ── Body ───────────────────────────────────────────────── */}
