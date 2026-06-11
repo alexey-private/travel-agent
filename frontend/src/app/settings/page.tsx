@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -19,7 +20,8 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const searchParams = useSearchParams();
   const [userId, setUserId] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
@@ -45,7 +47,17 @@ export default function SettingsPage() {
         if (s.appleId) setAppleId(s.appleId);
       })
       .catch(console.error);
-  }, []);
+
+    const googleAuth = searchParams.get("google_auth");
+    if (googleAuth === "success") {
+      setSaveMsg("Google Calendar connected successfully.");
+      window.history.replaceState({}, "", "/settings");
+    } else if (googleAuth === "error") {
+      const reason = searchParams.get("reason");
+      setSaveMsg(`Google connection failed: ${reason ?? "unknown error"}`);
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, [searchParams]);
 
   const handleSelectProvider = useCallback((provider: "google" | "apple") => {
     if (!settings) return;
@@ -338,7 +350,7 @@ export default function SettingsPage() {
             Save settings
           </button>
           {saveMsg && (
-            <span className={`text-sm ${saveMsg.startsWith("Failed") ? "text-red-600" : "text-green-600"}`}>
+            <span className={`text-sm ${saveMsg.startsWith("Failed") || saveMsg.startsWith("Google connection failed") ? "text-red-600" : "text-green-600"}`}>
               {saveMsg}
             </span>
           )}
@@ -346,5 +358,13 @@ export default function SettingsPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-gray-400" size={24} /></div>}>
+      <SettingsContent />
+    </Suspense>
   );
 }

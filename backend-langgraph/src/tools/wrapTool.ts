@@ -57,7 +57,9 @@ export function wrapTool(baseTool: BaseTool): DynamicStructuredTool {
     func: async (input: Record<string, unknown>) => {
       const result = await baseTool.execute(input);
       if (!result.success) {
-        throw new Error(result.error ?? 'Tool execution failed');
+        // Return the error as a tool result string so the model sees it and
+        // can explain the problem or ask the user for the missing information.
+        return `ERROR: ${result.error ?? 'Tool execution failed'}`;
       }
       return typeof result.data === 'string'
         ? result.data

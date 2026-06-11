@@ -51,7 +51,7 @@ export async function authRoutes(
 
       if (error) {
         return reply.redirect(
-          `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? 'http://localhost:3000'}?google_auth=error&reason=${encodeURIComponent(error)}`,
+          `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? 'http://localhost:3000'}/settings?google_auth=error&reason=${encodeURIComponent(error)}`,
         );
       }
 
@@ -73,7 +73,7 @@ export async function authRoutes(
       });
 
       return reply.redirect(
-        `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? 'http://localhost:3000'}?google_auth=success`,
+        `${process.env.NEXT_PUBLIC_FRONTEND_URL ?? 'http://localhost:3000'}/settings?google_auth=success`,
       );
     },
   );

@@ -69,17 +69,39 @@ export class TasksTool extends BaseTool {
     };
   }
 
+  private normalizeDue(raw: string): string | null {
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    // DD/MM or DD/MM/YYYY or DD/MM/YY
+    const dmMatch = raw.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+    if (dmMatch) {
+      const day = dmMatch[1].padStart(2, '0');
+      const month = dmMatch[2].padStart(2, '0');
+      let year = dmMatch[3];
+      if (!year) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const candidate = new Date(`${y}-${month}-${day}`);
+        year = String(candidate < now ? y + 1 : y);
+      } else if (year.length === 2) {
+        year = `20${year}`;
+      }
+      return `${year}-${month}-${day}`;
+    }
+    // Try native parse as fallback
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    return null;
+  }
+
   async execute(input: unknown): Promise<ToolResult> {
     const raw = input as TasksInput;
     const { userId, title, notes, taskId, tasklistName, includeCompleted } = raw;
     const action = raw.action?.toLowerCase() as TaskAction | undefined;
 
-    const due = raw.due;
-    if (due) {
-      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRe.test(due) || isNaN(Date.parse(due))) {
-        return { success: false, error: `Invalid due date "${due}". Use YYYY-MM-DD format.` };
-      }
+    const due = raw.due ? (this.normalizeDue(raw.due) ?? undefined) : undefined;
+    if (raw.due && !due) {
+      return { success: false, error: `Invalid due date "${raw.due}". Use YYYY-MM-DD format (e.g. 2026-06-20).` };
     }
 
     switch (action) {
@@ -104,12 +126,6 @@ export class TasksTool extends BaseTool {
 
       case 'update': {
         if (!taskId) return { success: false, error: 'taskId is required for update action' };
-        if (due) {
-          const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-          if (!dateRe.test(due) || isNaN(Date.parse(due))) {
-            return { success: false, error: `Invalid due date "${due}". Use YYYY-MM-DD format.` };
-          }
-        }
         return this.provider.update({ userId, taskId, title, notes, due, tasklistName });
       }
 
