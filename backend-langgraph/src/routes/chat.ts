@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { HumanMessage, ToolMessage } from '@langchain/core/messages';
+import { HumanMessage, ToolMessage, MessageContentComplex } from '@langchain/core/messages';
 import { PDFParse } from 'pdf-parse';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
@@ -85,7 +85,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         prefRepo.get(internalUserId),
       ]);
 
-      const requestId = request.id as string;
+      const requestId = request.id;
       request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
 
       // P0-2: persist user message before stream so history survives mid-stream crashes
@@ -114,8 +114,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const humanMsg = await (async () => {
         if (!attachments || attachments.length === 0) return new HumanMessage(userContent);
         // Build multimodal content: text first, then binary attachments
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const content: any[] = [{ type: 'text', text: userContent }];
+        const content: MessageContentComplex[] = [{ type: 'text', text: userContent }];
         for (const att of attachments) {
           if (att.mimeType.startsWith('image/')) {
             content.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });
@@ -161,8 +160,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       };
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for await (const event of graph.streamEvents({ messages: initialMessages, userId: internalUserId, sessionId, memories, taskListName, ragContext } as any, { version: 'v2', signal: ac.signal })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, userId: internalUserId, sessionId, conversationId, agentType, memories, taskListName, ragContext }, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
             const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string
@@ -182,26 +180,25 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
           if (event.event === 'on_chat_model_end') {
             // Capture tool_calls emitted by the LLM for LM-message history reconstruction.
             // Uses duck-typing (not instanceof) because streaming returns AIMessageChunk.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const output = event.data?.output as any;
-            const toolCalls: unknown[] = Array.isArray(output?.tool_calls) ? output.tool_calls : [];
+            type ToolCallShape = { id?: string; name: string; args: Record<string, unknown> };
+            const output = event.data?.output as { tool_calls?: ToolCallShape[] } | null | undefined;
+            const toolCalls = Array.isArray(output?.tool_calls) ? output.tool_calls : [];
             if (toolCalls.length > 0) {
               flushLMRound(); // flush previous round if any (multi-round ReAct)
-              currentToolCalls = (toolCalls as Array<{ id?: string; name: string; args: unknown }>)
-                .map(tc => ({ id: tc.id ?? '', name: tc.name, args: tc.args }));
+              currentToolCalls = toolCalls.map(tc => ({ id: tc.id ?? '', name: tc.name, args: tc.args }));
             } else {
               flushLMRound(); // flush last round before the final text response
             }
           }
 
           if (event.event === 'on_tool_start') {
-            const ev: AgentEvent = { type: 'tool_start', tool: event.name as string, input: event.data?.input as unknown };
+            const ev: AgentEvent = { type: 'tool_start', tool: event.name, input: event.data?.input as unknown };
             sse(ev);
             agentSteps.push(ev);
           }
 
           if (event.event === 'on_tool_end') {
-            const toolName = event.name as string;
+            const toolName = event.name;
             const outputRaw = event.data?.output;
             let output: unknown = outputRaw;
             let error: string | undefined;

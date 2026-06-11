@@ -1,4 +1,4 @@
-import { SystemMessage } from '@langchain/core/messages';
+import { SystemMessage, MessageContentComplex } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { AgentStateType } from '../state';
 import { createModel } from '../../llm/createModel';
@@ -14,21 +14,19 @@ import { createModel } from '../../llm/createModel';
  * The model is created once in the closure (per graph build / per singleton
  * init) with tools bound. streaming: true ensures on_chat_model_stream events
  * are emitted by streamEvents().
- *
- * bindTools() returns a Runnable with looser TS types — cast to avoid TS2722.
  */
 export function createReasonNode(
   buildSystemPrompt: (state: AgentStateType) => string,
   tools: DynamicStructuredTool[],
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const model = (createModel('full', { streaming: true }) as any).bindTools(tools);
+  // bindTools is optional on BaseChatModel (not all providers support it), but both
+  // ChatAnthropic and ChatOpenAI do. The ! non-null assertion is safe here.
+  const model = createModel('full', { streaming: true }).bindTools!(tools);
 
   return async (state: AgentStateType) => {
-    // cache_control marks the system prompt for Anthropic prompt caching (~5 min TTL).
-    // The field is not in LangChain core types but is forwarded to the Anthropic API.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sysContent: any = [{ type: 'text', text: buildSystemPrompt(state), cache_control: { type: 'ephemeral' } }];
+    // cache_control is an Anthropic extension forwarded as-is; fits the open Record<string,any>
+    // arm of MessageContentComplex so no cast is needed.
+    const sysContent: MessageContentComplex[] = [{ type: 'text', text: buildSystemPrompt(state), cache_control: { type: 'ephemeral' } }];
     const response = await model.invoke([
       new SystemMessage({ content: sysContent }),
       ...state.messages,
