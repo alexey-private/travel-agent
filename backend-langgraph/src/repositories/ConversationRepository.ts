@@ -85,6 +85,41 @@ export class ConversationRepository extends BaseRepository {
     );
   }
 
+  /**
+   * Full-text search across all messages for a user.
+   * Returns up to `limit` matching excerpts grouped by conversation.
+   */
+  async searchConversations(
+    userId: string,
+    query: string,
+    agentType: 'travel' | 'shopping' = 'travel',
+    limit = 5,
+  ): Promise<Array<{ conversationId: string; date: string; role: string; excerpt: string }>> {
+    // Split query into individual words and match any of them (OR logic)
+    const words = query.trim().split(/\s+/).filter(w => w.length > 2);
+    if (!words.length) return [];
+
+    const conditions = words.map((_, i) => `m.content ILIKE $${i + 3}`).join(' OR ');
+    const params: unknown[] = [userId, agentType, ...words.map(w => `%${w}%`), limit];
+
+    return this.query<{ conversationId: string; date: string; role: string; excerpt: string }>(
+      `SELECT
+         m.conversation_id AS "conversationId",
+         to_char(m.created_at, 'YYYY-MM-DD') AS date,
+         m.role,
+         left(m.content, 400) AS excerpt
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.user_id = $1
+         AND c.agent_type = $2
+         AND (${conditions})
+         AND m.content != ''
+       ORDER BY m.created_at DESC
+       LIMIT $${words.length + 3}`,
+      params,
+    );
+  }
+
   async deleteConversation(conversationId: string): Promise<void> {
     await this.execute('DELETE FROM conversations WHERE id = $1', [conversationId]);
   }

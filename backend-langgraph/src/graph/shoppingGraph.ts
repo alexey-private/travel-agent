@@ -13,6 +13,8 @@ import { PriceAlertTool } from '../tools/shopping/PriceAlertTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
 import { TasksTool } from '../tools/TasksTool';
+import { SearchConversationsTool } from '../tools/SearchConversationsTool';
+import { ConversationService } from '../services/ConversationService';
 import { RAGService } from '../services/RAGService';
 
 type CompiledShoppingGraph = ReturnType<typeof buildAgentGraph>;
@@ -29,6 +31,7 @@ export function initShoppingGraph(
   ragService: RAGService,
   calendarProvider: CalendarProvider,
   tasksProvider: TasksProvider,
+  conversationService: ConversationService,
 ): void {
   const tools = [
     new ProductSearchTool(ragService),
@@ -41,6 +44,7 @@ export function initShoppingGraph(
     new PriceAlertTool(),
     new CalendarTool(calendarProvider),
     new TasksTool(tasksProvider),
+    new SearchConversationsTool(conversationService),
   ];
 
   _shoppingGraph = buildAgentGraph(

@@ -85,8 +85,8 @@ async function bootstrap(): Promise<void> {
   const tasksProvider = new UserAwareTasksProvider(googleTasksProvider, icloudRemindersProvider, prefRepo);
 
   // Compile both agent graphs once — reused across all requests.
-  initTravelGraph(calendarProvider, tasksProvider);
-  initShoppingGraph(ragService, calendarProvider, tasksProvider);
+  initTravelGraph(calendarProvider, tasksProvider, conversationService);
+  initShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService);
   fastify.log.info('Agent graphs initialised');
 
   await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, prefRepo });

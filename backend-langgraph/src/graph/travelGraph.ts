@@ -15,6 +15,8 @@ import { SpaSearchTool } from '../tools/travel/SpaSearchTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
 import { TasksTool } from '../tools/TasksTool';
+import { SearchConversationsTool } from '../tools/SearchConversationsTool';
+import { ConversationService } from '../services/ConversationService';
 
 type CompiledTravelGraph = ReturnType<typeof buildAgentGraph>;
 let _travelGraph: CompiledTravelGraph | null = null;
@@ -29,6 +31,7 @@ let _travelGraph: CompiledTravelGraph | null = null;
 export function initTravelGraph(
   calendarProvider: CalendarProvider,
   tasksProvider: TasksProvider,
+  conversationService: ConversationService,
 ): void {
   const tools = [
     new WebSearchTool(),
@@ -43,6 +46,7 @@ export function initTravelGraph(
     new SpaSearchTool(),
     new CalendarTool(calendarProvider),
     new TasksTool(tasksProvider),
+    new SearchConversationsTool(conversationService),
   ];
 
   _travelGraph = buildAgentGraph(

@@ -41,6 +41,15 @@ export class ConversationService {
     return this.repo.listConversations(userId, agentType);
   }
 
+  async searchConversations(
+    userId: string,
+    query: string,
+    agentType: 'travel' | 'shopping' = 'travel',
+    limit = 5,
+  ): Promise<Array<{ conversationId: string; date: string; role: string; excerpt: string }>> {
+    return this.repo.searchConversations(userId, query, agentType, limit);
+  }
+
   async deleteConversation(conversationId: string): Promise<void> {
     return this.repo.deleteConversation(conversationId);
   }

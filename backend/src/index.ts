@@ -47,6 +47,7 @@ import { ProductReviewsTool } from './tools/shopping/ProductReviewsTool';
 import { DealSearchTool } from './tools/shopping/DealSearchTool';
 import { WishlistTool } from './tools/shopping/WishlistTool';
 import { PriceAlertTool } from './tools/shopping/PriceAlertTool';
+import { SearchConversationsTool } from './tools/SearchConversationsTool';
 
 let _reqCounter = 0;
 
@@ -125,6 +126,7 @@ async function bootstrap(): Promise<void> {
   travelToolRegistry.register(new SpaSearchTool());
   travelToolRegistry.register(calendarTool);
   travelToolRegistry.register(travelTasksTool);
+  travelToolRegistry.register(new SearchConversationsTool(conversationService));
 
   const shoppingToolRegistry = new ToolRegistry();
   shoppingToolRegistry.register(new ProductSearchTool(ragService));
@@ -137,6 +139,7 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(new PriceAlertTool());
   shoppingToolRegistry.register(calendarTool);
   shoppingToolRegistry.register(shoppingTasksTool);
+  shoppingToolRegistry.register(new SearchConversationsTool(conversationService));
 
   // Routes
   await fastify.register(chatRoutes, {
