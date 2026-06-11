@@ -46,7 +46,7 @@ const fastify = Fastify({
 
 async function bootstrap(): Promise<void> {
   await fastify.register(cors, {
-    origin: true,
+    origin: env.ALLOWED_ORIGIN ?? true,
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
   });
 

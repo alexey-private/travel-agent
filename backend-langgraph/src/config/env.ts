@@ -43,6 +43,9 @@ const envSchema = z.object({
   // Server
   PORT: z.coerce.number().int().positive().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  // Production CORS allowlist — set to the frontend URL (e.g. https://app.example.com).
+  // Omit in development to allow any origin.
+  ALLOWED_ORIGIN: z.string().optional(),
 });
 
 /**

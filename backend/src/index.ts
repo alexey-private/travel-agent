@@ -63,9 +63,8 @@ const fastify = Fastify({
 });
 
 async function bootstrap(): Promise<void> {
-  // CORS — allow the Next.js dev server and any configured frontend origin
   await fastify.register(cors, {
-    origin: true,
+    origin: env.ALLOWED_ORIGIN ?? true,
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
   });
 

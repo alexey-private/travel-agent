@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { env } from '../config/env';
 import { LLMClient } from '../llm/LLMClient';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
@@ -102,7 +103,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+        'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN ?? request.headers.origin ?? '*',
         'Access-Control-Allow-Credentials': 'true',
         'X-Request-Id': requestId,
       });
