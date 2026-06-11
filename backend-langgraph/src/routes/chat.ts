@@ -98,7 +98,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
 
       // P0-2: persist user message before stream so history survives mid-stream crashes
-      await conversationService.saveMessage(conversationId, 'user', message);
+      await conversationService.saveMessage(conversationId, 'user', message, undefined, undefined, internalUserId, agentType);
 
       reply.hijack();
       const raw = reply.raw;
@@ -272,7 +272,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       await Promise.allSettled([
         (assistantText || lmRounds.length > 0)
-          ? conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds)
+          ? conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds, internalUserId, agentType)
           : Promise.resolve(),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);

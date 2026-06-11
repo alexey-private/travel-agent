@@ -83,33 +83,40 @@ export class ConversationRepository extends BaseRepository {
     );
   }
 
+  async saveEmbedding(
+    messageId: string,
+    userId: string,
+    agentType: string,
+    role: string,
+    embedding: number[],
+  ): Promise<void> {
+    await this.execute(
+      `INSERT INTO conversation_embeddings (message_id, user_id, agent_type, role, embedding)
+       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (message_id) DO NOTHING`,
+      [messageId, userId, agentType, role, JSON.stringify(embedding)],
+    );
+  }
+
   async searchConversations(
     userId: string,
-    query: string,
+    queryEmbedding: number[],
     agentType: 'travel' | 'shopping' = 'travel',
     limit = 5,
   ): Promise<Array<{ conversationId: string; date: string; role: string; excerpt: string }>> {
-    const words = query.trim().split(/\s+/).filter(w => w.length > 2);
-    if (!words.length) return [];
-
-    const conditions = words.map((_, i) => `m.content ILIKE $${i + 3}`).join(' OR ');
-    const params: unknown[] = [userId, agentType, ...words.map(w => `%${w}%`), limit];
-
     return this.query<{ conversationId: string; date: string; role: string; excerpt: string }>(
       `SELECT
          m.conversation_id AS "conversationId",
          to_char(m.created_at, 'YYYY-MM-DD') AS date,
-         m.role,
+         ce.role,
          left(m.content, 400) AS excerpt
-       FROM messages m
-       JOIN conversations c ON c.id = m.conversation_id
-       WHERE c.user_id = $1
-         AND c.agent_type = $2
-         AND (${conditions})
+       FROM conversation_embeddings ce
+       JOIN messages m ON m.id = ce.message_id
+       WHERE ce.user_id = $1
+         AND ce.agent_type = $2
          AND m.content != ''
-       ORDER BY m.created_at DESC
-       LIMIT $${words.length + 3}`,
-      params,
+       ORDER BY ce.embedding <=> $3
+       LIMIT $4`,
+      [userId, agentType, JSON.stringify(queryEmbedding), limit],
     );
   }
 
@@ -129,10 +136,11 @@ export class ConversationRepository extends BaseRepository {
     role: 'user' | 'assistant',
     content: string,
     agentSteps?: unknown,
-  ): Promise<void> {
-    await this.execute(
-      'INSERT INTO messages (conversation_id, role, content, agent_steps) VALUES ($1, $2, $3, $4)',
+  ): Promise<string> {
+    const row = await this.queryOne<{ id: string }>(
+      'INSERT INTO messages (conversation_id, role, content, agent_steps) VALUES ($1, $2, $3, $4) RETURNING id',
       [conversationId, role, content, agentSteps ? JSON.stringify(agentSteps) : null],
     );
+    return row!.id;
   }
 }

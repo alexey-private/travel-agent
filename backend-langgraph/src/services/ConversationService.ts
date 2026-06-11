@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { ConversationRepository } from '../repositories/ConversationRepository';
+import { EmbeddingService } from './EmbeddingService';
 import { LMRound } from '../types/lm';
 
 /**
@@ -8,9 +9,11 @@ import { LMRound } from '../types/lm';
  */
 export class ConversationService {
   private repo: ConversationRepository;
+  private embeddingService: EmbeddingService;
 
-  constructor(pool: Pool) {
+  constructor(pool: Pool, embeddingService?: EmbeddingService) {
     this.repo = new ConversationRepository(pool);
+    this.embeddingService = embeddingService ?? new EmbeddingService();
   }
 
   /**
@@ -47,7 +50,8 @@ export class ConversationService {
     agentType: 'travel' | 'shopping' = 'travel',
     limit = 5,
   ): Promise<Array<{ conversationId: string; date: string; role: string; excerpt: string }>> {
-    return this.repo.searchConversations(userId, query, agentType, limit);
+    const queryEmbedding = await this.embeddingService.embed(query);
+    return this.repo.searchConversations(userId, queryEmbedding, agentType, limit);
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
@@ -67,7 +71,15 @@ export class ConversationService {
     content: string,
     agentSteps?: unknown,
     lmMessages?: LMRound[],
+    userId?: string,
+    agentType?: string,
   ): Promise<void> {
-    return this.repo.saveMessage(conversationId, role, content, agentSteps, lmMessages);
+    const messageId = await this.repo.saveMessage(conversationId, role, content, agentSteps, lmMessages);
+    // Embed non-empty messages asynchronously — never block the response
+    if (content && userId && agentType) {
+      this.embeddingService.embed(content).then(embedding =>
+        this.repo.saveEmbedding(messageId, userId, agentType, role, embedding)
+      ).catch(() => { /* embedding failure is non-fatal */ });
+    }
   }
 }

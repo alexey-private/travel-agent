@@ -58,7 +58,7 @@ async function bootstrap(): Promise<void> {
   const pool = getPool();
   const embeddingService = new EmbeddingService();
   const userService = new UserService(pool);
-  const conversationService = new ConversationService(pool);
+  const conversationService = new ConversationService(pool, embeddingService);
   const memoryService = new MemoryService(pool);
   const ragService = new RAGService(pool, embeddingService);
   const suggestionService = new SuggestionService();

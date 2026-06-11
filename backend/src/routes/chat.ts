@@ -187,9 +187,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       // Persist conversation and memories before closing the stream so that
       // the client's refresh (triggered by 'done') sees the saved data immediately.
-      await conversationService.saveMessage(conversationId, 'user', message);
+      await conversationService.saveMessage(conversationId, 'user', message, undefined, undefined, internalUserId, agentType);
       await Promise.allSettled([
-        conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
+        conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, undefined, internalUserId, agentType),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');

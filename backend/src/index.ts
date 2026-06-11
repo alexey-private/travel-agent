@@ -81,7 +81,7 @@ async function bootstrap(): Promise<void> {
   const pool = getPool();
   const ragService = new RAGService(pool, llmClient, embeddingService);
   const userService = new UserService(pool);
-  const conversationService = new ConversationService(pool);
+  const conversationService = new ConversationService(pool, embeddingService);
   const memoryService = new MemoryService(pool, llmClient);
   const suggestionService = new SuggestionService(llmClient);
 
