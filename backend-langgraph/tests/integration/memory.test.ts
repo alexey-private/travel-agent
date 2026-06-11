@@ -54,28 +54,33 @@ async function seedMemory(userId: string, key: string, value: string): Promise<v
   );
 }
 
+// globalSetup probes the DB once; skip all integration tests when DB is unavailable.
+const itDb = process.env.TEST_DB_AVAILABLE === 'true' ? it : it.skip;
+
 describe('Memory routes (LangGraph integration)', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
+    if (process.env.TEST_DB_AVAILABLE !== 'true') return;
     await setupTestDb();
     app = await buildApp();
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
     await closePool();
-    await teardownTestDb();
+    if (process.env.TEST_DB_AVAILABLE === 'true') await teardownTestDb();
   });
 
   beforeEach(async () => {
+    if (process.env.TEST_DB_AVAILABLE !== 'true') return;
     await clearTestDb();
   });
 
   // ── GET /api/memory/:userId ──────────────────────────────────────────────
 
   describe('GET /api/memory/:userId', () => {
-    it('returns an empty memories array for a brand-new session', async () => {
+    itDb('returns an empty memories array for a brand-new session', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/memory/brand-new-session',
@@ -86,7 +91,7 @@ describe('Memory routes (LangGraph integration)', () => {
       expect(body.memories).toEqual([]);
     });
 
-    it('returns all stored memories for an existing user', async () => {
+    itDb('returns all stored memories for an existing user', async () => {
       const userId = await seedUser('session-with-memories');
       await seedMemory(userId, 'home_city', 'San Francisco');
       await seedMemory(userId, 'diet', 'vegetarian');
@@ -103,7 +108,7 @@ describe('Memory routes (LangGraph integration)', () => {
       expect(body.memories).toContainEqual({ key: 'diet', value: 'vegetarian' });
     });
 
-    it('does not return memories belonging to a different user', async () => {
+    itDb('does not return memories belonging to a different user', async () => {
       const userId1 = await seedUser('session-user1');
       const userId2 = await seedUser('session-user2');
       await seedMemory(userId1, 'airline', 'United');
@@ -123,7 +128,7 @@ describe('Memory routes (LangGraph integration)', () => {
   // ── DELETE /api/memory/:userId/:key ─────────────────────────────────────
 
   describe('DELETE /api/memory/:userId/:key', () => {
-    it('removes the specified memory key and returns 204', async () => {
+    itDb('removes the specified memory key and returns 204', async () => {
       const userId = await seedUser('session-delete-test');
       await seedMemory(userId, 'home_city', 'New York');
       await seedMemory(userId, 'diet', 'vegan');
@@ -145,7 +150,7 @@ describe('Memory routes (LangGraph integration)', () => {
       expect(result.rows[0].key).toBe('diet');
     });
 
-    it('returns 204 even when the key does not exist (idempotent delete)', async () => {
+    itDb('returns 204 even when the key does not exist (idempotent delete)', async () => {
       await seedUser('session-idempotent');
 
       const response = await app.inject({
@@ -156,7 +161,7 @@ describe('Memory routes (LangGraph integration)', () => {
       expect(response.statusCode).toBe(204);
     });
 
-    it('only deletes the specified key, leaving other memories intact', async () => {
+    itDb('only deletes the specified key, leaving other memories intact', async () => {
       const userId = await seedUser('session-partial-delete');
       await seedMemory(userId, 'budget', 'mid-range');
       await seedMemory(userId, 'hotel', 'boutique');

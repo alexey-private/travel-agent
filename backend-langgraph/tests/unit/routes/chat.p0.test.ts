@@ -1,0 +1,312 @@
+/**
+ * Unit tests for chat route — P0 correctness guarantees.
+ *
+ * All external dependencies (DB services, LLM models, graph) are fully mocked
+ * so these tests run without a database or network.
+ *
+ * Covers:
+ *   P0-2  User message is saved BEFORE the stream starts
+ *   P0-3  AbortError (client disconnect) does NOT emit an SSE error event
+ *   P0-4  SSE stream is always closed (raw.end) even when post-stream DB writes fail
+ */
+
+import Fastify, { FastifyInstance } from 'fastify';
+import { chatRoutes } from '@/routes/chat';
+import type { UserService } from '@/services/UserService';
+import type { ConversationService } from '@/services/ConversationService';
+import type { MemoryService } from '@/services/MemoryService';
+import type { RAGService } from '@/services/RAGService';
+import type { SuggestionService } from '@/services/SuggestionService';
+import type { UserPreferencesRepository } from '@/repositories/UserPreferencesRepository';
+
+// ── Global mocks ──────────────────────────────────────────────────────────────
+
+jest.mock('@/config/env', () => ({
+  env: {
+    LLM_PROVIDER: 'anthropic',
+    ANTHROPIC_API_KEY: 'test-key',
+    OPENAI_API_KEY: 'test-openai-key',
+    TAVILY_API_KEY: 'test-tavily',
+    OPENWEATHER_API_KEY: 'test-weather',
+    PORT: 3000,
+    NODE_ENV: 'test',
+    REASONING_MODEL: 'claude-sonnet-4-6',
+    FAST_MODEL: 'claude-haiku-4-5-20251001',
+  },
+}));
+
+jest.mock('@langchain/anthropic', () => ({ ChatAnthropic: jest.fn() }));
+jest.mock('@langchain/openai', () => ({ ChatOpenAI: jest.fn() }));
+
+const mockTravelStreamEvents = jest.fn();
+const mockShoppingStreamEvents = jest.fn();
+
+jest.mock('@/graph/travelGraph', () => ({
+  initTravelGraph: jest.fn(),
+  getTravelGraph: jest.fn(() => ({ streamEvents: mockTravelStreamEvents })),
+}));
+jest.mock('@/graph/shoppingGraph', () => ({
+  initShoppingGraph: jest.fn(),
+  getShoppingGraph: jest.fn(() => ({ streamEvents: mockShoppingStreamEvents })),
+}));
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function* emitText(text: string) {
+  yield { event: 'on_chat_model_stream', name: 'ChatAnthropic', data: { chunk: { content: text } } };
+}
+
+function parseSse(body: string): Array<Record<string, unknown>> {
+  return body
+    .split('\n')
+    .filter((l) => l.startsWith('data: '))
+    .map((l) => JSON.parse(l.slice('data: '.length)) as Record<string, unknown>);
+}
+
+interface ServiceOverrides {
+  saveMessage?: jest.Mock;
+  streamEvents?: jest.Mock;
+}
+
+async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstance> {
+  const saveMessage = overrides.saveMessage ?? jest.fn().mockResolvedValue(undefined);
+  const streamEvents = overrides.streamEvents ?? jest.fn().mockImplementation(() => emitText('ok'));
+
+  mockTravelStreamEvents.mockImplementation(streamEvents);
+  mockShoppingStreamEvents.mockImplementation(streamEvents);
+
+  const app = Fastify({ logger: false });
+
+  const userService = {
+    findOrCreateUser: jest.fn().mockResolvedValue('internal-user-uuid'),
+  } as unknown as UserService;
+
+  const conversationService = {
+    findOrCreateConversation: jest.fn().mockResolvedValue('conv-uuid'),
+    getHistory: jest.fn().mockResolvedValue([]),
+    saveMessage,
+  } as unknown as ConversationService;
+
+  const memoryService = {
+    getMemories: jest.fn().mockResolvedValue([]),
+    extractAndSaveMemories: jest.fn().mockResolvedValue(undefined),
+  } as unknown as MemoryService;
+
+  const ragService = {
+    buildRagContext: jest.fn().mockResolvedValue(null),
+  } as unknown as RAGService;
+
+  const suggestionService = {
+    getSuggestions: jest.fn().mockResolvedValue([]),
+  } as unknown as SuggestionService;
+
+  const prefRepo = {
+    get: jest.fn().mockResolvedValue({ taskListName: 'Travel Plans', shoppingTaskListName: 'Shopping' }),
+  } as unknown as UserPreferencesRepository;
+
+  await app.register(chatRoutes, {
+    userService,
+    conversationService,
+    memoryService,
+    ragService,
+    suggestionService,
+    prefRepo,
+  });
+
+  return app;
+}
+
+// ── Suite ─────────────────────────────────────────────────────────────────────
+
+describe('POST /api/chat — P0 correctness', () => {
+  afterEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  // ── P0-2: save user message before stream ─────────────────────────────────
+
+  describe('P0-2: user message saved before stream starts', () => {
+    it('saveMessage(user) is called before streamEvents is invoked', async () => {
+      const callOrder: string[] = [];
+
+      const saveMessage = jest.fn().mockImplementation(async (_convId, role) => {
+        callOrder.push(`save:${role}`);
+      });
+
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        callOrder.push('stream:start');
+        yield { event: 'on_chat_model_stream', data: { chunk: { content: 'hi' } } };
+      });
+
+      const app = await buildApp({ saveMessage, streamEvents });
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Plan a trip' },
+      });
+
+      await app.close();
+
+      const userSaveIndex = callOrder.indexOf('save:user');
+      const streamStartIndex = callOrder.indexOf('stream:start');
+
+      expect(userSaveIndex).toBeGreaterThanOrEqual(0);
+      expect(streamStartIndex).toBeGreaterThanOrEqual(0);
+      expect(userSaveIndex).toBeLessThan(streamStartIndex);
+    });
+
+    it('user message is saved even when the graph throws mid-stream', async () => {
+      const saveMessage = jest.fn().mockResolvedValue(undefined);
+
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        throw new Error('Graph crashed');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+
+      const app = await buildApp({ saveMessage, streamEvents });
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Find hotels' },
+      });
+
+      await app.close();
+
+      const userSave = saveMessage.mock.calls.find(([, role]) => role === 'user');
+      expect(userSave).toBeDefined();
+      expect(userSave![2]).toBe('Find hotels');
+    });
+  });
+
+  // ── P0-3: AbortError on client disconnect ────────────────────────────────
+
+  describe('P0-3: client disconnect (AbortError) is handled silently', () => {
+    it('does NOT emit an SSE error event when stream is aborted', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        throw err;
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+
+      const app = await buildApp({ streamEvents });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const events = parseSse(response.body);
+      expect(events.some((e) => e.type === 'error')).toBe(false);
+    });
+
+    it('emits a regular error event for non-AbortErrors', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        throw new Error('Upstream API failed');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+
+      const app = await buildApp({ streamEvents });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const events = parseSse(response.body);
+      expect(events.some((e) => e.type === 'error')).toBe(true);
+    });
+
+    it('passes an AbortSignal to graph.streamEvents', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        yield { event: 'on_chat_model_stream', data: { chunk: { content: 'hi' } } };
+      });
+
+      const app = await buildApp({ streamEvents });
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const [, options] = streamEvents.mock.calls[0];
+      expect(options).toHaveProperty('signal');
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  // ── P0-4: SSE stream always closed ───────────────────────────────────────
+
+  describe('P0-4: done event always sent and stream always closed', () => {
+    it('emits done as the last event on success', async () => {
+      const app = await buildApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const events = parseSse(response.body);
+      expect(events[events.length - 1].type).toBe('done');
+    });
+
+    it('emits done as the last event even when graph throws', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        throw new Error('LLM quota exceeded');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+
+      const app = await buildApp({ streamEvents });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const events = parseSse(response.body);
+      expect(events[events.length - 1].type).toBe('done');
+    });
+
+    it('response is complete (status 200) even when post-stream DB write fails', async () => {
+      const saveMessage = jest.fn()
+        .mockResolvedValueOnce(undefined)    // user message save — succeeds (P0-2)
+        .mockRejectedValue(new Error('DB connection lost'));  // assistant save — fails
+
+      const app = await buildApp({ saveMessage });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      // Server responded with 200 and a valid SSE payload despite the DB error
+      expect(response.statusCode).toBe(200);
+      const events = parseSse(response.body);
+      expect(events.some((e) => e.type === 'done')).toBe(true);
+    });
+  });
+});

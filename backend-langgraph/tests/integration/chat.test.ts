@@ -116,19 +116,24 @@ function getModelInvoke(): jest.Mock {
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
+// globalSetup probes the DB once; skip all integration tests when DB is unavailable.
+const itDb = process.env.TEST_DB_AVAILABLE === 'true' ? it : it.skip;
+
 describe('POST /api/chat (LangGraph integration)', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
+    if (process.env.TEST_DB_AVAILABLE !== 'true') return;
     await setupTestDb();
   });
 
   afterAll(async () => {
     await closePool();
-    await teardownTestDb();
+    if (process.env.TEST_DB_AVAILABLE === 'true') await teardownTestDb();
   });
 
   beforeEach(async () => {
+    if (process.env.TEST_DB_AVAILABLE !== 'true') return;
     await clearTestDb();
     jest.clearAllMocks();
 
@@ -153,12 +158,12 @@ describe('POST /api/chat (LangGraph integration)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    await app?.close();
   });
 
   // ── Response format ──────────────────────────────────────────────────────
 
-  it('returns a text/event-stream response with text and done events', async () => {
+  itDb('returns a text/event-stream response with text and done events', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/chat',
@@ -178,7 +183,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(events[events.length - 1].type).toBe('done');
   });
 
-  it('emits conversation_id as first event', async () => {
+  itDb('emits conversation_id as first event', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/chat',
@@ -190,7 +195,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(typeof events[0].conversationId).toBe('string');
   });
 
-  it('emits tool_start and tool_end events when the graph calls tools', async () => {
+  itDb('emits tool_start and tool_end events when the graph calls tools', async () => {
     const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
     travelMod.getTravelGraph.mockReturnValue({
       streamEvents: jest.fn().mockReturnValue(
@@ -211,7 +216,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
 
   // ── Database persistence ─────────────────────────────────────────────────
 
-  it('creates a user record on the first message', async () => {
+  itDb('creates a user record on the first message', async () => {
     await app.inject({
       method: 'POST',
       url: '/api/chat',
@@ -225,7 +230,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(result.rows).toHaveLength(1);
   });
 
-  it('saves both user and assistant messages to the database', async () => {
+  itDb('saves both user and assistant messages to the database', async () => {
     await app.inject({
       method: 'POST',
       url: '/api/chat',
@@ -255,7 +260,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(msgResult.rows).toContainEqual({ role: 'assistant', content: 'Here is your Tokyo itinerary.' });
   });
 
-  it('continues an existing conversation when conversationId is provided', async () => {
+  itDb('continues an existing conversation when conversationId is provided', async () => {
     const pool = getTestPool();
 
     const first = await app.inject({
@@ -308,7 +313,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(msgResult.rows).toHaveLength(4);
   });
 
-  it('saves extracted memories when LLM returns preferences', async () => {
+  itDb('saves extracted memories when LLM returns preferences', async () => {
     await app.close();
 
     // RAGService and MemoryService each create their own ChatAnthropic instance.
@@ -352,7 +357,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
 
   // ── agentType ────────────────────────────────────────────────────────────
 
-  it('uses the shopping graph when agentType is shopping', async () => {
+  itDb('uses the shopping graph when agentType is shopping', async () => {
     const shoppingMod = jest.requireMock('@/graph/shoppingGraph') as { getShoppingGraph: jest.Mock };
 
     await app.inject({
@@ -364,7 +369,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(shoppingMod.getShoppingGraph).toHaveBeenCalled();
   });
 
-  it('defaults to travel graph when agentType is not provided', async () => {
+  itDb('defaults to travel graph when agentType is not provided', async () => {
     const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
 
     await app.inject({
@@ -378,7 +383,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
 
   // ── Error handling ───────────────────────────────────────────────────────
 
-  it('returns 400 when userId is missing', async () => {
+  itDb('returns 400 when userId is missing', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/chat',
@@ -387,7 +392,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('returns 400 when message is missing', async () => {
+  itDb('returns 400 when message is missing', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/chat',
@@ -396,7 +401,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('emits error event when graph throws', async () => {
+  itDb('emits error event when graph throws', async () => {
     const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
     travelMod.getTravelGraph.mockReturnValue({
       streamEvents: jest.fn().mockImplementation(async function* () {

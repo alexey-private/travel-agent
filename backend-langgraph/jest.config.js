@@ -1,6 +1,7 @@
 /** @type {import('jest').Config} */
 const config = {
   preset: 'ts-jest',
+  globalSetup: './jest.globalSetup.js',
   testEnvironment: 'node',
   rootDir: '.',
   testMatch: ['<rootDir>/tests/**/*.test.ts'],

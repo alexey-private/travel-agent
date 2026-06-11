@@ -55,28 +55,33 @@ async function seedConversation(
   return { userId, conversationId };
 }
 
+// globalSetup probes the DB once; skip all integration tests when DB is unavailable.
+const itDb = process.env.TEST_DB_AVAILABLE === 'true' ? it : it.skip;
+
 describe('Conversation routes (LangGraph integration)', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
+    if (process.env.TEST_DB_AVAILABLE !== 'true') return;
     await setupTestDb();
     app = await buildApp();
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
     await closePool();
-    await teardownTestDb();
+    if (process.env.TEST_DB_AVAILABLE === 'true') await teardownTestDb();
   });
 
   beforeEach(async () => {
+    if (process.env.TEST_DB_AVAILABLE !== 'true') return;
     await clearTestDb();
   });
 
   // ── GET /api/conversations/:userId ──────────────────────────────────────────
 
   describe('GET /api/conversations/:userId', () => {
-    it('creates a user on first call and returns an empty list', async () => {
+    itDb('creates a user on first call and returns an empty list', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/conversations/session-new',
@@ -90,7 +95,7 @@ describe('Conversation routes (LangGraph integration)', () => {
       expect(result.rows).toHaveLength(1);
     });
 
-    it('returns existing conversations for a known session, newest first', async () => {
+    itDb('returns existing conversations for a known session, newest first', async () => {
       await seedConversation('session-list', [{ role: 'user', content: 'First trip' }]);
       await seedConversation('session-list', [{ role: 'user', content: 'Second trip' }]);
 
@@ -113,7 +118,7 @@ describe('Conversation routes (LangGraph integration)', () => {
   // ── GET /api/conversations/:userId/:conversationId/messages ─────────────────
 
   describe('GET /api/conversations/:userId/:conversationId/messages', () => {
-    it('returns messages for an owned conversation', async () => {
+    itDb('returns messages for an owned conversation', async () => {
       const { conversationId } = await seedConversation('session-msg', [
         { role: 'user', content: 'Hello' },
         { role: 'assistant', content: 'Hi there!' },
@@ -133,7 +138,7 @@ describe('Conversation routes (LangGraph integration)', () => {
       expect(messages[1]).toMatchObject({ role: 'assistant', content: 'Hi there!' });
     });
 
-    it('returns 403 when the conversation belongs to a different user', async () => {
+    itDb('returns 403 when the conversation belongs to a different user', async () => {
       const { conversationId } = await seedConversation('session-owner', [
         { role: 'user', content: 'Secret trip' },
       ]);
@@ -146,7 +151,7 @@ describe('Conversation routes (LangGraph integration)', () => {
       expect(response.statusCode).toBe(403);
     });
 
-    it('returns 403 for a non-existent conversationId', async () => {
+    itDb('returns 403 for a non-existent conversationId', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/conversations/session-x/00000000-0000-0000-0000-000000000000/messages',
