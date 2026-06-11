@@ -6,11 +6,9 @@ import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
 import { RAGService } from '../services/RAGService';
 import { SuggestionService } from '../services/SuggestionService';
-import { buildTravelGraph } from '../graph/travelGraph';
-import { buildShoppingGraph } from '../graph/shoppingGraph';
+import { getTravelGraph } from '../graph/travelGraph';
+import { getShoppingGraph } from '../graph/shoppingGraph';
 import { AgentEvent } from '../types/agent';
-import { CalendarProvider } from '../tools/providers/CalendarProvider';
-import { TasksProvider } from '../tools/providers/TasksProvider';
 import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
 import { env } from '../config/env';
 
@@ -20,8 +18,6 @@ interface ChatRouteOptions {
   memoryService: MemoryService;
   ragService: RAGService;
   suggestionService: SuggestionService;
-  calendarProvider?: CalendarProvider;
-  tasksProvider?: TasksProvider;
   prefRepo: UserPreferencesRepository;
 }
 
@@ -63,7 +59,7 @@ interface Source {
  *   on_tool_end          → tool_end
  */
 export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOptions): Promise<void> {
-  const { userService, conversationService, memoryService, ragService, suggestionService, calendarProvider, tasksProvider, prefRepo } = options;
+  const { userService, conversationService, memoryService, ragService, suggestionService, prefRepo } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
@@ -89,6 +85,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       const requestId = request.id as string;
       request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
+
+      // P0-2: persist user message before stream so history survives mid-stream crashes
+      await conversationService.saveMessage(conversationId, 'user', message);
 
       reply.hijack();
       const raw = reply.raw;
@@ -144,9 +143,11 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const initialMessages = [...historyMessages, humanMsg];
 
       const taskListName = agentType === 'shopping' ? userPrefs.shoppingTaskListName : userPrefs.taskListName;
-      const graph = agentType === 'shopping'
-        ? buildShoppingGraph(ragService, memories, calendarProvider, tasksProvider, sessionId, taskListName)
-        : buildTravelGraph(memories, calendarProvider, tasksProvider, sessionId, taskListName);
+      const graph = agentType === 'shopping' ? getShoppingGraph() : getTravelGraph();
+
+      // P0-3: abort the graph when the client disconnects to stop wasting LLM tokens
+      const ac = new AbortController();
+      request.raw.once('close', () => ac.abort());
 
       let assistantText = '';
       const sources: Source[] = [];
@@ -154,14 +155,14 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for await (const event of graph.streamEvents({ messages: initialMessages } as any, { version: 'v2' })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, sessionId, memories, taskListName } as any, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
-            const raw = event.data?.chunk?.content;
+            const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string
-            const text = typeof raw === 'string'
-              ? raw
-              : Array.isArray(raw)
-                ? raw.filter((b: {type: string}) => b.type === 'text').map((b: {text: string}) => b.text).join('')
+            const text = typeof chunkContent === 'string'
+              ? chunkContent
+              : Array.isArray(chunkContent)
+                ? chunkContent.filter((b: {type: string}) => b.type === 'text').map((b: {text: string}) => b.text).join('')
                 : '';
             if (text) {
               assistantText += text;
@@ -217,19 +218,22 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
         sse({ type: 'done' });
       } catch (err) {
-        request.log.error({ requestId, err }, 'agent error');
-        sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
-        sse({ type: 'done' });
+        // AbortError means the client disconnected — no need to log or send an error event
+        if (!(err instanceof Error && err.name === 'AbortError')) {
+          request.log.error({ requestId, err }, 'agent error');
+          sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+          sse({ type: 'done' });
+        }
+      } finally {
+        // P0-4: always close the SSE stream regardless of success, error, or disconnect
+        raw.end();
       }
 
-      await conversationService.saveMessage(conversationId, 'user', message);
       await Promise.allSettled([
         conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');
-
-      raw.end();
     },
   );
 }

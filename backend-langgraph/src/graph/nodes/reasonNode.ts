@@ -6,20 +6,29 @@ import { createModel } from '../../llm/createModel';
 /**
  * Creates the "reason" node for a LangGraph ReAct agent.
  *
- * Invokes the model with the current message history prepended by the system prompt.
- * LangGraph's messagesStateReducer appends the response to state.messages automatically.
+ * Accepts a prompt builder instead of a static string so that per-request
+ * context (memories, sessionId, taskListName) can be read from state at
+ * invocation time. This lets the compiled graph be a singleton while still
+ * producing a personalised system prompt for every request.
  *
- * The model is created once per graph build (per request) with tools bound.
- * streaming: true ensures on_chat_model_stream events are emitted by streamEvents().
+ * The model is created once in the closure (per graph build / per singleton
+ * init) with tools bound. streaming: true ensures on_chat_model_stream events
+ * are emitted by streamEvents().
  *
- * bindTools() returns a Runnable with looser TS types — cast to avoid false TS2722.
+ * bindTools() returns a Runnable with looser TS types — cast to avoid TS2722.
  */
-export function createReasonNode(systemPrompt: string, tools: DynamicStructuredTool[]) {
+export function createReasonNode(
+  buildSystemPrompt: (state: AgentStateType) => string,
+  tools: DynamicStructuredTool[],
+) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const model = (createModel('full', { streaming: true }) as any).bindTools(tools);
 
   return async (state: AgentStateType) => {
-    const response = await model.invoke([new SystemMessage(systemPrompt), ...state.messages]);
+    const response = await model.invoke([
+      new SystemMessage(buildSystemPrompt(state)),
+      ...state.messages,
+    ]);
     return { messages: [response] };
   };
 }

@@ -12,6 +12,10 @@ const config = {
       'ts-jest',
       {
         tsconfig: './tsconfig.test.json',
+        // Type-checking is handled by `tsc --noEmit`; disabling it here avoids
+        // TS2589 "type instantiation excessively deep" errors in @langchain/openai
+        // that only surface during jest's coverage instrumentation pass.
+        diagnostics: false,
       },
     ],
   },

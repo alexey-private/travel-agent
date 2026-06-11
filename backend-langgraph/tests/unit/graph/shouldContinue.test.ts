@@ -7,10 +7,12 @@ function makeState(messages: AgentStateType['messages']): AgentStateType {
   return {
     messages,
     userId: 'user-1',
+    sessionId: 'session-1',
     conversationId: 'conv-1',
     agentType: 'travel',
     memories: [],
     ragContext: null,
+    taskListName: 'Travel Plans',
   };
 }
 

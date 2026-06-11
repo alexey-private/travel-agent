@@ -22,6 +22,8 @@ export const AgentState = Annotation.Root({
 
   // Per-request metadata (LastValue — set once, read-only throughout the graph).
   userId: Annotation<string>(),
+  /** External session ID passed to tool userId params and system prompt. */
+  sessionId: Annotation<string>(),
   conversationId: Annotation<string>(),
   agentType: Annotation<'travel' | 'shopping'>(),
 
@@ -30,6 +32,9 @@ export const AgentState = Annotation.Root({
 
   // RAG context prepended to the first user message (null = no RAG needed).
   ragContext: Annotation<string | null>(),
+
+  /** User-specific task list name, injected into the system prompt. */
+  taskListName: Annotation<string>(),
 });
 
 export type AgentStateType = typeof AgentState.State;
