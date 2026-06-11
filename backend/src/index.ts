@@ -158,6 +158,7 @@ async function bootstrap(): Promise<void> {
     icloudTokenRepo,
     prefRepo,
     googleTokenRepo: tokenRepo,
+    userService,
   });
   fastify.log.info('Settings routes registered');
 

@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { ConversationRepository } from '../repositories/ConversationRepository';
+import { LMRound } from '../types/lm';
 
 /**
  * Service layer for conversation lifecycle management.
@@ -26,7 +27,7 @@ export class ConversationService {
    */
   async getHistory(
     conversationId: string,
-  ): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null }>> {
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null; lm_messages: LMRound[] | null }>> {
     return this.repo.getHistory(conversationId);
   }
 
@@ -56,7 +57,8 @@ export class ConversationService {
     role: 'user' | 'assistant',
     content: string,
     agentSteps?: unknown,
+    lmMessages?: LMRound[],
   ): Promise<void> {
-    return this.repo.saveMessage(conversationId, role, content, agentSteps);
+    return this.repo.saveMessage(conversationId, role, content, agentSteps, lmMessages);
   }
 }

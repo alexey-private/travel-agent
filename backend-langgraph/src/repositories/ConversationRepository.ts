@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { BaseRepository } from './BaseRepository';
+import { LMRound } from '../types/lm';
 
 interface ConversationRow {
   id: string;
@@ -9,6 +10,7 @@ interface MessageRow {
   role: 'user' | 'assistant';
   content: string;
   agent_steps: unknown[] | null;
+  lm_messages: LMRound[] | null;
 }
 
 interface ConversationListRow {
@@ -48,10 +50,10 @@ export class ConversationRepository extends BaseRepository {
   /**
    * Returns the message history for a conversation, ordered chronologically.
    */
-  async getHistory(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null }>> {
+  async getHistory(conversationId: string): Promise<Array<{ role: 'user' | 'assistant'; content: string; agent_steps: unknown[] | null; lm_messages: LMRound[] | null }>> {
     return this.query<MessageRow>(
-      `SELECT role, content, agent_steps FROM (
-         SELECT role, content, agent_steps, created_at
+      `SELECT role, content, agent_steps, lm_messages FROM (
+         SELECT role, content, agent_steps, lm_messages, created_at
          FROM messages WHERE conversation_id = $1
          ORDER BY created_at DESC LIMIT 20
        ) sub ORDER BY created_at ASC`,
@@ -99,10 +101,17 @@ export class ConversationRepository extends BaseRepository {
     role: 'user' | 'assistant',
     content: string,
     agentSteps?: unknown,
+    lmMessages?: LMRound[],
   ): Promise<void> {
     await this.execute(
-      'INSERT INTO messages (conversation_id, role, content, agent_steps) VALUES ($1, $2, $3, $4)',
-      [conversationId, role, content, agentSteps ? JSON.stringify(agentSteps) : null],
+      'INSERT INTO messages (conversation_id, role, content, agent_steps, lm_messages) VALUES ($1, $2, $3, $4, $5)',
+      [
+        conversationId,
+        role,
+        content,
+        agentSteps ? JSON.stringify(agentSteps) : null,
+        lmMessages && lmMessages.length > 0 ? JSON.stringify(lmMessages) : null,
+      ],
     );
   }
 }

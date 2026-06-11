@@ -29,6 +29,7 @@ import { settingsRoutes } from '@/routes/settings';
 import { ICloudTokenRepository } from '@/repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from '@/repositories/UserPreferencesRepository';
 import { GoogleTokenRepository } from '@/repositories/GoogleTokenRepository';
+import { UserService } from '@/services/UserService';
 import { getPool, closePool } from '@/db/client';
 import { setupTestDb, clearTestDb, teardownTestDb } from '../helpers/testDb';
 
@@ -39,6 +40,7 @@ async function buildApp(): Promise<FastifyInstance> {
     icloudTokenRepo: new ICloudTokenRepository(pool, 'test-encryption-key-32-chars!!!!!'),
     prefRepo: new UserPreferencesRepository(pool),
     googleTokenRepo: new GoogleTokenRepository(pool),
+    userService: new UserService(pool),
   });
   return app;
 }

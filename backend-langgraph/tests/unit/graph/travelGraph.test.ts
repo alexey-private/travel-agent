@@ -107,9 +107,9 @@ describe('travelGraph singleton', () => {
       expect(capturedBuildPrompt(state)).toContain('Tel Aviv');
     });
 
-    it('prompt builder includes sessionId from state', () => {
-      const state = makeState({ sessionId: 'user-session-xyz' });
-      expect(capturedBuildPrompt(state)).toContain('user-session-xyz');
+    it('prompt builder includes userId from state', () => {
+      const state = makeState({ userId: 'internal-uuid-xyz' });
+      expect(capturedBuildPrompt(state)).toContain('internal-uuid-xyz');
     });
 
     it('prompt builder includes taskListName from state', () => {

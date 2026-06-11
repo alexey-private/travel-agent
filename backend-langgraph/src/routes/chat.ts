@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { HumanMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
+import { HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { PDFParse } from 'pdf-parse';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
@@ -8,7 +8,9 @@ import { RAGService } from '../services/RAGService';
 import { SuggestionService } from '../services/SuggestionService';
 import { getTravelGraph } from '../graph/travelGraph';
 import { getShoppingGraph } from '../graph/shoppingGraph';
+import { historyToMessages } from '../graph/history';
 import { AgentEvent } from '../types/agent';
+import { LMRound, LMToolCall, LMToolResult } from '../types/lm';
 import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
 import { env } from '../config/env';
 
@@ -80,7 +82,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
-        prefRepo.get(sessionId),
+        prefRepo.get(internalUserId),
       ]);
 
       const requestId = request.id as string;
@@ -105,9 +107,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       sse({ type: 'conversation_id', conversationId });
 
-      const historyMessages = history.flatMap(m =>
-        m.role === 'user' ? [new HumanMessage(m.content)] : [new AIMessage(m.content)],
-      );
+      const historyMessages = historyToMessages(history);
 
       const userContent = message || 'Please analyze the attached file(s).';
 
@@ -138,16 +138,31 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const graph = agentType === 'shopping' ? getShoppingGraph() : getTravelGraph();
 
       // P0-3: abort the graph when the client disconnects to stop wasting LLM tokens
+      // P2-14: also abort after GRAPH_TIMEOUT_MS to prevent zombie streams on slow APIs
       const ac = new AbortController();
+      let timedOut = false;
       request.raw.once('close', () => ac.abort());
+      const timeoutId = setTimeout(() => { timedOut = true; ac.abort(); }, 60_000);
 
       let assistantText = '';
       const sources: Source[] = [];
       const agentSteps: AgentEvent[] = [];
 
+      // LM message sequence for history reconstruction (AIMessage+ToolMessage rounds)
+      const lmRounds: LMRound[] = [];
+      let currentToolCalls: LMToolCall[] = [];
+      let currentToolResults: LMToolResult[] = [];
+      const flushLMRound = () => {
+        if (currentToolCalls.length > 0) {
+          lmRounds.push({ tool_calls: currentToolCalls, tool_results: currentToolResults });
+          currentToolCalls = [];
+          currentToolResults = [];
+        }
+      };
+
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for await (const event of graph.streamEvents({ messages: initialMessages, sessionId, memories, taskListName, ragContext } as any, { version: 'v2', signal: ac.signal })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, userId: internalUserId, sessionId, memories, taskListName, ragContext } as any, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
             const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string
@@ -164,6 +179,21 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
             }
           }
 
+          if (event.event === 'on_chat_model_end') {
+            // Capture tool_calls emitted by the LLM for LM-message history reconstruction.
+            // Uses duck-typing (not instanceof) because streaming returns AIMessageChunk.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const output = event.data?.output as any;
+            const toolCalls: unknown[] = Array.isArray(output?.tool_calls) ? output.tool_calls : [];
+            if (toolCalls.length > 0) {
+              flushLMRound(); // flush previous round if any (multi-round ReAct)
+              currentToolCalls = (toolCalls as Array<{ id?: string; name: string; args: unknown }>)
+                .map(tc => ({ id: tc.id ?? '', name: tc.name, args: tc.args }));
+            } else {
+              flushLMRound(); // flush last round before the final text response
+            }
+          }
+
           if (event.event === 'on_tool_start') {
             const ev: AgentEvent = { type: 'tool_start', tool: event.name as string, input: event.data?.input as unknown };
             sse(ev);
@@ -177,10 +207,15 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
             let error: string | undefined;
 
             if (outputRaw instanceof ToolMessage) {
-              const content = outputRaw.content as string;
-              try { output = JSON.parse(content); } catch { output = content; }
+              const rawContent = typeof outputRaw.content === 'string'
+                ? outputRaw.content
+                : JSON.stringify(outputRaw.content);
+              try { output = JSON.parse(rawContent); } catch { output = rawContent; }
               if (outputRaw.status === 'error') {
                 error = typeof output === 'string' ? output : JSON.stringify(output);
+              }
+              if (outputRaw.tool_call_id) {
+                currentToolResults.push({ tool_call_id: outputRaw.tool_call_id, name: toolName, content: rawContent });
               }
             }
 
@@ -201,28 +236,36 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
           sse({ type: 'sources', sources });
         }
 
+        flushLMRound(); // safety flush if stream ended without a final on_chat_model_end
+        sse({ type: 'done' }); // client can render response immediately; suggestions follow async
+
         const suggestions = await suggestionService.getSuggestions(message, assistantText, agentType);
         if (suggestions.length > 0) {
           const ev: AgentEvent = { type: 'suggestions', suggestions };
           sse(ev);
           agentSteps.push(ev);
         }
-
-        sse({ type: 'done' });
       } catch (err) {
-        // AbortError means the client disconnected — no need to log or send an error event
-        if (!(err instanceof Error && err.name === 'AbortError')) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          if (timedOut) {
+            request.log.warn({ requestId }, 'graph execution timed out');
+            sse({ type: 'error', message: 'Request timed out' });
+            sse({ type: 'done' });
+          }
+          // else: client disconnected — silent
+        } else {
           request.log.error({ requestId, err }, 'agent error');
           sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
           sse({ type: 'done' });
         }
       } finally {
+        clearTimeout(timeoutId);
         // P0-4: always close the SSE stream regardless of success, error, or disconnect
         raw.end();
       }
 
       await Promise.allSettled([
-        conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps),
+        conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');

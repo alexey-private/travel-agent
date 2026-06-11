@@ -30,7 +30,7 @@ export class TravelAgent {
 
     // Inject user long-term memories (preferences) into the system prompt
     // so the LLM can personalize the response without re-asking each time.
-    const systemPrompt = buildTravelAgentSystemPrompt(context.memories, context.sessionId, context.taskListName);
+    const systemPrompt = buildTravelAgentSystemPrompt(context.memories, context.userId, context.taskListName);
 
     // Truncate history to avoid context overflow on long conversations
     const recentHistory = context.history.slice(-MAX_HISTORY);

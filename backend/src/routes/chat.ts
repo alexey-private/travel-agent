@@ -85,7 +85,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
-        prefRepo.get(sessionId),
+        prefRepo.get(internalUserId),
       ]);
 
       const taskListName = agentType === 'shopping' ? userPrefs.shoppingTaskListName : userPrefs.taskListName;
@@ -160,15 +160,14 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
           raw.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
         }
 
-        // Emit suggestions
+        raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`); // client renders response immediately
+
+        // Suggestions require a separate LLM call — emit after done so they don't delay rendering
         const suggestions = await suggestionService.getSuggestions(message, assistantText);
         if (suggestions.length > 0) {
           raw.write(`data: ${JSON.stringify({ type: 'suggestions', suggestions })}\n\n`);
-          // Store suggestions in agentSteps so they survive conversation reload
           agentSteps.push({ type: 'suggestions', suggestions });
         }
-
-        raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         request.log.error({ requestId, err }, 'agent error');

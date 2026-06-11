@@ -101,9 +101,9 @@ describe('shoppingGraph singleton', () => {
       expect(capturedBuildPrompt(state)).toContain('Apple');
     });
 
-    it('prompt builder includes sessionId from state', () => {
-      const state = makeState({ sessionId: 'shopper-session-42' });
-      expect(capturedBuildPrompt(state)).toContain('shopper-session-42');
+    it('prompt builder includes userId from state', () => {
+      const state = makeState({ userId: 'internal-uuid-shopper' });
+      expect(capturedBuildPrompt(state)).toContain('internal-uuid-shopper');
     });
 
     it('prompt builder includes taskListName from state', () => {
