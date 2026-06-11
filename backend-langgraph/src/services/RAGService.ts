@@ -1,16 +1,14 @@
 import { Pool } from 'pg';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import LRU from 'lru-cache';
 import { KnowledgeRepository } from '../repositories/KnowledgeRepository';
 import { EmbeddingService } from './EmbeddingService';
 import { KnowledgeChunk } from '../types/memory';
 import { createModel } from '../llm/createModel';
 
 const RAG_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
+const RAG_CACHE_MAX = 512;
 
 const SHOULD_QUERY_PROMPT = `You decide whether a travel-planning query needs factual destination knowledge
 from a knowledge base (visa rules, health tips, cultural guides, etc.).
@@ -28,26 +26,14 @@ Answer with a single word: yes or no.`;
 export class RAGService {
   private knowledgeRepo: KnowledgeRepository;
   private embeddingService: EmbeddingService;
-  private shouldQueryCache = new Map<string, CacheEntry<boolean>>();
-  private ragContextCache = new Map<string, CacheEntry<string | null>>();
+  private readonly gateModel: BaseChatModel;
+  private shouldQueryCache = new LRU<string, boolean>({ max: RAG_CACHE_MAX, maxAge: RAG_CACHE_TTL_MS });
+  private ragContextCache = new LRU<string, string | null>({ max: RAG_CACHE_MAX, maxAge: RAG_CACHE_TTL_MS });
 
   constructor(pool: Pool, embeddingService: EmbeddingService) {
     this.knowledgeRepo = new KnowledgeRepository(pool);
     this.embeddingService = embeddingService;
-  }
-
-  private getCached<T>(cache: Map<string, CacheEntry<T>>, key: string): T | undefined {
-    const entry = cache.get(key);
-    if (!entry) return undefined;
-    if (Date.now() > entry.expiresAt) {
-      cache.delete(key);
-      return undefined;
-    }
-    return entry.value;
-  }
-
-  private setCached<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
-    cache.set(key, { value, expiresAt: Date.now() + RAG_CACHE_TTL_MS });
+    this.gateModel = createModel('fast', { maxTokens: 10 });
   }
 
   /**
@@ -55,18 +41,18 @@ export class RAGService {
    * Returns true when the model responds with "yes".
    */
   async shouldQueryKnowledgeBase(query: string): Promise<boolean> {
-    const cached = this.getCached(this.shouldQueryCache, query);
+    const cached = this.shouldQueryCache.get(query);
     if (cached !== undefined) return cached;
 
     try {
-      const response = await createModel('fast', 10).invoke([
+      const response = await this.gateModel.invoke([
         new SystemMessage(SHOULD_QUERY_PROMPT),
         new HumanMessage(query),
       ]);
 
       const text = typeof response.content === 'string' ? response.content : '';
       const result = text.toLowerCase().trim().startsWith('yes');
-      this.setCached(this.shouldQueryCache, query, result);
+      this.shouldQueryCache.set(query, result);
       return result;
     } catch {
       return true;
@@ -113,12 +99,12 @@ export class RAGService {
    * Returns null if RAG is not needed or no results found.
    */
   async buildRagContext(query: string): Promise<string | null> {
-    const cached = this.getCached(this.ragContextCache, query);
+    const cached = this.ragContextCache.get(query);
     if (cached !== undefined) return cached;
 
     const needed = await this.shouldQueryKnowledgeBase(query);
     if (!needed) {
-      this.setCached(this.ragContextCache, query, null);
+      this.ragContextCache.set(query, null);
       return null;
     }
 
@@ -127,7 +113,7 @@ export class RAGService {
       ? null
       : chunks.map(c => `[${c.topic}]\n${c.content}`).join('\n\n---\n\n');
 
-    this.setCached(this.ragContextCache, query, result);
+    this.ragContextCache.set(query, result);
     return result;
   }
 }

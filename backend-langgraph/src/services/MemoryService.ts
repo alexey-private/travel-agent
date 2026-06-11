@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
-import { HumanMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
 import { createModel } from '../llm/createModel';
@@ -46,10 +47,12 @@ const EXTRACTION_EVERY_N = 3;
  */
 export class MemoryService {
   private repo: MemoryRepository;
+  private readonly model: BaseChatModel;
   private messageCounters = new Map<string, number>();
 
   constructor(pool: Pool) {
     this.repo = new MemoryRepository(pool);
+    this.model = createModel('fast', { maxTokens: 512 });
   }
 
   private shouldExtract(userId: string, message: string): boolean {
@@ -103,8 +106,9 @@ export class MemoryService {
     const systemPrompt = agentType === 'shopping' ? SHOPPING_EXTRACT_PROMPT : TRAVEL_EXTRACT_PROMPT;
 
     try {
-      const response = await createModel('fast', 512).invoke([
-        new HumanMessage(`${systemPrompt}\n\n${existingSection}User message:\n${userMessage}`),
+      const response = await this.model.invoke([
+        new SystemMessage(systemPrompt),
+        new HumanMessage(`${existingSection}User message:\n${userMessage}`),
       ]);
 
       const text = typeof response.content === 'string' ? response.content : '';
@@ -118,8 +122,8 @@ export class MemoryService {
           this.repo.upsertMemory(userId, key, String(value), agentType),
         ),
       );
-    } catch {
-      // Non-fatal: skip saving on error
+    } catch (err) {
+      console.warn('memory extraction failed', err);
     }
   }
 }

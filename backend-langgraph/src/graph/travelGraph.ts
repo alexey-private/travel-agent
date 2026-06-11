@@ -48,7 +48,7 @@ export function initTravelGraph(
   _travelGraph = buildAgentGraph(
     tools,
     (state: AgentStateType) =>
-      buildTravelAgentSystemPrompt(state.memories ?? [], state.sessionId, state.taskListName),
+      buildTravelAgentSystemPrompt(state.memories ?? [], state.sessionId, state.taskListName, state.ragContext),
   );
 }
 

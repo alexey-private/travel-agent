@@ -105,19 +105,11 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       sse({ type: 'conversation_id', conversationId });
 
-      if (ragContext) {
-        sse({ type: 'tool_start', tool: 'knowledge_base', input: { query: message } });
-        sse({ type: 'tool_end', tool: 'knowledge_base', output: ragContext });
-      }
-
       const historyMessages = history.flatMap(m =>
         m.role === 'user' ? [new HumanMessage(m.content)] : [new AIMessage(m.content)],
       );
 
-      const userText = message || 'Please analyze the attached file(s).';
-      const userContent = ragContext
-        ? `Relevant ${agentType} knowledge:\n${ragContext}\n\nUser request: ${userText}`
-        : userText;
+      const userContent = message || 'Please analyze the attached file(s).';
 
       const humanMsg = await (async () => {
         if (!attachments || attachments.length === 0) return new HumanMessage(userContent);
@@ -155,7 +147,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for await (const event of graph.streamEvents({ messages: initialMessages, sessionId, memories, taskListName } as any, { version: 'v2', signal: ac.signal })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, sessionId, memories, taskListName, ragContext } as any, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
             const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string

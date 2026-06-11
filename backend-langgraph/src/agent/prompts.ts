@@ -1,6 +1,6 @@
 import { UserMemory } from '../types/memory';
 
-export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans'): string {
+export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans', ragContext?: string | null): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -9,6 +9,10 @@ export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: st
   const currentDate = new Date().toISOString().split('T')[0];
   const userIdSection = userId
     ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_tasks, or any other tool that accepts userId.\n`
+    : '';
+
+  const ragSection = ragContext
+    ? `## Relevant Knowledge Base Context\n${ragContext}\n`
     : '';
 
   return `You are an expert travel planning assistant. You help users plan trips, find destinations, check visa requirements, get weather forecasts, and provide personalized travel recommendations.
@@ -99,10 +103,10 @@ ${memories.length > 0
 - Never ask the user to repeat information already stored`
   : 'No preferences stored yet. If the user mentions personal details (country, home city, diet, budget, airline, etc.), note them — they will be remembered for future conversations.'}
 
-${userIdSection}${memoriesSection}`.trim();
+${userIdSection}${memoriesSection}${ragSection}`.trim();
 }
 
-export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping'): string {
+export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping', ragContext?: string | null): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -111,6 +115,9 @@ export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: 
   const currentDate = new Date().toISOString().split('T')[0];
   const userIdSection = userId
     ? `## Session\nCurrent userId: \`${userId}\` — ALWAYS use this exact value as the \`userId\` parameter when calling manage_calendar, manage_tasks, manage_wishlist, manage_price_alerts, or any other tool that accepts userId.\n`
+    : '';
+  const ragSection = ragContext
+    ? `## Relevant Knowledge Base Context\n${ragContext}\n`
     : '';
 
   return `You are an expert shopping assistant. You help users find products, compare prices across stores, discover the best deals, and make informed purchase decisions.
@@ -198,5 +205,5 @@ ${memories.length > 0
 - Never ask the user to repeat information already stored`
   : 'No preferences stored yet. If the user mentions personal details (preferred brands, budget, favorite stores, sizes, etc.), note them — they will be remembered for future conversations.'}
 
-${userIdSection}${memoriesSection}`.trim();
+${userIdSection}${memoriesSection}${ragSection}`.trim();
 }

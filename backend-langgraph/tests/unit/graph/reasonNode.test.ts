@@ -83,7 +83,12 @@ describe('createReasonNode', () => {
 
     const [messages] = mockInvoke.mock.calls[0];
     expect(messages[0]).toBeInstanceOf(SystemMessage);
-    expect(messages[0].content).toBe('Custom travel system prompt.');
+    // content is a cache-control block array; extract the text field
+    const sysContent = messages[0].content;
+    const sysText = Array.isArray(sysContent)
+      ? (sysContent[0] as { text: string }).text
+      : sysContent;
+    expect(sysText).toBe('Custom travel system prompt.');
   });
 
   it('appends state.messages after the system message', async () => {
@@ -115,9 +120,13 @@ describe('createReasonNode', () => {
     await node(makeState());
     await node(makeState());
 
+    const sysText = (msg: SystemMessage) => {
+      const c = msg.content;
+      return Array.isArray(c) ? (c[0] as { text: string }).text : c;
+    };
     expect(buildPrompt).toHaveBeenCalledTimes(2);
-    expect(mockInvoke.mock.calls[0][0][0].content).toBe('Prompt #1');
-    expect(mockInvoke.mock.calls[1][0][0].content).toBe('Prompt #2');
+    expect(sysText(mockInvoke.mock.calls[0][0][0])).toBe('Prompt #1');
+    expect(sysText(mockInvoke.mock.calls[1][0][0])).toBe('Prompt #2');
   });
 
   it('creates the model once in the closure, not per invocation', async () => {

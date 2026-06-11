@@ -89,8 +89,8 @@ describe('MemoryService', () => {
       await service.extractAndSaveMemories('user-1', 'I usually fly EL AL.');
 
       const callArg = mockInvoke.mock.calls[0][0];
-      // The HumanMessage content should include existing memories
-      const msgContent = callArg[0].content as string;
+      // callArg[0] is SystemMessage (prompt), callArg[1] is HumanMessage (memories + user message)
+      const msgContent = callArg[1].content as string;
       expect(msgContent).toContain('home_city: Ashkelon');
       expect(msgContent).toContain('name: Alexey');
     });

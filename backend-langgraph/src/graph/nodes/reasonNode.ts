@@ -25,8 +25,12 @@ export function createReasonNode(
   const model = (createModel('full', { streaming: true }) as any).bindTools(tools);
 
   return async (state: AgentStateType) => {
+    // cache_control marks the system prompt for Anthropic prompt caching (~5 min TTL).
+    // The field is not in LangChain core types but is forwarded to the Anthropic API.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sysContent: any = [{ type: 'text', text: buildSystemPrompt(state), cache_control: { type: 'ephemeral' } }];
     const response = await model.invoke([
-      new SystemMessage(buildSystemPrompt(state)),
+      new SystemMessage({ content: sysContent }),
       ...state.messages,
     ]);
     return { messages: [response] };
