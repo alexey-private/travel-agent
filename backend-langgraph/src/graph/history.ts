@@ -48,10 +48,19 @@ export function lmRoundsToMessages(rounds: LMRound[]): BaseMessage[] {
 export function historyToMessages(
   history: Array<{ role: 'user' | 'assistant'; content: string; lm_messages: LMRound[] | null }>,
 ): BaseMessage[] {
-  return history.flatMap(m => {
-    if (m.role === 'user') return [new HumanMessage(m.content)];
+  const result: BaseMessage[] = [];
+  for (const m of history) {
+    if (m.role === 'user') {
+      result.push(new HumanMessage(m.content));
+      continue;
+    }
+    // Skip empty assistant messages with no tool rounds — these are incomplete
+    // turns saved after an error (e.g. Google not connected) that contain no
+    // usable content and would break the tool_use/tool_result pairing requirement.
+    if (!m.content && !m.lm_messages?.length) continue;
 
     const roundMsgs = m.lm_messages?.length ? lmRoundsToMessages(m.lm_messages) : [];
-    return [...roundMsgs, new AIMessage(m.content)];
-  });
+    result.push(...roundMsgs, new AIMessage(m.content));
+  }
+  return result;
 }

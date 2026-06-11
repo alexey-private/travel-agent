@@ -95,6 +95,7 @@ async function bootstrap(): Promise<void> {
   if (googleConfig) {
     await fastify.register(authRoutes, {
       tokenRepo,
+      userService,
       clientId: googleConfig.clientId,
       clientSecret: googleConfig.clientSecret,
       redirectUri: googleConfig.redirectUri,

@@ -271,7 +271,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       }
 
       await Promise.allSettled([
-        conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds),
+        (assistantText || lmRounds.length > 0)
+          ? conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds)
+          : Promise.resolve(),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');

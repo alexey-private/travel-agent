@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { google } from 'googleapis';
 import { GoogleTokenRepository } from '../repositories/GoogleTokenRepository';
+import { UserService } from '../services/UserService';
 
 interface AuthRouteOptions {
   tokenRepo: GoogleTokenRepository;
+  userService: UserService;
   clientId: string;
   clientSecret: string;
   redirectUri: string;
@@ -17,13 +19,14 @@ export async function authRoutes(
   fastify: FastifyInstance,
   opts: AuthRouteOptions,
 ): Promise<void> {
-  const { tokenRepo, clientId, clientSecret, redirectUri } = opts;
+  const { tokenRepo, userService, clientId, clientSecret, redirectUri } = opts;
 
   // GET /auth/google/status?userId=xxx  — check if connected
   fastify.get<{ Querystring: { userId?: string } }>('/auth/google/status', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ connected: false, error: 'userId required' });
-    const tokens = await tokenRepo.get(userId);
+    const internalId = await userService.findOrCreateUser(userId);
+    const tokens = await tokenRepo.get(internalId);
     return { connected: !!tokens };
   });
 
@@ -66,7 +69,8 @@ export async function authRoutes(
         return reply.code(400).send({ error: 'Incomplete tokens from Google' });
       }
 
-      await tokenRepo.save(userId, {
+      const internalId = await userService.findOrCreateUser(userId);
+      await tokenRepo.save(internalId, {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiryDate: tokens.expiry_date ?? Date.now() + 3600_000,
@@ -82,7 +86,8 @@ export async function authRoutes(
   fastify.delete<{ Querystring: { userId?: string } }>('/auth/google/disconnect', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId is required' });
-    await tokenRepo.delete(userId);
+    const internalId = await userService.findOrCreateUser(userId);
+    await tokenRepo.delete(internalId);
     return { disconnected: true };
   });
 }
