@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env';
 import { getPool, closePool } from './db/client';
 import { EmbeddingService } from './services/EmbeddingService';
@@ -49,6 +50,9 @@ async function bootstrap(): Promise<void> {
     origin: env.ALLOWED_ORIGIN ?? true,
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
   });
+  // global: false — only routes that set config.rateLimit are limited.
+  // hook: 'preHandler' — body is parsed at this stage, so keyGenerator can read req.body.userId.
+  await fastify.register(rateLimit, { global: false, hook: 'preHandler' });
 
   // Shared singletons — created once at startup, reused across all requests
   const pool = getPool();

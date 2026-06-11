@@ -66,6 +66,15 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
   const { llmClient, travelToolRegistry, shoppingToolRegistry, userService, conversationService, memoryService, ragService, suggestionService, prefRepo } = options;
   fastify.post<{ Body: ChatBody }>(
     '/api/chat',
+    {
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: 60_000,
+          keyGenerator: (req) => (req.body as ChatBody | null)?.userId ?? req.ip ?? 'unknown',
+        },
+      },
+    },
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
       const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel', attachments } = request.body;
 

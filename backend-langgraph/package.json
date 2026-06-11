@@ -19,6 +19,7 @@
   "dependencies": {
     "@duffel/api": "^4.25.0",
     "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "^11.0.0",
     "@langchain/anthropic": "^0.3.0",
     "@langchain/core": "^0.3.0",
     "@langchain/langgraph": "^0.2.0",
