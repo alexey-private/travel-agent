@@ -4,22 +4,11 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
-import AgentThoughts, { type ToolStep } from "./AgentThoughts";
+import AgentThoughts from "./AgentThoughts";
 import { exportToPdf } from "../lib/api";
+import { type Message } from "@/types/agent";
 
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  /** Tool-use steps attached to this assistant message */
-  steps?: ToolStep[];
-  /** True while the assistant is still streaming */
-  streaming?: boolean;
-  /** Web sources cited by the agent */
-  sources?: { title: string; url: string }[];
-  /** Suggested follow-up questions */
-  suggestions?: string[];
-}
+export type { Message };
 
 interface MessageBubbleProps {
   message: Message;

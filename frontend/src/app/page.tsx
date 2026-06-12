@@ -7,6 +7,7 @@ import ChatWindow from "@/components/ChatWindow";
 import MemoryPanel from "@/components/MemoryPanel";
 import ConversationList from "@/components/ConversationList";
 import AgentSelector, { type AgentType } from "@/components/AgentSelector";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { getOrCreateUserId } from "@/lib/api";
 
 /**
@@ -102,14 +103,16 @@ export default function Home() {
 
         {/* Chat area */}
         <main className="flex flex-col flex-1 min-w-0 min-h-0">
-          <ChatWindow
-            key={chatKey}
-            userId={userId}
-            initialConversationId={selectedConversationId}
-            agentType={agentType}
-            onConversationCreated={handleConversationCreated}
-            onReplyComplete={handleReplyComplete}
-          />
+          <ErrorBoundary>
+            <ChatWindow
+              key={chatKey}
+              userId={userId}
+              initialConversationId={selectedConversationId}
+              agentType={agentType}
+              onConversationCreated={handleConversationCreated}
+              onReplyComplete={handleReplyComplete}
+            />
+          </ErrorBoundary>
         </main>
 
         {/* Memory panel */}

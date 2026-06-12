@@ -1,31 +1,7 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { API_URL } from "./config";
+import { type Attachment, type AgentEvent, type Conversation, type UserMemory, type ChatMessage } from "@/types/agent";
 
-export interface Attachment {
-  name: string;
-  mimeType: string;
-  base64: string;
-  size: number;
-}
-
-export type AgentEvent =
-  | { type: "conversation_id"; conversationId: string }
-  | { type: "text"; content: string }
-  | { type: "tool_start"; tool: string; input: unknown }
-  | { type: "tool_end"; tool: string; output: unknown; error?: string }
-  | { type: "sources"; sources: { title: string; url: string }[] }
-  | { type: "suggestions"; suggestions: string[] }
-  | { type: "done" };
-
-export interface Conversation {
-  id: string;
-  created_at: string;
-  title: string | null;
-}
-
-export interface UserMemory {
-  key: string;
-  value: string;
-}
+export type { Attachment, AgentEvent, Conversation, UserMemory, ChatMessage } from "@/types/agent";
 
 /**
  * Stream a chat message to the backend via SSE (POST + ReadableStream).
@@ -93,12 +69,6 @@ export async function deleteMemory(userId: string, key: string, agentType: "trav
   await fetch(`${API_URL}/api/memory/${userId}/${encodeURIComponent(key)}?agentType=${agentType}`, {
     method: "DELETE",
   });
-}
-
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  agent_steps?: AgentEvent[] | null;
 }
 
 /** Fetch messages for a specific conversation. */

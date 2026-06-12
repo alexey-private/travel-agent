@@ -2,16 +2,9 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { type ToolStep } from "@/types/agent";
 
-export interface ToolStep {
-  id: string;
-  tool: string;
-  input: unknown;
-  output?: unknown;
-  error?: string;
-  /** true while waiting for the tool_end event */
-  pending: boolean;
-}
+export type { ToolStep };
 
 interface AgentThoughtsProps {
   steps: ToolStep[];

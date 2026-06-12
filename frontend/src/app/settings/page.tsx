@@ -17,8 +17,7 @@ import {
   disconnectApple,
   SettingsData,
 } from "@/lib/settingsApi";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { API_URL } from "@/lib/config";
 
 function SettingsContent() {
   const searchParams = useSearchParams();

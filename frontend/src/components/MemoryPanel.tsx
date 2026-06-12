@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { Trash2, RefreshCw, Brain, Calendar, CheckCircle2, XCircle, Settings } from "lucide-react";
 import Link from "next/link";
-import { fetchMemories, deleteMemory, disconnectGoogleCalendar, type UserMemory } from "@/lib/api";
-import { getSettings, disconnectApple, type SettingsData } from "@/lib/settingsApi";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+import { fetchMemories, deleteMemory, disconnectGoogleCalendar } from "@/lib/api";
+import { getSettings, disconnectApple } from "@/lib/settingsApi";
+import { API_URL } from "@/lib/config";
+import { useAsync } from "@/hooks/useAsync";
 
 interface MemoryPanelProps {
   userId: string;
@@ -15,46 +15,19 @@ interface MemoryPanelProps {
   refreshTrigger?: number;
 }
 
-/**
- * Side panel that displays and manages the user's long-term memories.
- */
 export default function MemoryPanel({ userId, agentType, refreshTrigger }: MemoryPanelProps) {
-  const [memories, setMemories] = useState<UserMemory[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [providerSettings, setProviderSettings] = useState<SettingsData | null>(null);
-  const [providerLoading, setProviderLoading] = useState(false);
+  const {
+    data: memories,
+    loading,
+    error,
+    reload: loadMemories,
+    setData: setMemories,
+  } = useAsync(() => fetchMemories(userId, agentType), [userId, agentType, refreshTrigger]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchMemories(userId, agentType);
-      setMemories(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load memories");
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, agentType]);
-
-  // Load on mount and whenever refreshTrigger or agentType changes
-  useEffect(() => {
-    void load();
-  }, [load, refreshTrigger]);
-
-  const loadProviderSettings = useCallback(async () => {
-    try {
-      const s = await getSettings(userId);
-      setProviderSettings(s);
-    } catch {
-      // non-critical, don't block UI
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    void loadProviderSettings();
-  }, [loadProviderSettings]);
+  const {
+    data: providerSettings,
+    reload: loadProviderSettings,
+  } = useAsync(() => getSettings(userId), [userId]);
 
   // Handle ?google_auth=success|error redirect from OAuth callback
   useEffect(() => {
@@ -62,7 +35,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
     const status = params.get("google_auth");
     if (status === "success" || status === "error") {
       window.history.replaceState({}, "", window.location.pathname);
-      void loadProviderSettings();
+      loadProviderSettings();
     }
   }, [loadProviderSettings]);
 
@@ -70,34 +43,26 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
     window.location.href = `${API_URL}/auth/google/start?userId=${encodeURIComponent(userId)}`;
   };
 
-  const handleGoogleDisconnect = async () => {
-    setProviderLoading(true);
-    try {
-      await disconnectGoogleCalendar(userId);
-      await loadProviderSettings();
-    } finally {
-      setProviderLoading(false);
-    }
-  };
+  const handleGoogleDisconnect = useCallback(async () => {
+    await disconnectGoogleCalendar(userId);
+    loadProviderSettings();
+  }, [userId, loadProviderSettings]);
 
-  const handleAppleDisconnect = async () => {
-    setProviderLoading(true);
-    try {
-      await disconnectApple(userId);
-      await loadProviderSettings();
-    } finally {
-      setProviderLoading(false);
-    }
-  };
+  const handleAppleDisconnect = useCallback(async () => {
+    await disconnectApple(userId);
+    loadProviderSettings();
+  }, [userId, loadProviderSettings]);
 
-  const handleDelete = async (key: string) => {
+  const handleDelete = useCallback(async (key: string) => {
     try {
       await deleteMemory(userId, key, agentType);
-      setMemories((prev) => prev.filter((m) => m.key !== key));
+      setMemories((prev) => prev?.filter((m) => m.key !== key) ?? prev);
     } catch {
-      setError("Failed to delete memory");
+      // silently ignore
     }
-  };
+  }, [userId, agentType, setMemories]);
+
+  const memoryList = memories ?? [];
 
   return (
     <aside className="w-64 border-l border-gray-200 flex flex-col bg-gray-50 shrink-0">
@@ -108,7 +73,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
           Your Preferences
         </div>
         <button
-          onClick={load}
+          onClick={loadMemories}
           disabled={loading}
           className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
           title="Refresh memories"
@@ -123,7 +88,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
           <p className="text-xs text-red-500 text-center">{error}</p>
         )}
 
-        {!loading && memories.length === 0 && !error && (
+        {!loading && memoryList.length === 0 && !error && (
           <p className="text-xs text-gray-400 text-center mt-4">
             No preferences saved yet.
             <br />
@@ -131,7 +96,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
           </p>
         )}
 
-        {memories.map((mem) => (
+        {memoryList.map((mem) => (
           <div
             key={mem.key}
             className="flex items-start gap-2 bg-white rounded-lg px-3 py-2 border border-gray-100 group"
@@ -145,7 +110,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
               </p>
             </div>
             <button
-              onClick={() => handleDelete(mem.key)}
+              onClick={() => void handleDelete(mem.key)}
               className="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
               title={`Delete "${mem.key}"`}
             >
@@ -154,6 +119,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
           </div>
         ))}
       </div>
+
       {/* Active provider status */}
       <div className="border-t border-gray-200 p-3 bg-white">
         {providerSettings === null ? (
@@ -176,8 +142,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
                 </div>
                 <button
                   onClick={() => void handleAppleDisconnect()}
-                  disabled={providerLoading}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
                 >
                   Disconnect
                 </button>
@@ -210,8 +175,7 @@ export default function MemoryPanel({ userId, agentType, refreshTrigger }: Memor
                 </div>
                 <button
                   onClick={() => void handleGoogleDisconnect()}
-                  disabled={providerLoading}
-                  className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
                 >
                   Disconnect
                 </button>
