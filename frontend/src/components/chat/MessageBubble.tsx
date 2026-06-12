@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import AgentThoughts from "./AgentThoughts";
-import { exportToPdf } from "../lib/api";
+import { exportToPdf } from "@/lib/api";
 import { type Message } from "@/types/agent";
 
 export type { Message };
@@ -15,13 +15,9 @@ interface MessageBubbleProps {
   onSuggestionClick?: (text: string) => void;
 }
 
-/**
- * Renders a single chat message bubble.
- * Assistant messages include an optional AgentThoughts section.
- */
 const SOURCES_PREVIEW = 5;
 
-export default function MessageBubble({ message, onSuggestionClick }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ message, onSuggestionClick }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -183,4 +179,6 @@ export default function MessageBubble({ message, onSuggestionClick }: MessageBub
       </div>
     </div>
   );
-}
+});
+
+export default MessageBubble;

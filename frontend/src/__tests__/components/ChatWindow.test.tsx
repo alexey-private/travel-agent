@@ -7,7 +7,7 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ChatWindow from "@/components/ChatWindow";
+import ChatWindow from "@/components/chat/ChatWindow";
 import * as api from "@/lib/api";
 import type { AgentEvent } from "@/lib/api";
 

@@ -5,7 +5,7 @@
 
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import AgentSelector from "@/components/AgentSelector";
+import AgentSelector from "@/components/shared/AgentSelector";
 
 describe("AgentSelector — rendering", () => {
   it("renders both Travel and Shopping tabs", () => {

@@ -5,7 +5,7 @@
 
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import AgentThoughts, { type ToolStep } from "@/components/AgentThoughts";
+import AgentThoughts, { type ToolStep } from "@/components/chat/AgentThoughts";
 
 function makeStep(overrides: Partial<ToolStep> = {}): ToolStep {
   return {

@@ -54,3 +54,14 @@ export interface Message {
   /** Suggested follow-up questions */
   suggestions?: string[];
 }
+
+export type MessagesAction =
+  | { type: "RESET"; messages: Message[] }
+  | { type: "ADD"; message: Message }
+  | { type: "STREAM_TEXT"; id: string; chunk: string }
+  | { type: "TOOL_START"; id: string; tool: string; input: unknown }
+  | { type: "TOOL_END"; id: string; tool: string; output: unknown; error?: string }
+  | { type: "SET_SOURCES"; id: string; sources: { title: string; url: string }[] }
+  | { type: "SET_SUGGESTIONS"; id: string; suggestions: string[] }
+  | { type: "MARK_DONE"; id: string }
+  | { type: "MARK_ERROR"; id: string; error: string };

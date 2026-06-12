@@ -5,7 +5,7 @@
 
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import MessageBubble, { type Message } from "@/components/MessageBubble";
+import MessageBubble, { type Message } from "@/components/chat/MessageBubble";
 
 function makeMessage(overrides: Partial<Message>): Message {
   return {

@@ -5,7 +5,7 @@
 
 import React from "react";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import MemoryPanel from "@/components/MemoryPanel";
+import MemoryPanel from "@/components/memory/MemoryPanel";
 import * as api from "@/lib/api";
 
 jest.mock("@/lib/api");
@@ -68,12 +68,12 @@ describe("MemoryPanel", () => {
     );
   });
 
-  it("re-fetches memories when refreshTrigger changes", async () => {
+  it("re-fetches memories when the refresh button is clicked twice", async () => {
     mockFetchMemories.mockResolvedValue([]);
-    const { rerender } = render(<MemoryPanel userId="u1" agentType="travel" refreshTrigger={0} />);
+    render(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() => expect(mockFetchMemories).toHaveBeenCalledTimes(1));
 
-    rerender(<MemoryPanel userId="u1" agentType="travel" refreshTrigger={1} />);
+    fireEvent.click(screen.getByTitle(/refresh memories/i));
     await waitFor(() => expect(mockFetchMemories).toHaveBeenCalledTimes(2));
   });
 

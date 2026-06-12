@@ -1,27 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Plane, Settings, CalendarDays } from "lucide-react";
-import ChatWindow from "@/components/ChatWindow";
-import MemoryPanel from "@/components/MemoryPanel";
-import ConversationList from "@/components/ConversationList";
-import AgentSelector, { type AgentType } from "@/components/AgentSelector";
-import ErrorBoundary from "@/components/ErrorBoundary";
+import ChatWindow from "@/components/chat/ChatWindow";
+import MemoryPanel, { type MemoryPanelHandle } from "@/components/memory/MemoryPanel";
+import ConversationList, { type ConversationListHandle } from "@/components/conversations/ConversationList";
+import AgentSelector, { type AgentType } from "@/components/shared/AgentSelector";
+import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { getOrCreateUserId } from "@/lib/api";
 
-/**
- * Root page — full-height layout with conversation sidebar, chat window, and memory panel.
- */
 export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [agentType, setAgentType] = useState<AgentType>("travel");
-  const [memoryRefresh, setMemoryRefresh] = useState(0);
-  const [conversationListRefresh, setConversationListRefresh] = useState(0);
-  /** Currently open conversation. null = new (unsaved) chat. */
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  /** Incrementing this key unmounts/remounts ChatWindow, resetting all conversation state. */
   const [chatKey, setChatKey] = useState(0);
+
+  const conversationListRef = useRef<ConversationListHandle>(null);
+  const memoryPanelRef = useRef<MemoryPanelHandle>(null);
 
   useEffect(() => {
     setUserId(getOrCreateUserId());
@@ -45,12 +41,12 @@ export default function Home() {
 
   const handleConversationCreated = useCallback((id: string) => {
     setSelectedConversationId(id);
-    setConversationListRefresh((n) => n + 1);
+    conversationListRef.current?.reload();
   }, []);
 
   const handleReplyComplete = useCallback(() => {
-    setMemoryRefresh((n) => n + 1);
-    setConversationListRefresh((n) => n + 1);
+    memoryPanelRef.current?.reload();
+    conversationListRef.current?.reload();
   }, []);
 
   const handleConversationDeleted = useCallback((id: string) => {
@@ -92,10 +88,10 @@ export default function Home() {
       <div className="flex flex-1 min-h-0">
         {/* Conversation sidebar */}
         <ConversationList
+          ref={conversationListRef}
           userId={userId}
           agentType={agentType}
           selectedId={selectedConversationId}
-          refreshTrigger={conversationListRefresh}
           onSelect={handleSelectConversation}
           onNewChat={handleNewChat}
           onDelete={handleConversationDeleted}
@@ -117,7 +113,7 @@ export default function Home() {
 
         {/* Memory panel */}
         <ErrorBoundary>
-          <MemoryPanel userId={userId} agentType={agentType} refreshTrigger={memoryRefresh} />
+          <MemoryPanel ref={memoryPanelRef} userId={userId} agentType={agentType} />
         </ErrorBoundary>
       </div>
     </div>

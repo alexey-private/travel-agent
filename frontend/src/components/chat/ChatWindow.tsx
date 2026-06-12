@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Send, Loader2, Paperclip, X, FileText } from "lucide-react";
 import MessageBubble from "./MessageBubble";
-import { getRandomSuggestions } from "../data/starterSuggestions";
-import { type AgentType } from "./AgentSelector";
+import { getRandomSuggestions } from "@/data/starterSuggestions";
+import { type AgentType } from "../shared/AgentSelector";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useFileAttachments } from "@/hooks/useFileAttachments";
@@ -32,14 +32,14 @@ export default function ChatWindow({
   onConversationCreated,
   onReplyComplete,
 }: ChatWindowProps) {
-  const { messages, setMessages } = useChatHistory(userId, initialConversationId);
+  const { messages, dispatch } = useChatHistory(userId, initialConversationId);
   const { loading, send } = useStreamChat({
     userId,
     agentType,
     initialConversationId,
     onConversationCreated,
     onReplyComplete,
-    setMessages,
+    dispatch,
   });
   const {
     attachments,

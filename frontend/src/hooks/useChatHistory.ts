@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import { fetchMessages } from "@/lib/api";
-import { type Message, type AgentEvent } from "@/types/agent";
+import { type Message, type MessagesAction, type ToolStep, type AgentEvent } from "@/types/agent";
 
 function sourcesFromSteps(steps?: AgentEvent[] | null): { title: string; url: string }[] {
   if (!steps) return [];
@@ -22,11 +22,52 @@ function suggestionsFromSteps(steps?: AgentEvent[] | null): string[] {
   return found?.suggestions ?? [];
 }
 
+export function messagesReducer(state: Message[], action: MessagesAction): Message[] {
+  switch (action.type) {
+    case "RESET":
+      return action.messages;
+    case "ADD":
+      return [...state, action.message];
+    case "STREAM_TEXT":
+      return state.map((m) => m.id === action.id ? { ...m, content: m.content + action.chunk } : m);
+    case "TOOL_START":
+      return state.map((m) => {
+        if (m.id !== action.id) return m;
+        const existing = m.steps ?? [];
+        const step: ToolStep = { id: `step-${existing.length}`, tool: action.tool, input: action.input, pending: true };
+        return { ...m, steps: [...existing, step] };
+      });
+    case "TOOL_END":
+      return state.map((m) => {
+        if (m.id !== action.id) return m;
+        const steps = [...(m.steps ?? [])];
+        let lastIdx = -1;
+        for (let i = steps.length - 1; i >= 0; i--) {
+          if (steps[i].tool === action.tool && steps[i].pending) { lastIdx = i; break; }
+        }
+        if (lastIdx !== -1) {
+          steps[lastIdx] = { ...steps[lastIdx], output: action.output, error: action.error, pending: false };
+        }
+        return { ...m, steps };
+      });
+    case "SET_SOURCES":
+      return state.map((m) => m.id === action.id ? { ...m, sources: action.sources } : m);
+    case "SET_SUGGESTIONS":
+      return state.map((m) => m.id === action.id ? { ...m, suggestions: action.suggestions } : m);
+    case "MARK_DONE":
+      return state.map((m) => m.id === action.id ? { ...m, streaming: false } : m);
+    case "MARK_ERROR":
+      return state.map((m) => m.id === action.id ? { ...m, content: action.error, streaming: false } : m);
+    default:
+      return state;
+  }
+}
+
 export function useChatHistory(
   userId: string,
   initialConversationId: string | null | undefined,
-): { messages: Message[]; setMessages: React.Dispatch<React.SetStateAction<Message[]>> } {
-  const [messages, setMessages] = useState<Message[]>([]);
+): { messages: Message[]; dispatch: React.Dispatch<MessagesAction> } {
+  const [messages, dispatch] = useReducer(messagesReducer, []);
 
   useEffect(() => {
     if (!initialConversationId) return;
@@ -34,20 +75,21 @@ export function useChatHistory(
     fetchMessages(userId, initialConversationId)
       .then((history) => {
         if (ignore) return;
-        setMessages(
-          history.map((m) => ({
+        dispatch({
+          type: "RESET",
+          messages: history.map((m) => ({
             id: crypto.randomUUID(),
             role: m.role,
             content: m.content,
             sources: sourcesFromSteps(m.agent_steps),
             suggestions: suggestionsFromSteps(m.agent_steps),
           })),
-        );
+        });
       })
       .catch(() => {});
     return () => { ignore = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { messages, setMessages };
+  return { messages, dispatch };
 }
