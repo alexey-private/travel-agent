@@ -22,7 +22,7 @@ export class SearchConversationsTool extends BaseTool {
     properties: {
       query: {
         type: 'string',
-        description: 'Keywords or phrase to search for in past conversations (e.g. "Morocco", "hotel Tokyo", "visa")',
+        description: 'Keywords or phrase to search for in past conversations. Include specific place names, cities, countries (e.g. "London Paris hotel", "Morocco tour", "Barcelona flights visa"). The more specific the query, the better the results.',
       },
       userId: {
         type: 'string',
@@ -34,7 +34,7 @@ export class SearchConversationsTool extends BaseTool {
       },
       limit: {
         type: 'number',
-        description: 'Maximum number of results to return (default: 5, max: 10)',
+        description: 'Maximum number of results to return (default: 10, max: 20)',
       },
     },
     required: ['query', 'userId'],
@@ -45,13 +45,15 @@ export class SearchConversationsTool extends BaseTool {
   }
 
   async execute(input: unknown): Promise<ToolResult> {
+    console.log('[search_conversations] raw input:', JSON.stringify(input));
     const { query, userId, agentType = 'travel', limit = 5 } = input as SearchConversationsInput;
+    console.log('[search_conversations] parsed:', { query, userId, agentType, limit });
 
     if (!query?.trim()) {
       return { success: false, error: 'query is required' };
     }
 
-    const clampedLimit = Math.min(Math.max(1, limit), 10);
+    const clampedLimit = Math.min(Math.max(1, limit), 20);
 
     const results = await this.conversationService.searchConversations(userId, query.trim(), agentType, clampedLimit);
 

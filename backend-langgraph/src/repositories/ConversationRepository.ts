@@ -110,7 +110,7 @@ export class ConversationRepository extends BaseRepository {
     agentType: 'travel' | 'shopping' = 'travel',
     limit = 5,
   ): Promise<Array<{ conversationId: string; date: string; role: string; excerpt: string }>> {
-    return this.query<{ conversationId: string; date: string; role: string; excerpt: string }>(
+    const rows = await this.query<{ conversationId: string; date: string; role: string; excerpt: string }>(
       `SELECT
          m.conversation_id AS "conversationId",
          to_char(m.created_at, 'YYYY-MM-DD') AS date,
@@ -125,6 +125,7 @@ export class ConversationRepository extends BaseRepository {
        LIMIT $4`,
       [userId, agentType, JSON.stringify(queryEmbedding), limit],
     );
+    return rows;
   }
 
   async deleteConversation(conversationId: string): Promise<void> {

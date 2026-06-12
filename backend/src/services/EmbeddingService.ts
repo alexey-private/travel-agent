@@ -17,6 +17,8 @@ const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings';
 export class EmbeddingService {
   private readonly voyageApiKey: string | undefined;
   private readonly cache = new Map<string, number[]>();
+  // Serialize Voyage AI requests to avoid 429 from parallel tool calls
+  private queue: Promise<void> = Promise.resolve();
 
   constructor() {
     this.voyageApiKey = process.env.VOYAGE_API_KEY;
@@ -29,12 +31,26 @@ export class EmbeddingService {
     const cached = this.cache.get(text);
     if (cached) return cached;
 
-    const result = this.voyageApiKey
-      ? await this.embedWithVoyage(text)
-      : this.randomVector();
+    // Chain onto the queue so concurrent calls are serialized
+    let resolve!: () => void;
+    const next = new Promise<void>(r => { resolve = r; });
+    const prev = this.queue;
+    this.queue = next;
 
-    this.cache.set(text, result);
-    return result;
+    await prev;
+    try {
+      const already = this.cache.get(text);
+      if (already) return already;
+
+      const result = this.voyageApiKey
+        ? await this.embedWithVoyage(text)
+        : this.randomVector();
+
+      this.cache.set(text, result);
+      return result;
+    } finally {
+      resolve();
+    }
   }
 
   private async embedWithVoyage(text: string, attempt = 0): Promise<number[]> {
