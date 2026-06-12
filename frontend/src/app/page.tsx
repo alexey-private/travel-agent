@@ -116,7 +116,9 @@ export default function Home() {
         </main>
 
         {/* Memory panel */}
-        <MemoryPanel userId={userId} agentType={agentType} refreshTrigger={memoryRefresh} />
+        <ErrorBoundary>
+          <MemoryPanel userId={userId} agentType={agentType} refreshTrigger={memoryRefresh} />
+        </ErrorBoundary>
       </div>
     </div>
   );

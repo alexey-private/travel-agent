@@ -30,8 +30,10 @@ export function useChatHistory(
 
   useEffect(() => {
     if (!initialConversationId) return;
+    let ignore = false;
     fetchMessages(userId, initialConversationId)
       .then((history) => {
+        if (ignore) return;
         setMessages(
           history.map((m) => ({
             id: crypto.randomUUID(),
@@ -43,6 +45,7 @@ export function useChatHistory(
         );
       })
       .catch(() => {});
+    return () => { ignore = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

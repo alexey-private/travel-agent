@@ -103,6 +103,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const requestId = request.id as string;
       request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
 
+      // P0-2: persist user message before stream so history survives mid-stream crashes
+      await conversationService.saveMessage(conversationId, 'user', message, undefined, undefined, internalUserId, agentType);
+
       // Hijack the connection so Fastify does not finalise the response.
       // CORS headers must be set manually here because reply.hijack() bypasses
       // the @fastify/cors onSend hook.
@@ -117,16 +120,17 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         'X-Request-Id': requestId,
       });
 
-      // Send conversationId immediately so the client can track the session
-      raw.write(`data: ${JSON.stringify({ type: 'conversation_id', conversationId })}\n\n`);
+      const sse = (payload: AgentEvent | { type: 'error'; message: string } | { type: 'sources'; sources: Source[] }) =>
+        raw.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+      sse({ type: 'conversation_id', conversationId } as AgentEvent);
 
       // Show RAG context in the UI so it's visible during demos/testing
       if (ragContext) {
-        raw.write(`data: ${JSON.stringify({ type: 'tool_start', tool: 'knowledge_base', input: { query: message } })}\n\n`);
-        raw.write(`data: ${JSON.stringify({ type: 'tool_end', tool: 'knowledge_base', output: ragContext })}\n\n`);
+        sse({ type: 'tool_start', tool: 'knowledge_base', input: { query: message } } as AgentEvent);
+        sse({ type: 'tool_end', tool: 'knowledge_base', output: ragContext } as AgentEvent);
       }
 
-      //
       const context = new AgentContext(
         internalUserId,
         conversationId,
@@ -145,9 +149,16 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const agentSteps: AgentEvent[] = [];
       let assistantText = '';
       const sources: Source[] = [];
-      // 
+
+      // P0-3: abort on client disconnect; P2-14: abort after 60 s to prevent zombie streams
+      const ac = new AbortController();
+      let timedOut = false;
+      request.raw.once('close', () => ac.abort());
+      const timeoutId = setTimeout(() => { timedOut = true; ac.abort(); }, 60_000);
+
       try {
         for await (const event of agent.run(context)) {
+          if (ac.signal.aborted) break;
           agentSteps.push(event);
           if (event.type === 'text') {
             assistantText += event.content;
@@ -161,40 +172,47 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
           }
           // Delay 'done' until sources and suggestions are emitted
           if (event.type !== 'done') {
-            raw.write(`data: ${JSON.stringify(event)}\n\n`);
+            sse(event);
           }
         }
 
-        // Emit sources
-        if (sources.length > 0) {
-          raw.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
-        }
+        if (!ac.signal.aborted) {
+          if (sources.length > 0) {
+            sse({ type: 'sources', sources });
+          }
+          sse({ type: 'done' } as AgentEvent);
 
-        raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`); // client renders response immediately
-
-        // Suggestions require a separate LLM call — emit after done so they don't delay rendering
-        const suggestions = await suggestionService.getSuggestions(message, assistantText);
-        if (suggestions.length > 0) {
-          raw.write(`data: ${JSON.stringify({ type: 'suggestions', suggestions })}\n\n`);
-          agentSteps.push({ type: 'suggestions', suggestions });
+          // Suggestions require a separate LLM call — emit after done so they don't delay rendering
+          const suggestions = await suggestionService.getSuggestions(message, assistantText);
+          if (suggestions.length > 0) {
+            sse({ type: 'suggestions', suggestions } as AgentEvent);
+            agentSteps.push({ type: 'suggestions', suggestions });
+          }
         }
       } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        request.log.error({ requestId, err }, 'agent error');
-        raw.write(`data: ${JSON.stringify({ type: 'error', message: errMsg })}\n\n`);
-        raw.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+        if (timedOut) {
+          request.log.warn({ requestId }, 'agent execution timed out');
+          sse({ type: 'error', message: 'Request timed out' });
+          sse({ type: 'done' } as AgentEvent);
+        } else if (!ac.signal.aborted) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          request.log.error({ requestId, err }, 'agent error');
+          sse({ type: 'error', message: errMsg });
+          sse({ type: 'done' } as AgentEvent);
+        }
+      } finally {
+        clearTimeout(timeoutId);
+        // P0-4: always close the SSE stream regardless of success, error, or disconnect
+        raw.end();
       }
 
-      // Persist conversation and memories before closing the stream so that
-      // the client's refresh (triggered by 'done') sees the saved data immediately.
-      await conversationService.saveMessage(conversationId, 'user', message, undefined, undefined, internalUserId, agentType);
       await Promise.allSettled([
-        conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, undefined, internalUserId, agentType),
+        assistantText
+          ? conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, undefined, internalUserId, agentType)
+          : Promise.resolve(),
         memoryService.extractAndSaveMemories(internalUserId, message, agentType),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');
-
-      raw.end();
     },
   );
 }
