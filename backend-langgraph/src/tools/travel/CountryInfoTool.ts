@@ -1,11 +1,13 @@
 import { BaseTool } from '../BaseTool';
 import { ToolResult, JSONSchema } from '../../types/tools';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const worldCountries: WorldCountry[] = require('world-countries');
 
 interface CountryInfoInput {
   country: string;
 }
 
-interface RestCountry {
+interface WorldCountry {
   name: { common: string; official: string };
   capital?: string[];
   region: string;
@@ -16,6 +18,21 @@ interface RestCountry {
   flag: string;
   population: number;
   continents: string[];
+  altSpellings: string[];
+  cca2: string;
+  cca3: string;
+}
+
+function findCountry(query: string): WorldCountry | undefined {
+  const q = query.trim().toLowerCase();
+  return worldCountries.find(
+    (c) =>
+      c.name.common.toLowerCase() === q ||
+      c.name.official.toLowerCase() === q ||
+      c.cca2.toLowerCase() === q ||
+      c.cca3.toLowerCase() === q ||
+      c.altSpellings.some((s) => s.toLowerCase() === q),
+  );
 }
 
 export class CountryInfoTool extends BaseTool {
@@ -37,45 +54,32 @@ export class CountryInfoTool extends BaseTool {
   async execute(input: unknown): Promise<ToolResult> {
     const { country } = input as CountryInfoInput;
 
-    try {
-      const url = `https://restcountries.com/v3.1/name/${encodeURIComponent(country)}?fields=name,capital,region,subregion,languages,currencies,timezones,flag,population,continents`;
-      const response = await fetch(url);
-
-      if (response.status === 404) {
-        return { success: false, error: `Country not found: ${country}` };
-      }
-
-      if (!response.ok) {
-        return { success: false, error: `RestCountries API error ${response.status}` };
-      }
-
-      const data = (await response.json()) as RestCountry[];
-      const c = data[0];
-
-      const currencies = c.currencies
-        ? Object.values(c.currencies).map((v) => `${v.name} (${v.symbol})`)
-        : [];
-
-      const languages = c.languages ? Object.values(c.languages) : [];
-
-      return {
-        success: true,
-        data: {
-          name: c.name.common,
-          official_name: c.name.official,
-          capital: c.capital?.[0] ?? null,
-          region: c.region,
-          subregion: c.subregion ?? null,
-          continents: c.continents,
-          languages,
-          currencies,
-          timezones: c.timezones,
-          flag: c.flag,
-          population: c.population,
-        },
-      };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    const c = findCountry(country);
+    if (!c) {
+      return { success: false, error: `Country not found: ${country}` };
     }
+
+    const currencies = c.currencies
+      ? Object.values(c.currencies).map((v) => `${v.name} (${v.symbol})`)
+      : [];
+
+    const languages = c.languages ? Object.values(c.languages) : [];
+
+    return {
+      success: true,
+      data: {
+        name: c.name.common,
+        official_name: c.name.official,
+        capital: c.capital?.[0] ?? null,
+        region: c.region,
+        subregion: c.subregion ?? null,
+        continents: c.continents,
+        languages,
+        currencies,
+        timezones: c.timezones,
+        flag: c.flag,
+        population: c.population,
+      },
+    };
   }
 }
