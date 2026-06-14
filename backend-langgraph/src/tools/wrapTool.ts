@@ -57,7 +57,10 @@ export function wrapTool(baseTool: BaseTool): DynamicStructuredTool {
     func: async (input: Record<string, unknown>) => {
       const result = await baseTool.execute(input);
       if (!result.success) {
-        throw new Error(result.error ?? 'Tool execution failed');
+        // Return error string instead of throwing so LangChain fires on_tool_end
+        // (not on_tool_error which event_stream.js doesn't emit), keeping the
+        // frontend spinner from hanging forever.
+        return `Error: ${result.error ?? 'Tool execution failed'}`;
       }
       return typeof result.data === 'string'
         ? result.data

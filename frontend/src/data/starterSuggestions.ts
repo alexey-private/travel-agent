@@ -1,14 +1,24 @@
-export const ALL_SUGGESTIONS: Record<"travel" | "shopping", string[]> = {
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function monthName(offsetMonths = 0): string {
+  const d = new Date();
+  return MONTH_NAMES[(d.getMonth() + offsetMonths) % 12];
+}
+
+const ALL_SUGGESTIONS_RAW: Record<"travel" | "shopping", string[]> = {
   travel: [
     // search_flights
-    "Find flights from New York to Rome in June",
+    `Find flights from New York to Rome in ${monthName(2)}`,
     "Cheapest flights from London to Bangkok next month",
     // search_hotels
-    "Find hotels in Barcelona for 5 nights in July",
+    `Find hotels in Barcelona for 5 nights in ${monthName(1)}`,
     "Best 4-star hotels in Kyoto under $150/night",
     // search_car_rentals
-    "Rent an SUV in Lisbon for a week in August",
-    "Cheapest car rental in Miami from June 10 to 17",
+    `Rent an SUV in Lisbon for a week in ${monthName(2)}`,
+    `Cheapest car rental in Miami from ${monthName(1)} 10 to 17`,
     // search_tours
     "Find cultural tours in Morocco for 7 days",
     "Best adventure tours in New Zealand under $2000",
@@ -19,7 +29,7 @@ export const ALL_SUGGESTIONS: Record<"travel" | "shopping", string[]> = {
     "Do I need a visa for Thailand from the US?",
     "Visa requirements for India with a UK passport",
     // manage_calendar
-    "Add my Paris trip (June 5–12) to my travel calendar",
+    `Add my Paris trip (${monthName(1)} 5–12) to my travel calendar`,
     "Remind me to book a hotel for my Tokyo trip",
     // get_weather
     "Best time to visit Bali — weather & crowds?",
@@ -65,8 +75,10 @@ export const ALL_SUGGESTIONS: Record<"travel" | "shopping", string[]> = {
   ],
 };
 
+export const ALL_SUGGESTIONS = ALL_SUGGESTIONS_RAW;
+
 export function getRandomSuggestions(count: number, agentType: "travel" | "shopping" = "travel"): string[] {
-  const pool = ALL_SUGGESTIONS[agentType];
+  const pool = ALL_SUGGESTIONS_RAW[agentType];
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }

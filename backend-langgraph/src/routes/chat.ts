@@ -221,6 +221,9 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
               if (outputRaw.tool_call_id) {
                 currentToolResults.push({ tool_call_id: outputRaw.tool_call_id, name: toolName, content: rawContent });
               }
+            } else if (typeof outputRaw === 'string' && outputRaw.startsWith('Error:')) {
+              // wrapTool returns "Error: ..." string on failure (throwing would suppress on_tool_end)
+              error = outputRaw;
             }
 
             const ev: AgentEvent = { type: 'tool_end', tool: toolName, output, error };
