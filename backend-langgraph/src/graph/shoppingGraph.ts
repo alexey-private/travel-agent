@@ -17,22 +17,14 @@ import { SearchConversationsTool } from '../tools/SearchConversationsTool';
 import { ConversationService } from '../services/ConversationService';
 import { RAGService } from '../services/RAGService';
 
-type CompiledShoppingGraph = ReturnType<typeof buildAgentGraph>;
-let _shoppingGraph: CompiledShoppingGraph | null = null;
+export type CompiledShoppingGraph = ReturnType<typeof buildAgentGraph>;
 
-/**
- * Initialises the shopping agent singleton graph.
- * Call once at server startup after providers are ready.
- * All tools and the compiled StateGraph are reused across every request.
- * Per-request context (memories, sessionId, taskListName) is injected via
- * AgentState and read by the prompt builder inside reasonNode.
- */
-export function initShoppingGraph(
+export function createShoppingGraph(
   ragService: RAGService,
   calendarProvider: CalendarProvider,
   tasksProvider: TasksProvider,
   conversationService: ConversationService,
-): void {
+): CompiledShoppingGraph {
   const tools = [
     new ProductSearchTool(ragService),
     new PriceCompareTool(),
@@ -47,18 +39,9 @@ export function initShoppingGraph(
     new SearchConversationsTool(conversationService),
   ];
 
-  _shoppingGraph = buildAgentGraph(
+  return buildAgentGraph(
     tools,
     (state: AgentStateType) =>
       buildShoppingAgentSystemPrompt(state.memories ?? [], state.userId, state.taskListName, state.ragContext),
   );
-}
-
-/**
- * Returns the pre-compiled shopping agent graph.
- * Throws if initShoppingGraph() was not called at startup.
- */
-export function getShoppingGraph(): CompiledShoppingGraph {
-  if (!_shoppingGraph) throw new Error('Shopping graph not initialised — call initShoppingGraph() first');
-  return _shoppingGraph;
 }

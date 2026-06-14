@@ -27,8 +27,8 @@ import { ICloudCalendarProvider } from './tools/providers/ICloudCalendarProvider
 import { ICloudRemindersProvider } from './tools/providers/ICloudRemindersProvider';
 import { UserAwareCalendarProvider } from './tools/providers/UserAwareCalendarProvider';
 import { UserAwareTasksProvider } from './tools/providers/UserAwareTasksProvider';
-import { initTravelGraph } from './graph/travelGraph';
-import { initShoppingGraph } from './graph/shoppingGraph';
+import { createTravelGraph } from './graph/travelGraph';
+import { createShoppingGraph } from './graph/shoppingGraph';
 
 let _reqCounter = 0;
 
@@ -84,9 +84,9 @@ async function bootstrap(): Promise<void> {
   const calendarProvider = new UserAwareCalendarProvider(googleCalendarProvider, icloudCalendarProvider, prefRepo);
   const tasksProvider = new UserAwareTasksProvider(googleTasksProvider, icloudRemindersProvider, prefRepo);
 
-  // Compile both agent graphs once — reused across all requests.
-  initTravelGraph(calendarProvider, tasksProvider, conversationService);
-  initShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService);
+  // Compile both agent graphs once — reused across all requests via fastify.decorate.
+  fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService));
+  fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService));
   fastify.log.info('Agent graphs initialised');
 
   await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, prefRepo });

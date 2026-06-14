@@ -41,15 +41,6 @@ jest.mock('@langchain/openai', () => ({ ChatOpenAI: jest.fn() }));
 const mockTravelStreamEvents = jest.fn();
 const mockShoppingStreamEvents = jest.fn();
 
-jest.mock('@/graph/travelGraph', () => ({
-  initTravelGraph: jest.fn(),
-  getTravelGraph: jest.fn(() => ({ streamEvents: mockTravelStreamEvents })),
-}));
-jest.mock('@/graph/shoppingGraph', () => ({
-  initShoppingGraph: jest.fn(),
-  getShoppingGraph: jest.fn(() => ({ streamEvents: mockShoppingStreamEvents })),
-}));
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function* emitText(text: string) {
@@ -76,6 +67,10 @@ async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstan
   mockShoppingStreamEvents.mockImplementation(streamEvents);
 
   const app = Fastify({ logger: false });
+
+  // Inject compiled graphs via Fastify DI (mirrors how index.ts wires them at startup)
+  app.decorate('travelGraph', { streamEvents: mockTravelStreamEvents });
+  app.decorate('shoppingGraph', { streamEvents: mockShoppingStreamEvents });
 
   const userService = {
     findOrCreateUser: jest.fn().mockResolvedValue('internal-user-uuid'),

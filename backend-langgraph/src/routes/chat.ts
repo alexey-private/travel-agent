@@ -6,8 +6,6 @@ import { ConversationService } from '../services/ConversationService';
 import { MemoryService } from '../services/MemoryService';
 import { RAGService } from '../services/RAGService';
 import { SuggestionService } from '../services/SuggestionService';
-import { getTravelGraph } from '../graph/travelGraph';
-import { getShoppingGraph } from '../graph/shoppingGraph';
 import { historyToMessages } from '../graph/history';
 import { AgentEvent } from '../types/agent';
 import { LMRound, LMToolCall, LMToolResult } from '../types/lm';
@@ -143,7 +141,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const initialMessages = [...historyMessages, humanMsg];
 
       const taskListName = agentType === 'shopping' ? userPrefs.shoppingTaskListName : userPrefs.taskListName;
-      const graph = agentType === 'shopping' ? getShoppingGraph() : getTravelGraph();
+      const graph = agentType === 'shopping' ? fastify.shoppingGraph : fastify.travelGraph;
 
       // P0-3: abort the graph when the client disconnects to stop wasting LLM tokens
       // P2-14: also abort after GRAPH_TIMEOUT_MS to prevent zombie streams on slow APIs

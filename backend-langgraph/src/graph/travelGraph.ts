@@ -18,21 +18,13 @@ import { TasksTool } from '../tools/TasksTool';
 import { SearchConversationsTool } from '../tools/SearchConversationsTool';
 import { ConversationService } from '../services/ConversationService';
 
-type CompiledTravelGraph = ReturnType<typeof buildAgentGraph>;
-let _travelGraph: CompiledTravelGraph | null = null;
+export type CompiledTravelGraph = ReturnType<typeof buildAgentGraph>;
 
-/**
- * Initialises the travel agent singleton graph.
- * Call once at server startup after providers are ready.
- * All tools and the compiled StateGraph are reused across every request.
- * Per-request context (memories, sessionId, taskListName) is injected via
- * AgentState and read by the prompt builder inside reasonNode.
- */
-export function initTravelGraph(
+export function createTravelGraph(
   calendarProvider: CalendarProvider,
   tasksProvider: TasksProvider,
   conversationService: ConversationService,
-): void {
+): CompiledTravelGraph {
   const tools = [
     new WebSearchTool(),
     new WeatherTool(),
@@ -49,18 +41,9 @@ export function initTravelGraph(
     new SearchConversationsTool(conversationService),
   ];
 
-  _travelGraph = buildAgentGraph(
+  return buildAgentGraph(
     tools,
     (state: AgentStateType) =>
       buildTravelAgentSystemPrompt(state.memories ?? [], state.userId, state.taskListName, state.ragContext),
   );
-}
-
-/**
- * Returns the pre-compiled travel agent graph.
- * Throws if initTravelGraph() was not called at startup.
- */
-export function getTravelGraph(): CompiledTravelGraph {
-  if (!_travelGraph) throw new Error('Travel graph not initialised — call initTravelGraph() first');
-  return _travelGraph;
 }

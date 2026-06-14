@@ -168,7 +168,7 @@ Fastify (Node.js)
 
 ### Graph topology
 
-Both Travel and Shopping agents share the same graph shape, compiled once per request by `buildAgentGraph`:
+Both Travel and Shopping agents share the same graph shape, compiled once at startup by `buildAgentGraph` and registered on the Fastify instance via `fastify.decorate`:
 
 ```
 START → [reason] → shouldContinue → [act] → [reason] → …
@@ -208,8 +208,8 @@ POST /api/chat
   │
   ├─ Promise.all([memories, history, ragContext])   ← parallel DB queries
   │
-  ├─ buildTravelGraph(memories)  /  buildShoppingGraph(ragService, memories)
-  │     └─ buildAgentGraph(tools, systemPrompt)
+  ├─ fastify.travelGraph / fastify.shoppingGraph    ← compiled once at startup, reused here
+  │     (built via createTravelGraph / createShoppingGraph → buildAgentGraph)
   │           ├─ tools.map(wrapTool)          ← BaseTool JSONSchema → Zod (required by ToolNode)
   │           ├─ createReasonNode(...)         ← model = createModel('full').bindTools(tools)
   │           ├─ new ToolNode(tools)           ← built-in executor

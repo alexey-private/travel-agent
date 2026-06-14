@@ -1,11 +1,17 @@
 /**
- * Unit tests for the shoppingGraph singleton (init/get pattern).
+ * Unit tests for the shopping graph factory (createShoppingGraph).
+ *
+ * The factory compiles a new graph on every call — no module-level singleton.
+ * At server startup index.ts calls it once and stores the result via
+ * fastify.decorate('shoppingGraph', ...). These tests verify the factory's
+ * output and the prompt builder it passes to buildAgentGraph.
  */
 
-import { initShoppingGraph, getShoppingGraph } from '@/graph/shoppingGraph';
+import { createShoppingGraph } from '@/graph/shoppingGraph';
 import { buildAgentGraph } from '@/graph/buildGraph';
 import type { CalendarProvider } from '@/tools/providers/CalendarProvider';
 import type { TasksProvider } from '@/tools/providers/TasksProvider';
+import type { ConversationService } from '@/services/ConversationService';
 import type { RAGService } from '@/services/RAGService';
 import type { AgentStateType } from '@/graph/state';
 
@@ -32,7 +38,8 @@ jest.mock('@langchain/anthropic', () => ({
 }));
 jest.mock('@langchain/openai', () => ({ ChatOpenAI: jest.fn() }));
 
-// Note: jest.mock is hoisted — factory must NOT reference outer `const` variables (TDZ).
+// Mock buildAgentGraph so we never compile a real LangGraph StateGraph in tests.
+// jest.mock is hoisted — return value is set per test/beforeAll instead.
 jest.mock('@/graph/buildGraph', () => ({
   buildAgentGraph: jest.fn(),
 }));
@@ -45,6 +52,7 @@ const mockCompiledGraph = { streamEvents: jest.fn(), invoke: jest.fn() };
 const mockRag = { buildRagContext: jest.fn(), retrieve: jest.fn() } as unknown as RAGService;
 const mockCalendar = {} as CalendarProvider;
 const mockTasks = {} as TasksProvider;
+const mockConversationService = {} as ConversationService;
 
 function makeState(overrides: Partial<AgentStateType> = {}): AgentStateType {
   return {
@@ -62,33 +70,26 @@ function makeState(overrides: Partial<AgentStateType> = {}): AgentStateType {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('shoppingGraph singleton', () => {
-  it('getShoppingGraph throws before initShoppingGraph is called', () => {
-    expect(() => getShoppingGraph()).toThrow('not initialised');
-  });
-
-  describe('after initShoppingGraph', () => {
+describe('createShoppingGraph', () => {
+  describe('graph construction', () => {
     // clearMocks:true in jest.config wipes mock.calls before each it, so capture
-    // buildAgentGraph's call arguments in beforeAll while they're still available.
+    // buildAgentGraph's call arguments here in beforeAll while they're still available.
+    let result: ReturnType<typeof createShoppingGraph>;
     let capturedBuildPrompt: (state: AgentStateType) => string;
     let buildAgentGraphCallCount: number;
 
     beforeAll(() => {
       mockBuildAgentGraph.mockReturnValue(mockCompiledGraph);
-      initShoppingGraph(mockRag, mockCalendar, mockTasks);
+      result = createShoppingGraph(mockRag, mockCalendar, mockTasks, mockConversationService);
       buildAgentGraphCallCount = mockBuildAgentGraph.mock.calls.length;
       [, capturedBuildPrompt] = mockBuildAgentGraph.mock.calls[0];
     });
 
     it('returns the compiled graph', () => {
-      expect(getShoppingGraph()).toBe(mockCompiledGraph);
+      expect(result).toBe(mockCompiledGraph);
     });
 
-    it('is a singleton — same reference on repeated calls', () => {
-      expect(getShoppingGraph()).toBe(getShoppingGraph());
-    });
-
-    it('calls buildAgentGraph exactly once', () => {
+    it('calls buildAgentGraph exactly once per invocation', () => {
       expect(buildAgentGraphCallCount).toBe(1);
     });
 
@@ -111,11 +112,21 @@ describe('shoppingGraph singleton', () => {
       expect(capturedBuildPrompt(state)).toContain('My Wishlist Tasks');
     });
 
-    it('reinitialisation replaces the singleton', () => {
-      const newGraph = { streamEvents: jest.fn() };
-      mockBuildAgentGraph.mockReturnValueOnce(newGraph);
-      initShoppingGraph(mockRag, mockCalendar, mockTasks);
-      expect(getShoppingGraph()).toBe(newGraph);
+    it('prompt builder produces different output when state changes', () => {
+      const stateA = makeState({ memories: [{ key: 'budget_range', value: 'luxury' }] });
+      const stateB = makeState({ memories: [{ key: 'budget_range', value: 'budget' }] });
+      expect(capturedBuildPrompt(stateA)).not.toBe(capturedBuildPrompt(stateB));
     });
+  });
+
+  it('each call produces an independent graph instance', () => {
+    const g1 = { streamEvents: jest.fn() };
+    const g2 = { streamEvents: jest.fn() };
+    mockBuildAgentGraph.mockReturnValueOnce(g1).mockReturnValueOnce(g2);
+    const graph1 = createShoppingGraph(mockRag, mockCalendar, mockTasks, mockConversationService);
+    const graph2 = createShoppingGraph(mockRag, mockCalendar, mockTasks, mockConversationService);
+    expect(graph1).toBe(g1);
+    expect(graph2).toBe(g2);
+    expect(graph1).not.toBe(graph2);
   });
 });

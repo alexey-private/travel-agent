@@ -32,9 +32,9 @@ bootstrap()
   │     ├── UserAwareCalendarProvider (delegates to Google or Apple)
   │     └── UserAwareTasksProvider (delegates to Google or Apple)
   │
-  ├── Compile agent graphs (once, reused across all requests):
-  │     ├── initTravelGraph(calendarProvider, tasksProvider, conversationService)
-  │     └── initShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService)
+  ├── Compile agent graphs (once, reused across all requests via fastify.decorate):
+  │     ├── fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService))
+  │     └── fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService))
   │
   ├── Register routes:
   │     ├── POST /api/chat     → chatRoutes
@@ -59,9 +59,9 @@ const embeddingService = new EmbeddingService();
 const userService = new UserService(pool);
 const conversationService = new ConversationService(pool, embeddingService);
 
-// Lines 88-89: compile graphs (once!)
-initTravelGraph(calendarProvider, tasksProvider, conversationService);
-initShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService);
+// Lines 88-89: compile graphs (once!) and expose via Fastify DI
+fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService));
+fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService));
 
 // Line 92: register chatRoutes with injected dependencies
 await fastify.register(chatRoutes, {
@@ -157,7 +157,7 @@ const initialMessages = [...historyMessages, humanMsg];
 ### 3e. Run graph + SSE streaming
 
 ```ts
-const graph = agentType === 'shopping' ? getShoppingGraph() : getTravelGraph();
+const graph = agentType === 'shopping' ? fastify.shoppingGraph : fastify.travelGraph;
 
 for await (const event of graph.streamEvents(
   { messages: initialMessages, userId, sessionId, conversationId, agentType, memories, taskListName, ragContext },

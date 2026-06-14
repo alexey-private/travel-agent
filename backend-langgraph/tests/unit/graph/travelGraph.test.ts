@@ -1,15 +1,17 @@
 /**
- * Unit tests for the travelGraph singleton (init/get pattern).
+ * Unit tests for the travel graph factory (createTravelGraph).
  *
- * The module-level _travelGraph variable starts null when the module is first loaded
- * by Jest. Tests are ordered so that the "throws before init" case runs first,
- * then a shared beforeAll calls initTravelGraph once for the remaining tests.
+ * The factory compiles a new graph on every call — no module-level singleton.
+ * At server startup index.ts calls it once and stores the result via
+ * fastify.decorate('travelGraph', ...). These tests verify the factory's
+ * output and the prompt builder it passes to buildAgentGraph.
  */
 
-import { initTravelGraph, getTravelGraph } from '@/graph/travelGraph';
+import { createTravelGraph } from '@/graph/travelGraph';
 import { buildAgentGraph } from '@/graph/buildGraph';
 import type { CalendarProvider } from '@/tools/providers/CalendarProvider';
 import type { TasksProvider } from '@/tools/providers/TasksProvider';
+import type { ConversationService } from '@/services/ConversationService';
 import type { AgentStateType } from '@/graph/state';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -36,9 +38,8 @@ jest.mock('@langchain/anthropic', () => ({
 }));
 jest.mock('@langchain/openai', () => ({ ChatOpenAI: jest.fn() }));
 
-// Mock buildAgentGraph so we never actually compile a LangGraph StateGraph in tests.
-// Note: jest.mock is hoisted — the factory must NOT reference outer `const` variables
-// (they are in TDZ when the factory runs). Return value is set in beforeAll instead.
+// Mock buildAgentGraph so we never compile a real LangGraph StateGraph in tests.
+// jest.mock is hoisted — return value is set per test/beforeAll instead.
 jest.mock('@/graph/buildGraph', () => ({
   buildAgentGraph: jest.fn(),
 }));
@@ -50,6 +51,7 @@ const mockCompiledGraph = { streamEvents: jest.fn(), invoke: jest.fn() };
 
 const mockCalendar = {} as CalendarProvider;
 const mockTasks = {} as TasksProvider;
+const mockConversationService = {} as ConversationService;
 
 function makeState(overrides: Partial<AgentStateType> = {}): AgentStateType {
   return {
@@ -67,34 +69,26 @@ function makeState(overrides: Partial<AgentStateType> = {}): AgentStateType {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('travelGraph singleton', () => {
-  // This test MUST run first — the module starts with _travelGraph = null.
-  it('getTravelGraph throws before initTravelGraph is called', () => {
-    expect(() => getTravelGraph()).toThrow('not initialised');
-  });
-
-  describe('after initTravelGraph', () => {
+describe('createTravelGraph', () => {
+  describe('graph construction', () => {
     // clearMocks:true in jest.config wipes mock.calls before each it, so capture
     // buildAgentGraph's call arguments here in beforeAll while they're still available.
+    let result: ReturnType<typeof createTravelGraph>;
     let capturedBuildPrompt: (state: AgentStateType) => string;
     let buildAgentGraphCallCount: number;
 
     beforeAll(() => {
       mockBuildAgentGraph.mockReturnValue(mockCompiledGraph);
-      initTravelGraph(mockCalendar, mockTasks);
+      result = createTravelGraph(mockCalendar, mockTasks, mockConversationService);
       buildAgentGraphCallCount = mockBuildAgentGraph.mock.calls.length;
       [, capturedBuildPrompt] = mockBuildAgentGraph.mock.calls[0];
     });
 
     it('returns the compiled graph', () => {
-      expect(getTravelGraph()).toBe(mockCompiledGraph);
+      expect(result).toBe(mockCompiledGraph);
     });
 
-    it('is a singleton — same reference on repeated calls', () => {
-      expect(getTravelGraph()).toBe(getTravelGraph());
-    });
-
-    it('calls buildAgentGraph exactly once', () => {
+    it('calls buildAgentGraph exactly once per invocation', () => {
       expect(buildAgentGraphCallCount).toBe(1);
     });
 
@@ -122,12 +116,16 @@ describe('travelGraph singleton', () => {
       const stateB = makeState({ memories: [{ key: 'airline', value: 'United' }] });
       expect(capturedBuildPrompt(stateA)).not.toBe(capturedBuildPrompt(stateB));
     });
+  });
 
-    it('reinitialisation replaces the singleton', () => {
-      const newGraph = { streamEvents: jest.fn() };
-      mockBuildAgentGraph.mockReturnValueOnce(newGraph);
-      initTravelGraph(mockCalendar, mockTasks);
-      expect(getTravelGraph()).toBe(newGraph);
-    });
+  it('each call produces an independent graph instance', () => {
+    const g1 = { streamEvents: jest.fn() };
+    const g2 = { streamEvents: jest.fn() };
+    mockBuildAgentGraph.mockReturnValueOnce(g1).mockReturnValueOnce(g2);
+    const graph1 = createTravelGraph(mockCalendar, mockTasks, mockConversationService);
+    const graph2 = createTravelGraph(mockCalendar, mockTasks, mockConversationService);
+    expect(graph1).toBe(g1);
+    expect(graph2).toBe(g2);
+    expect(graph1).not.toBe(graph2);
   });
 });
