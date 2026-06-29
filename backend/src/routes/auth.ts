@@ -25,8 +25,8 @@ export async function authRoutes(
   fastify.get<{ Querystring: { userId?: string } }>('/auth/google/status', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ connected: false, error: 'userId required' });
-    const internalId = await userService.findOrCreateUser(userId);
-    const tokens = await tokenRepo.get(internalId);
+    await userService.findOrCreateUser(userId); // ensure user row exists
+    const tokens = await tokenRepo.get(userId);
     return { connected: !!tokens };
   });
 
@@ -69,8 +69,8 @@ export async function authRoutes(
         return reply.code(400).send({ error: 'Incomplete tokens from Google' });
       }
 
-      const internalId = await userService.findOrCreateUser(userId);
-      await tokenRepo.save(internalId, {
+      await userService.findOrCreateUser(userId); // ensure user row exists
+      await tokenRepo.save(userId, {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiryDate: tokens.expiry_date ?? Date.now() + 3600_000,
@@ -86,8 +86,7 @@ export async function authRoutes(
   fastify.delete<{ Querystring: { userId?: string } }>('/auth/google/disconnect', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId is required' });
-    const internalId = await userService.findOrCreateUser(userId);
-    await tokenRepo.delete(internalId);
+    await tokenRepo.delete(userId);
     return { disconnected: true };
   });
 }
