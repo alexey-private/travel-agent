@@ -2,8 +2,10 @@ import type { Bot } from 'grammy';
 import type { BotContext } from './types';
 import { streamChat, type Attachment } from './sse-client';
 import { setCalendarDispatch } from './commands/calendar';
+import { setTasksDispatch } from './commands/tasks';
 import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
+import { renderHtml } from './render';
 
 const MAX_TG_LENGTH = 4096;
 const EDIT_THROTTLE_MS = 1000;
@@ -95,9 +97,11 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
     clearInterval(typingInterval);
 
     const chunks = splitMessage(accumulated || '(no response)');
-    await ctx.api.editMessageText(chat.id, sent.message_id, chunks[0]).catch(() => {});
+    await ctx.api
+      .editMessageText(chat.id, sent.message_id, renderHtml(chunks[0]), { parse_mode: 'HTML' })
+      .catch(() => {});
     for (let i = 1; i < chunks.length; i++) {
-      await ctx.reply(chunks[i]);
+      await ctx.reply(renderHtml(chunks[i]), { parse_mode: 'HTML' });
     }
 
     // Show dynamic follow-up suggestions as inline keyboard
@@ -135,6 +139,7 @@ async function downloadTelegramFile(fileId: string, ctx: BotContext): Promise<{ 
 
 export function registerChatHandler(bot: Bot<BotContext>): void {
   setCalendarDispatch(handleChatMessage);
+  setTasksDispatch(handleChatMessage);
 
   // Document handler — PDF and plain text files
   bot.on('message:document', async (ctx) => {

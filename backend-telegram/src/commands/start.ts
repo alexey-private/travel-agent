@@ -56,6 +56,7 @@ export function registerStartCommand(bot: Bot<BotContext>): void {
       `/shopping — switch to Shopping Agent\n` +
       `/mode — show current mode\n` +
       `/calendar — show upcoming events\n` +
+      `/tasks — show your task list\n` +
       `/connect — link your Google account\n` +
       `/clear — reset conversation\n\n` +
       `Or pick a quick example:`,

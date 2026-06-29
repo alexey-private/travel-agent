@@ -25,6 +25,7 @@ import { registerAgentTypeCommands } from './commands/agent-type';
 import { registerClearCommand } from './commands/clear';
 import { registerConnectCommand } from './commands/connect';
 import { registerCalendarCommand } from './commands/calendar';
+import { registerTasksCommand } from './commands/tasks';
 import { registerModeCommand } from './commands/mode';
 import { registerChatHandler, handleChatMessage } from './chat.handler';
 
@@ -33,6 +34,7 @@ registerAgentTypeCommands(bot);
 registerClearCommand(bot);
 registerConnectCommand(bot);
 registerCalendarCommand(bot);
+registerTasksCommand(bot);
 registerModeCommand(bot);
 
 // Inline keyboard: suggestion buttons (data = "sugg:<index>")
@@ -52,6 +54,21 @@ bot.catch((err) => {
   console.error('Unhandled bot error:', err.message, err.stack);
 });
 
+const BOT_COMMANDS = [
+  { command: 'start',    description: 'Show welcome message and quick examples' },
+  { command: 'travel',   description: 'Switch to Travel Agent mode' },
+  { command: 'shopping', description: 'Switch to Shopping Agent mode' },
+  { command: 'mode',     description: 'Show current agent mode' },
+  { command: 'calendar', description: 'List upcoming calendar events' },
+  { command: 'tasks',    description: 'List your Google Tasks' },
+  { command: 'connect',  description: 'Link your Google account (Calendar & Tasks)' },
+  { command: 'clear',    description: 'Reset conversation' },
+];
+
 bot.start({
-  onStart: (info) => console.log(`Bot started as @${info.username}`),
+  onStart: async (info) => {
+    console.log(`Bot started as @${info.username}`);
+    await bot.api.setMyCommands(BOT_COMMANDS);
+    console.log('Bot commands registered');
+  },
 });
