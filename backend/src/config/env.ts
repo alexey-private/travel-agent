@@ -40,6 +40,11 @@ const envSchema = z.object({
   // iCloud credentials encryption
   ENCRYPTION_KEY: z.string().optional(),
 
+  // Web Push (VAPID)
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_EMAIL: z.string().optional(),
+
   // Server
   PORT: z.coerce.number().int().positive().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

@@ -17,6 +17,7 @@ import { calendarRoutes } from './routes/calendar';
 import { exportRoutes } from './routes/export';
 import { transcribeRoutes } from './routes/transcribe';
 import { userRoutes } from './routes/users';
+import { pushRoutes } from './routes/push';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -175,6 +176,7 @@ async function bootstrap(): Promise<void> {
   await fastify.register(exportRoutes);
   await fastify.register(transcribeRoutes);
   await fastify.register(userRoutes);
+  await fastify.register(pushRoutes, { pool, userService });
 
   // Health check
   fastify.get('/health', async () => ({ status: 'ok' }));
