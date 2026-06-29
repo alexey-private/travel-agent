@@ -207,6 +207,52 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
     await handleChatMessage(ctx, caption, [attachment]);
   });
 
+  // Voice handler — transcribes via OpenAI Whisper, then sends text to agent
+  bot.on('message:voice', async (ctx) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      await ctx.reply('Voice messages require OPENAI_API_KEY to be configured.');
+      return;
+    }
+
+    await ctx.api.sendChatAction(ctx.chat.id, 'typing');
+
+    let fileData: Buffer;
+    try {
+      const { data } = await downloadTelegramFile(ctx.message.voice.file_id, ctx);
+      fileData = data;
+    } catch (err) {
+      await ctx.reply(`Could not download voice message: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    let transcribed: string;
+    try {
+      const form = new FormData();
+      form.append('file', new Blob([new Uint8Array(fileData)], { type: 'audio/ogg' }), 'voice.ogg');
+      form.append('model', 'whisper-1');
+      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+      if (!res.ok) throw new Error(`Whisper API error: ${res.status} ${await res.text()}`);
+      const json = await res.json() as { text: string };
+      transcribed = json.text.trim();
+    } catch (err) {
+      await ctx.reply(`Could not transcribe voice message: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    if (!transcribed) {
+      await ctx.reply('Could not understand the voice message.');
+      return;
+    }
+
+    await ctx.reply(`🎤 <i>${transcribed}</i>`, { parse_mode: 'HTML' });
+    await handleChatMessage(ctx, transcribed);
+  });
+
   // Catch-all text handler — MUST be registered last
   bot.on('message:text', async (ctx) => {
     if (!ctx.chat) return;

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Send, Loader2, Paperclip, X, FileText } from "lucide-react";
+import { Send, Loader2, Paperclip, X, FileText, Mic, Square } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import { getRandomSuggestions } from "@/data/starterSuggestions";
 import { type AgentType } from "../shared/AgentSelector";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useFileAttachments } from "@/hooks/useFileAttachments";
+import { useVoiceRecording } from "@/hooks/useVoiceRecording";
 
 interface ChatWindowProps {
   userId: string;
@@ -55,6 +56,10 @@ export default function ChatWindow({
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { voiceState, toggleRecording } = useVoiceRecording((text) => {
+    void send(text, text, []);
+  });
 
   // Auto-scroll to bottom on new content
   useEffect(() => {
@@ -198,6 +203,25 @@ export default function ChatWindow({
             className="h-11 w-11 rounded-xl border border-gray-300 text-gray-500 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             <Paperclip size={18} />
+          </button>
+          {/* Microphone button */}
+          <button
+            aria-label={voiceState === "recording" ? "Stop recording" : "Record voice message"}
+            onClick={toggleRecording}
+            disabled={loading || voiceState === "transcribing"}
+            className={`h-11 w-11 rounded-xl border flex items-center justify-center transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+              voiceState === "recording"
+                ? "border-red-400 bg-red-50 text-red-500 hover:bg-red-100"
+                : "border-gray-300 text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            {voiceState === "transcribing" ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : voiceState === "recording" ? (
+              <Square size={18} className="fill-red-500" />
+            ) : (
+              <Mic size={18} />
+            )}
           </button>
           <textarea
             className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
