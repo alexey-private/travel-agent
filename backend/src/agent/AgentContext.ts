@@ -21,6 +21,7 @@ export class AgentContext {
     public readonly sessionId?: string,
     public readonly taskListName?: string,
     public readonly attachments?: AgentAttachment[],
+    public readonly platform?: 'web' | 'telegram',
   ) {}
 
   /**

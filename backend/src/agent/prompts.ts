@@ -1,6 +1,22 @@
 import { UserMemory } from '../types/memory';
 
-export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans'): string {
+const TELEGRAM_FORMATTING = `
+## Output Format — Telegram (STRICT)
+You are replying inside a Telegram chat. Telegram does NOT render Markdown tables or Markdown syntax.
+- NEVER use pipe tables (| col | col |)
+- NEVER use ## or ### headers — use an emoji icon as a section label on its own line instead
+- NEVER use **bold** or _italic_ Markdown syntax — plain text only
+- For comparisons use a compact numbered list, one item per line:
+  1. Airline IB3167 · EWR→NRT · 14h 59m · Nonstop · €397
+  2. British Airways BA0105 · EWR→NRT · 14h 59m · Nonstop · €415
+- Separate sections with a blank line and a leading emoji, e.g.:
+  ✈️ Flights
+  🌤️ Weather
+  💰 Currency
+- Keep responses concise — mobile users read on small screens
+`.trim();
+
+export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans', platform?: 'web' | 'telegram'): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -70,7 +86,7 @@ If a tool returns an error or unexpected results:
 - Always inform the user if information could not be retrieved
 
 ## Response Formatting — ALWAYS apply
-Structure every response richly using Markdown:
+${platform === 'telegram' ? TELEGRAM_FORMATTING : `Structure every response richly using Markdown:
 - Use **emoji icons** to make sections scannable: ✈️ flights, 🌤️ weather, 💰 currency, 🗺️ destination, 🏨 accommodation, 🚗 car rental, 🎭 tours, 🧖 spa, 📋 visa, 🗓️ calendar, 🍽️ food, ⚠️ tips
 - Use **tables** for comparing flights, prices, weather forecasts, or multiple options
 - Use **bold headers** (##, ###) to separate sections
@@ -88,7 +104,7 @@ Example structure for a flight query:
 > ## 💰 Currency & Budget
 > ...
 > ## 🗺️ About the UK
-> ...
+> ...`}
 
 ## Using Known Preferences
 ${memories.length > 0
@@ -103,7 +119,7 @@ ${memories.length > 0
 ${userIdSection}${memoriesSection}`.trim();
 }
 
-export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping'): string {
+export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping', platform?: 'web' | 'telegram'): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -169,7 +185,7 @@ If search_products returns no results:
 - **search_conversations**: Search the user's past conversation history by keyword. Use when the user says "remember when we talked about X", "what products did we look at", "check our previous conversations", or any similar recall. Always call this before saying you don't have access to past conversations. **Call it at most ONCE per user message** — combine all topics into a single broad query.
 
 ## Response Formatting — ALWAYS apply
-Structure every response richly using Markdown:
+${platform === 'telegram' ? TELEGRAM_FORMATTING : `Structure every response richly using Markdown:
 - Use **emoji icons** to make sections scannable: 🛍️ products, 💰 prices, ⭐ reviews, 🔥 deals, 📦 availability, ✅ pros, ❌ cons, 💛 wishlist, 🔔 price alerts, 🗓️ calendar events, ✅ tasks
 - Use **tables** for comparing prices across stores or comparing multiple products
 - Use **bold headers** (##, ###) to separate sections
@@ -188,7 +204,7 @@ Example structure for a product query:
 > **✅ Pros:** ...
 > **❌ Cons:** ...
 > **🛒 Buy:** [Best Buy](url)
-> ## 🔥 Similar Deals
+> ## 🔥 Similar Deals`}
 
 ## Using Known Preferences
 ${memories.length > 0

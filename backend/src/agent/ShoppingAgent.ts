@@ -30,7 +30,7 @@ export class ShoppingAgent {
 
     // Inject user long-term memories (preferences) into the system prompt
     // so the LLM can personalize the response without re-asking each time.
-    const systemPrompt = buildShoppingAgentSystemPrompt(context.memories, context.userId, context.taskListName);
+    const systemPrompt = buildShoppingAgentSystemPrompt(context.memories, context.userId, context.taskListName, context.platform);
 
     // Truncate history to avoid context overflow on long conversations
     const recentHistory = context.history.slice(-MAX_HISTORY);

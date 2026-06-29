@@ -44,6 +44,7 @@ interface ChatBody {
   /** Pass to continue an existing conversation */
   conversationId?: string;
   agentType?: 'travel' | 'shopping';
+  platform?: 'web' | 'telegram';
   attachments?: Attachment[];
 }
 
@@ -76,7 +77,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       },
     },
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
-      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel', attachments } = request.body;
+      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel', platform, attachments } = request.body;
 
       if (!sessionId || (!message && !(attachments && attachments.length > 0))) {
         return reply.status(400).send({ error: 'userId and message (or attachment) are required' });
@@ -141,6 +142,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         sessionId,
         taskListName,
         attachments,
+        platform,
       );
 
       const agent = agentType === 'shopping'

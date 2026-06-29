@@ -25,6 +25,7 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
     userId: req.sessionId,
     message: req.message,
     agentType: req.agentType,
+    platform: 'telegram',
     ...(req.conversationId ? { conversationId: req.conversationId } : {}),
   });
 

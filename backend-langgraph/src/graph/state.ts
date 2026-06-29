@@ -35,6 +35,12 @@ export const AgentState = Annotation.Root({
 
   /** User-specific task list name, injected into the system prompt. */
   taskListName: Annotation<string>(),
+
+  /** Client platform — controls response formatting in the system prompt. */
+  platform: Annotation<'web' | 'telegram' | undefined>({
+    default: () => undefined,
+    reducer: (_, next) => next,
+  }),
 });
 
 export type AgentStateType = typeof AgentState.State;
