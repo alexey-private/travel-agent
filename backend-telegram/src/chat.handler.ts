@@ -180,6 +180,33 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
     await handleChatMessage(ctx, caption, [attachment]);
   });
 
+  // Photo handler
+  bot.on('message:photo', async (ctx) => {
+    const photos = ctx.message.photo;
+    const best = photos[photos.length - 1]; // highest resolution
+
+    await ctx.api.sendChatAction(ctx.chat.id, 'upload_photo');
+
+    let fileData: Buffer;
+    try {
+      const { data } = await downloadTelegramFile(best.file_id, ctx);
+      fileData = data;
+    } catch (err) {
+      await ctx.reply(`Could not download the photo: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    const attachment: Attachment = {
+      name: 'photo.jpg',
+      mimeType: 'image/jpeg',
+      base64: fileData.toString('base64'),
+      size: fileData.length,
+    };
+
+    const caption = ctx.message.caption ?? '';
+    await handleChatMessage(ctx, caption, [attachment]);
+  });
+
   // Catch-all text handler — MUST be registered last
   bot.on('message:text', async (ctx) => {
     if (!ctx.chat) return;
