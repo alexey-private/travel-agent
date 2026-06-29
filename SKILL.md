@@ -41,17 +41,22 @@ Files to update in **both** `backend/` and `backend-langgraph/`:
 
 **When:** Adding a new database table, column, or index.
 
-```bash
-# 1. Create migration file (next number)
-touch backend-langgraph/src/db/migrations/012_my_change.sql
-cp backend-langgraph/src/db/migrations/012_my_change.sql backend/src/db/migrations/
+> **CRITICAL:** NEVER run `ALTER TABLE` directly on any database. Always create a migration file first — the test DB uses only migration files to build its schema. A column added directly to production will be missing from tests, causing silent failures.
 
-# 2. Write SQL with IF NOT EXISTS guards
-# 3. Apply
-cd backend-langgraph && npm run migrate
+```bash
+# 1. Create migration file (next number, check existing: ls backend-langgraph/src/db/migrations/)
+touch backend-langgraph/src/db/migrations/013_my_change.sql
+cp backend-langgraph/src/db/migrations/013_my_change.sql backend/src/db/migrations/
+
+# 2. Write SQL with IF NOT EXISTS guards (migrations run idempotently)
+# 3. Apply to dev DB
+npm run migrate --workspace=backend-langgraph
+
+# 4. Apply to test DB
+docker exec travel-agent-postgres-1 psql -U user -d travel_agent_test -f /path/to/migration.sql
 ```
 
-Always use `IF NOT EXISTS` / `IF EXISTS` — migrations run idempotently.
+Note: `ADD CONSTRAINT IF NOT EXISTS` is not supported in PostgreSQL — use a `DO $$ BEGIN ... END $$` block.
 Copy to **both** `backend/` and `backend-langgraph/`.
 
 ---
@@ -71,20 +76,32 @@ Both must pass. If one fails, fix before proceeding.
 
 ## SKILL: run-tests
 
-**When:** After changes to tools, services, or repositories.
+**When:** After ANY significant change — tools, routes, services, repositories, graph code.
 
 ```bash
-# Unit tests only (fast, no DB)
-cd backend-langgraph && npm run test
+# TypeScript check (fast, run first)
+npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
 
-# All tests (requires TEST_DATABASE_URL)
-cd backend-langgraph && npm run test:all
+# Unit tests only (fast, no DB needed)
+npm run test --workspace=backend-langgraph
 
-# With coverage
-cd backend-langgraph && npm run test:coverage
+# All tests including integration (requires test DB)
+TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+  npm run test:all --workspace=backend-langgraph
+
+# Coverage report
+npm run test:coverage --workspace=backend-langgraph
 ```
 
-Unit tests use shared mocks from `tests/helpers/`. Integration tests hit a real DB — set `TEST_DATABASE_URL` in `.env`.
+**Test DB setup** (first time or after Docker restart):
+```bash
+docker exec travel-agent-postgres-1 psql -U user -d postgres -c "CREATE DATABASE travel_agent_test;"
+# Migrations are applied automatically by setupTestDb() in beforeAll
+```
+
+Integration tests skip automatically (`it.skip`) if the test DB is unreachable — check `TEST_DB_AVAILABLE` in `.env`.
+
+Unit tests use shared mocks in `tests/helpers/`. Integration tests (`chat.test.ts`, `memory.test.ts`, `conversations.test.ts`, `conversationRepository.test.ts`) hit a real PostgreSQL DB.
 
 ---
 
@@ -111,15 +128,25 @@ pool.query('SELECT (SELECT COUNT(*) FROM conversation_embeddings) embedded, COUN
 
 ## SKILL: google-auth-debug
 
-**When:** "Connect Google Calendar" button doesn't work or shows not-connected after OAuth.
+**When:** "Connect Google Calendar" shows not-connected after OAuth, or agent says "Google account not connected".
 
-Key chain to check:
-1. `UserService.findOrCreateUser(sessionId)` → internal UUID
-2. `GoogleTokenRepository` stores/reads token by **internal UUID** (not session_id)
-3. Auth callback redirects to `/settings?google_auth=success`
-4. `settings/page.tsx` reads `?google_auth=` param via `useSearchParams` (wrapped in `Suspense`)
+Architecture (CURRENT — после фикса 2026-06-29):
+- Все tool-репозитории (`google_tokens`, `icloud_tokens`, `user_service_preferences`) хранят токены по **`session_id`** (TEXT), НЕ по internal UUID
+- `internalUserId` используется ТОЛЬКО для conversations, messages, user_memories
+- Graph state: поле `userId` = `session_id` — это то, что LLM вставляет в tool-вызовы
 
-Files: [backend-langgraph/src/routes/auth.ts](backend-langgraph/src/routes/auth.ts), [frontend/src/app/settings/page.tsx](frontend/src/app/settings/page.tsx)
+Цепочка проверки:
+1. `auth.ts` callback: `tokenRepo.save(userId, ...)` где `userId` = `session_id` из `state` параметра OAuth
+2. `UserAwareCalendarProvider.resolve(userId)` → `prefRepo.get(userId)` → `session_id`
+3. `GoogleCalendarProvider` → `tokenRepo.get(userId)` → находит токен по `session_id`
+4. Auth callback редиректит на `/settings?google_auth=success`
+
+Если агент говорит "не подключён":
+- Проверить, что в системном промпте `userId` = правильный `session_id`
+- Проверить запись в `google_tokens` через `SELECT * FROM google_tokens WHERE user_id = '<session_id>'`
+- Проверить что `chat.ts` передаёт `userId: sessionId` (не `internalUserId`) в `graph.streamEvents()`
+
+Files: [backend-langgraph/src/routes/auth.ts](backend-langgraph/src/routes/auth.ts), [backend-langgraph/src/routes/chat.ts](backend-langgraph/src/routes/chat.ts), [frontend/src/app/settings/page.tsx](frontend/src/app/settings/page.tsx)
 
 ---
 

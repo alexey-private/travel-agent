@@ -67,14 +67,34 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 
 ```
 users                — internal UUID ↔ session_id mapping
-conversations        — user_id, agent_type
+conversations        — user_id (UUID FK), agent_type
 messages             — conversation_id, role, content, agent_steps, lm_messages
-conversation_embeddings — message_id, user_id, agent_type, role, embedding vector(512)
-user_memories        — user_id, key, value (agent preferences)
-google_tokens        — user_id, access_token, refresh_token, expiry
-icloud_tokens        — user_id, encrypted credentials
-user_preferences     — user_id, task_list_name, shopping_task_list_name
+conversation_embeddings — message_id, user_id (UUID FK), agent_type, embedding vector(512)
+user_memories        — user_id (UUID FK), key, value, agent_type
+google_tokens        — user_id TEXT = session_id, access_token, refresh_token, expiry
+icloud_tokens        — user_id TEXT = session_id, encrypted credentials
+user_preferences     — user_id TEXT = session_id, task_list_name, shopping_task_list_name
+push_subscriptions   — user_id UUID FK → users.id, endpoint, p256dh, auth
 ```
+
+---
+
+## userId vs internalUserId (CRITICAL)
+
+Два типа идентификаторов пользователя:
+- **`session_id`** (TEXT, из localStorage браузера) — используется как `userId` во всех tool-репозиториях
+- **`internalUserId`** (UUID, `users.id` PK) — используется только для conversations, messages, user_memories
+
+| Таблица | Ключ |
+|---------|------|
+| `google_tokens` | `session_id` |
+| `icloud_tokens` | `session_id` |
+| `user_service_preferences` | `session_id` |
+| `push_subscriptions` | `users.id` (UUID FK, каскадное удаление) |
+| `conversations` | `users.id` (UUID FK) |
+| `user_memories` | `users.id` (UUID FK) |
+
+**Graph state** содержит поле `userId` — в него записывается `session_id`. LLM получает `userId` из системного промпта и передаёт в tool-вызовы.
 
 ---
 
@@ -98,17 +118,40 @@ ALLOWED_ORIGIN        # CORS origin for production
 
 ## Two-Backend Rule (CRITICAL)
 
-All changes to tools, prompts, routes, repositories, or services **must be mirrored** to both `backend/` and `backend-langgraph/`. Run both TypeScript checks after every change:
+All changes to tools, prompts, routes, repositories, or services **must be mirrored** to both `backend/` and `backend-langgraph/`. Run after every change:
 
 ```bash
-npx tsc -p backend/tsconfig.json --noEmit
-npx tsc -p backend-langgraph/tsconfig.json --noEmit
+npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
+TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+  npm run test:all --workspace=backend-langgraph
 ```
 
 ---
 
-## After Each Task
+## Migration Rule (CRITICAL)
 
-1. **Memory** (`~/.claude/projects/.../memory/`) — update if the task revealed a non-obvious invariant, a new bug class, or a recurring pattern.
-2. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
-3. **SKILL.md** — update if the task introduced a new recurring workflow.
+**NEVER alter the production database directly.** Schema changes MUST go through migration files:
+
+```bash
+# 1. Create migration file first
+touch backend-langgraph/src/db/migrations/013_my_change.sql
+# 2. Write SQL with IF NOT EXISTS guards
+# 3. Apply to dev/test DB, then prod
+npm run migrate --workspace=backend-langgraph
+```
+
+If a column exists in production but has no migration file — it will be missing from the test DB, breaking integration tests.
+
+---
+
+## After Each Task (MANDATORY CHECKLIST)
+
+1. **Run tsc + tests** — non-negotiable after any code change:
+   ```bash
+   npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
+   TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+     npm run test:all --workspace=backend-langgraph
+   ```
+2. **Memory** — update if the task revealed a non-obvious invariant or recurring pattern.
+3. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
+4. **SKILL.md** — update if the task introduced a new recurring workflow.
