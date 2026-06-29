@@ -16,6 +16,7 @@ bot.use(
       conversationId: null,
       agentType: 'travel',
       suggestions: [],
+      currentCity: null,
     }),
   }),
 );
@@ -27,6 +28,8 @@ import { registerConnectCommand } from './commands/connect';
 import { registerCalendarCommand } from './commands/calendar';
 import { registerTasksCommand } from './commands/tasks';
 import { registerModeCommand } from './commands/mode';
+import { registerLocationCommand } from './commands/location';
+import { registerHistoryCommand } from './commands/history';
 import { registerChatHandler, handleChatMessage } from './chat.handler';
 
 registerStartCommand(bot);
@@ -36,6 +39,8 @@ registerConnectCommand(bot);
 registerCalendarCommand(bot);
 registerTasksCommand(bot);
 registerModeCommand(bot);
+registerLocationCommand(bot);
+registerHistoryCommand(bot);
 
 // Inline keyboard: suggestion buttons (data = "sugg:<index>")
 bot.callbackQuery(/^sugg:(\d+)$/, async (ctx) => {
@@ -62,7 +67,10 @@ const BOT_COMMANDS = [
   { command: 'calendar', description: 'List upcoming calendar events' },
   { command: 'tasks',    description: 'List your Google Tasks' },
   { command: 'connect',  description: 'Link your Google account (Calendar & Tasks)' },
-  { command: 'clear',    description: 'Reset conversation' },
+  { command: 'clear',       description: 'Reset conversation' },
+  { command: 'location',    description: 'Show saved location' },
+  { command: 'clearlocation', description: 'Clear saved location' },
+  { command: 'history',       description: 'Show last 5 exchanges in this conversation' },
 ];
 
 bot.start({

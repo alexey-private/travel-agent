@@ -6,6 +6,8 @@ export interface SessionData {
   agentType: 'travel' | 'shopping';
   // Last suggestions from the agent — indexed by "sugg:<i>" callback_data
   suggestions: string[];
+  // Reverse-geocoded city from shared location, prepended to agent queries
+  currentCity: string | null;
 }
 
 export type BotContext = Context & SessionFlavor<SessionData>;

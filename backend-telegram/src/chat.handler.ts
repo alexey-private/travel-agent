@@ -44,11 +44,15 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
   let toolActivity = false;
   let pendingSuggestions: string[] = [];
 
+  const messageWithLocation = ctx.session.currentCity && userText
+    ? `[My current location: ${ctx.session.currentCity}] ${userText}`
+    : userText;
+
   try {
     for await (const event of streamChat({
       sessionId: ctx.session.sessionId!,
       conversationId: ctx.session.conversationId,
-      message: userText,
+      message: messageWithLocation,
       agentType: ctx.session.agentType,
       attachments,
     })) {
@@ -124,6 +128,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
 
 const BOT_TOKEN = process.env.BOT_TOKEN!;
 const TG_FILE_API = `https://api.telegram.org/file/bot${BOT_TOKEN}`;
+const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY!;
 const SUPPORTED_MIME_TYPES = new Set(['application/pdf', 'text/plain']);
 const MAX_FILE_SIZE_MB = 19;
 
@@ -137,9 +142,41 @@ async function downloadTelegramFile(fileId: string, ctx: BotContext): Promise<{ 
   return { data: buf, path: file.file_path };
 }
 
+async function reverseGeocode(lat: number, lon: number): Promise<string> {
+  const url = `https://api.openweathermap.org/geo/1.0/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${OPENWEATHER_API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Geocoding error: ${res.status}`);
+  const data = await res.json() as Array<{ name: string; country: string; state?: string }>;
+  if (!data.length) throw new Error('Location not found');
+  const { name, state, country } = data[0];
+  return state ? `${name}, ${state}, ${country}` : `${name}, ${country}`;
+}
+
 export function registerChatHandler(bot: Bot<BotContext>): void {
   setCalendarDispatch(handleChatMessage);
   setTasksDispatch(handleChatMessage);
+
+  // Location handler — reverse-geocode and store city in session
+  bot.on('message:location', async (ctx) => {
+    const { latitude, longitude } = ctx.message.location;
+    const processing = await ctx.reply('📍 Getting your location…');
+    try {
+      const city = await reverseGeocode(latitude, longitude);
+      ctx.session.currentCity = city;
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        processing.message_id,
+        `📍 Location set to <b>${city}</b>.\n\nI'll include your location in travel queries. Use /clearlocation to remove it.`,
+        { parse_mode: 'HTML' },
+      );
+    } catch (err) {
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        processing.message_id,
+        `Could not determine your location: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
 
   // Document handler — PDF and plain text files
   bot.on('message:document', async (ctx) => {
