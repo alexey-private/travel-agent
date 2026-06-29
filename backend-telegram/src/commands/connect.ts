@@ -11,9 +11,10 @@ export function registerConnectCommand(bot: Bot<BotContext>): void {
       );
       return;
     }
-    const url = `${BACKEND_URL}/api/auth/google?session_id=${sessionId}`;
+    const url = `${BACKEND_URL}/auth/google/start?userId=${encodeURIComponent(sessionId)}`;
     await ctx.reply(
-      `Connect your Google account to enable Calendar and Tasks integration:\n\n${url}\n\n` +
+      `To enable Google Calendar and Tasks, open this link in your browser:\n\n<code>${url}</code>\n\n` +
+      `After you approve access, come back here and try /calendar again.\n\n` +
       `<i>This link is personal — do not share it.</i>`,
       { parse_mode: 'HTML' },
     );

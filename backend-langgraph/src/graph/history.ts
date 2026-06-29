@@ -16,6 +16,9 @@ export function lmRoundsToMessages(rounds: LMRound[]): BaseMessage[] {
     if (!round.tool_calls.length) continue;
     // Skip any round where IDs are missing — the API would reject mismatched tool_call_ids.
     if (round.tool_calls.some(tc => !tc.id)) continue;
+    // Skip incomplete rounds — tool was called but results never saved (request interrupted mid-stream).
+    // Sending tool_use without tool_result causes a 400 from the Anthropic API.
+    if (!round.tool_results.length) continue;
 
     msgs.push(
       new AIMessage({
