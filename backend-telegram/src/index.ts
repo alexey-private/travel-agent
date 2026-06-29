@@ -31,6 +31,7 @@ import { registerModeCommand } from './commands/mode';
 import { registerLocationCommand } from './commands/location';
 import { registerHistoryCommand } from './commands/history';
 import { registerChatHandler, handleChatMessage } from './chat.handler';
+import { startCalendarCron } from './notifier/calendar.cron';
 
 registerStartCommand(bot);
 registerAgentTypeCommands(bot);
@@ -78,5 +79,6 @@ bot.start({
     console.log(`Bot started as @${info.username}`);
     await bot.api.setMyCommands(BOT_COMMANDS);
     console.log('Bot commands registered');
+    startCalendarCron(bot.api);
   },
 });

@@ -20,18 +20,35 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
     ensureSessionId(ctx);
 
     const { sessionId, conversationId } = ctx.session;
-    if (!conversationId) {
-      await ctx.reply("No conversation history yet. Start chatting first!");
-      return;
-    }
 
     const processing = await ctx.reply('📋 Loading history…');
+
+    // If conversationId is not in session (e.g. after bot restart), fetch most recent from backend
+    let resolvedConversationId = conversationId;
+    if (!resolvedConversationId) {
+      try {
+        const listRes = await fetch(
+          `${BACKEND_URL}/api/conversations/${encodeURIComponent(sessionId!)}?agentType=${ctx.session.agentType}`,
+        );
+        if (listRes.ok) {
+          const listData = await listRes.json() as { conversations: Array<{ id: string }> };
+          resolvedConversationId = listData.conversations[0]?.id ?? null;
+        }
+      } catch {
+        // ignore — will fall through to "no history" message
+      }
+    }
+
+    if (!resolvedConversationId) {
+      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, 'No conversation history yet. Start chatting first!');
+      return;
+    }
 
     let messages: Message[];
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/conversations/${encodeURIComponent(sessionId!)}/` +
-        `${encodeURIComponent(conversationId)}/messages`,
+        `${encodeURIComponent(resolvedConversationId)}/messages`,
       );
       if (!res.ok) throw new Error(`Backend error: ${res.status}`);
       const data = await res.json() as { messages: Message[] };
