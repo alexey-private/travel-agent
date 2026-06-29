@@ -38,11 +38,19 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
     ...(req.attachments?.length ? { attachments: req.attachments } : {}),
   });
 
-  const response = await fetch(`${BACKEND_URL}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    yield { type: 'error', message: `Cannot reach backend: ${message}` };
+    yield { type: 'done' };
+    return;
+  }
 
   if (!response.ok || !response.body) {
     const text = await response.text().catch(() => 'unknown error');

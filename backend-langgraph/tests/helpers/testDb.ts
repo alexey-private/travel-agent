@@ -4,7 +4,7 @@ import path from 'path';
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ||
-  'postgresql://user:password@localhost:5433/travel_agent_test';
+  'postgresql://user:password@localhost:5432/travel_agent_test';
 
 let pool: Pool | null = null;
 

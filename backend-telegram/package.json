@@ -7,9 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "jest",
+    "test": "jest --testPathPattern='tests/(?!integration)' --forceExit",
+    "test:integration": "jest --testPathPattern='tests/integration' --forceExit",
+    "test:all": "jest --forceExit",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage --forceExit"
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",

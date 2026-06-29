@@ -5,6 +5,10 @@
  * to skip cleanly rather than fail.
  */
 
+// Load .env so TEST_DATABASE_URL is available without having to export it manually.
+// This also propagates the variable to worker processes via process.env.
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+
 const { Client } = require('pg');
 
 module.exports = async function globalSetup() {
