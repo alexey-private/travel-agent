@@ -2,27 +2,47 @@ import type { Bot } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import type { BotContext } from '../types';
 
-const TRAVEL_STARTERS = [
+const TRAVEL_POOL = [
   'Find flights from NYC to Tokyo next month',
-  'What\'s the weather in Bali in July?',
+  "What's the weather in Bali in July?",
   'Do I need a visa for Thailand?',
   'Convert 1000 USD to Japanese Yen',
+  'Best hotels in Paris under €150/night',
+  'Search car rentals in Rome for next week',
+  'Plan a 7-day trip to Japan',
+  'What currency does Vietnam use?',
+  'Find guided tours in Barcelona',
+  'Check visa requirements for India',
 ];
 
-const SHOPPING_STARTERS = [
+const SHOPPING_POOL = [
   'Find me a good laptop under $1000',
   'Compare iPhone 16 vs Samsung Galaxy S25',
   'Best wireless headphones in 2025',
   'Add MacBook Pro to my shopping list',
+  'Find deals on Sony cameras',
+  'Compare prices for iPad Pro',
+  'Best budget mechanical keyboard',
+  'Find a 4K monitor under $400',
+  'Search deals on running shoes',
+  'Compare AirPods Pro vs Sony WF-1000XM5',
 ];
 
-export function getStarterKeyboard(agentType: 'travel' | 'shopping'): InlineKeyboard {
-  const starters = agentType === 'travel' ? TRAVEL_STARTERS : SHOPPING_STARTERS;
+function shuffle<T>(arr: T[]): T[] {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+export function buildSuggestionsKeyboard(suggestions: string[], ctx: BotContext): InlineKeyboard {
+  ctx.session.suggestions = suggestions;
   const kb = new InlineKeyboard();
-  for (const prompt of starters) {
-    kb.text(prompt, `starter:${prompt}`).row();
-  }
+  suggestions.forEach((_, i) => kb.text(suggestions[i], `sugg:${i}`).row());
   return kb;
+}
+
+export function getStarterKeyboard(agentType: 'travel' | 'shopping', ctx: BotContext): InlineKeyboard {
+  const pool = agentType === 'travel' ? TRAVEL_POOL : SHOPPING_POOL;
+  const starters = shuffle(pool).slice(0, 4);
+  return buildSuggestionsKeyboard(starters, ctx);
 }
 
 export function registerStartCommand(bot: Bot<BotContext>): void {
@@ -41,7 +61,7 @@ export function registerStartCommand(bot: Bot<BotContext>): void {
       `Or pick a quick example:`,
       {
         parse_mode: 'HTML',
-        reply_markup: getStarterKeyboard(agentType),
+        reply_markup: getStarterKeyboard(agentType, ctx),
       },
     );
   });

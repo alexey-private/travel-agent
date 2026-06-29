@@ -15,6 +15,7 @@ bot.use(
       sessionId: null,
       conversationId: null,
       agentType: 'travel',
+      suggestions: [],
     }),
   }),
 );
@@ -34,11 +35,12 @@ registerConnectCommand(bot);
 registerCalendarCommand(bot);
 registerModeCommand(bot);
 
-// Inline keyboard: starter prompt buttons (data = "starter:<text>")
-bot.callbackQuery(/^starter:(.+)$/, async (ctx) => {
-  const text = ctx.match[1];
+// Inline keyboard: suggestion buttons (data = "sugg:<index>")
+bot.callbackQuery(/^sugg:(\d+)$/, async (ctx) => {
+  const index = parseInt(ctx.match[1], 10);
+  const text = ctx.session.suggestions[index];
+  if (!text) { await ctx.answerCallbackQuery(); return; }
   await ctx.answerCallbackQuery();
-  // Echo as a user message so the chat history looks natural
   await ctx.reply(text);
   await handleChatMessage(ctx, text);
 });

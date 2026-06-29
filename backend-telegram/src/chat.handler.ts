@@ -1,7 +1,9 @@
 import type { Bot } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import type { BotContext } from './types';
 import { streamChat } from './sse-client';
 import { setCalendarDispatch } from './commands/calendar';
+import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
 
 const MAX_TG_LENGTH = 4096;
@@ -39,6 +41,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string): Prom
   let accumulated = '';
   let lastEdit = Date.now();
   let toolActivity = false;
+  let pendingSuggestions: string[] = [];
 
   try {
     for await (const event of streamChat({
@@ -73,6 +76,11 @@ export async function handleChatMessage(ctx: BotContext, userText: string): Prom
         continue;
       }
 
+      if (event.type === 'suggestions') {
+        pendingSuggestions = event.suggestions.slice(0, 4);
+        continue;
+      }
+
       if (event.type === 'error') {
         clearInterval(typingInterval);
         await ctx.api
@@ -91,6 +99,12 @@ export async function handleChatMessage(ctx: BotContext, userText: string): Prom
     for (let i = 1; i < chunks.length; i++) {
       await ctx.reply(chunks[i]);
     }
+
+    // Show dynamic follow-up suggestions as inline keyboard
+    if (pendingSuggestions.length > 0) {
+      const kb = buildSuggestionsKeyboard(pendingSuggestions, ctx);
+      await ctx.reply('What would you like to do next?', { reply_markup: kb });
+    }
   } catch (err) {
     clearInterval(typingInterval);
     const isConnectError = err instanceof TypeError && err.message.includes('fetch failed');
@@ -101,12 +115,10 @@ export async function handleChatMessage(ctx: BotContext, userText: string): Prom
     await ctx.api
       .editMessageText(chat.id, sent.message_id, `⚠️ ${msg}`)
       .catch(() => {});
-    // Don't re-throw — error already shown to user
   }
 }
 
 export function registerChatHandler(bot: Bot<BotContext>): void {
-  // Wire /calendar dispatch now that the handler is available
   setCalendarDispatch(handleChatMessage);
 
   // Catch-all text handler — MUST be registered last
