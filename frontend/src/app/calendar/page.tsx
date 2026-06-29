@@ -209,7 +209,14 @@ export default function CalendarPage() {
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2">
             <X size={14} />
-            {error}
+            <span className="flex-1">
+              {error}
+              {error.includes('reconnect') && (
+                <Link href="/settings" className="ml-2 underline font-medium hover:text-red-900">
+                  Go to Settings
+                </Link>
+              )}
+            </span>
             <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
               <X size={12} />
             </button>
