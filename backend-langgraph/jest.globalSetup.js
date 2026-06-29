@@ -10,7 +10,7 @@ const { Client } = require('pg');
 module.exports = async function globalSetup() {
   const connectionString =
     process.env.TEST_DATABASE_URL ||
-    'postgresql://user:password@localhost:5433/travel_agent_test';
+    'postgresql://user:password@localhost:5432/travel_agent_test';
 
   const client = new Client({ connectionString, connectionTimeoutMillis: 2000 });
   try {
