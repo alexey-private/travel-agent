@@ -1,7 +1,6 @@
 import type { Bot } from 'grammy';
-import { InlineKeyboard } from 'grammy';
 import type { BotContext } from './types';
-import { streamChat } from './sse-client';
+import { streamChat, type Attachment } from './sse-client';
 import { setCalendarDispatch } from './commands/calendar';
 import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
@@ -28,7 +27,7 @@ function splitMessage(text: string): string[] {
   return chunks;
 }
 
-export async function handleChatMessage(ctx: BotContext, userText: string): Promise<void> {
+export async function handleChatMessage(ctx: BotContext, userText: string, attachments?: Attachment[]): Promise<void> {
   const chat = ctx.chat!;
   ensureSessionId(ctx);
 
@@ -49,6 +48,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string): Prom
       conversationId: ctx.session.conversationId,
       message: userText,
       agentType: ctx.session.agentType,
+      attachments,
     })) {
       if (event.type === 'conversation_id') {
         ctx.session.conversationId = event.conversationId;
@@ -118,8 +118,62 @@ export async function handleChatMessage(ctx: BotContext, userText: string): Prom
   }
 }
 
+const BOT_TOKEN = process.env.BOT_TOKEN!;
+const TG_FILE_API = `https://api.telegram.org/file/bot${BOT_TOKEN}`;
+const SUPPORTED_MIME_TYPES = new Set(['application/pdf', 'text/plain']);
+const MAX_FILE_SIZE_MB = 19;
+
+async function downloadTelegramFile(fileId: string, ctx: BotContext): Promise<{ data: Buffer; path: string }> {
+  const file = await ctx.api.getFile(fileId);
+  if (!file.file_path) throw new Error('Telegram did not return a file path');
+  const url = `${TG_FILE_API}/${file.file_path}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to download file: ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { data: buf, path: file.file_path };
+}
+
 export function registerChatHandler(bot: Bot<BotContext>): void {
   setCalendarDispatch(handleChatMessage);
+
+  // Document handler — PDF and plain text files
+  bot.on('message:document', async (ctx) => {
+    const doc = ctx.message.document;
+    const mimeType = doc.mime_type ?? 'application/octet-stream';
+    const fileSize = doc.file_size ?? 0;
+
+    if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
+      await ctx.reply(`Unsupported file type: ${mimeType}.\nI can read PDF and plain text files.`);
+      return;
+    }
+
+    if (fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      await ctx.reply(`File is too large (max ${MAX_FILE_SIZE_MB} MB).`);
+      return;
+    }
+
+    await ctx.api.sendChatAction(ctx.chat.id, 'upload_document');
+
+    let fileData: Buffer;
+    try {
+      const { data } = await downloadTelegramFile(doc.file_id, ctx);
+      fileData = data;
+    } catch (err) {
+      await ctx.reply(`Could not download the file: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    const attachment: Attachment = {
+      name: doc.file_name ?? 'document.pdf',
+      mimeType,
+      base64: fileData.toString('base64'),
+      size: fileData.length,
+    };
+
+    // Caption becomes the user message; fall back to empty string (backend fills in default)
+    const caption = ctx.message.caption ?? '';
+    await handleChatMessage(ctx, caption, [attachment]);
+  });
 
   // Catch-all text handler — MUST be registered last
   bot.on('message:text', async (ctx) => {

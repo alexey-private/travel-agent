@@ -9,11 +9,19 @@ export type AgentEvent =
   | { type: 'error'; message: string }
   | { type: 'done' };
 
+export interface Attachment {
+  name: string;
+  mimeType: string;
+  base64: string;
+  size: number;
+}
+
 interface ChatRequest {
   sessionId: string;
   conversationId: string | null;
   message: string;
   agentType: 'travel' | 'shopping';
+  attachments?: Attachment[];
 }
 
 /**
@@ -27,6 +35,7 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
     agentType: req.agentType,
     platform: 'telegram',
     ...(req.conversationId ? { conversationId: req.conversationId } : {}),
+    ...(req.attachments?.length ? { attachments: req.attachments } : {}),
   });
 
   const response = await fetch(`${BACKEND_URL}/api/chat`, {
