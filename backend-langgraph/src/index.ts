@@ -25,6 +25,7 @@ import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
 import { GoogleCalendarProvider } from './tools/providers/GoogleCalendarProvider';
 import { GoogleTasksProvider } from './tools/providers/GoogleTasksProvider';
+import { GoogleDriveProvider } from './tools/providers/GoogleDriveProvider';
 import { MockCalendarProvider } from './tools/providers/MockCalendarProvider';
 import { MockTasksProvider } from './tools/providers/MockTasksProvider';
 import { ICloudCalendarProvider } from './tools/providers/ICloudCalendarProvider';
@@ -81,6 +82,9 @@ async function bootstrap(): Promise<void> {
   const googleTasksProvider = googleConfig
     ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
     : new MockTasksProvider();
+  const driveProvider = googleConfig
+    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+    : undefined;
 
   const icloudCalendarProvider = new ICloudCalendarProvider(icloudTokenRepo, prefRepo);
   const icloudRemindersProvider = new ICloudRemindersProvider(icloudTokenRepo, prefRepo);
@@ -89,8 +93,8 @@ async function bootstrap(): Promise<void> {
   const tasksProvider = new UserAwareTasksProvider(googleTasksProvider, icloudRemindersProvider, prefRepo);
 
   // Compile both agent graphs once — reused across all requests via fastify.decorate.
-  fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService));
-  fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService));
+  fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService, driveProvider));
+  fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService, driveProvider));
   fastify.log.info('Agent graphs initialised');
 
   await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, prefRepo });

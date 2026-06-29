@@ -292,6 +292,37 @@ function SettingsContent() {
           </div>
         </section>
 
+        {/* ── Google Drive ─────────────────────────────────────── */}
+        <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-6 py-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-gray-800">Google Drive</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Let the agent read your Drive files (Google Docs, Sheets, plain text, CSV).
+                </p>
+              </div>
+              {settings.googleDriveConnected ? (
+                <span className="flex items-center gap-1 text-green-600 text-sm font-medium shrink-0 mt-0.5">
+                  <CheckCircle2 size={14} /> Connected
+                </span>
+              ) : (
+                <a
+                  href={`${API_URL}/auth/google/start?userId=${encodeURIComponent(userId)}`}
+                  className="inline-block shrink-0 bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Connect Google
+                </a>
+              )}
+            </div>
+            {settings.googleDriveConnected && (
+              <p className="text-xs text-gray-400 mt-3">
+                Drive access is granted via your Google connection. To revoke, disconnect Google Calendar above.
+              </p>
+            )}
+          </div>
+        </section>
+
         {/* ── Calendar Names ───────────────────────────────────── */}
         <section className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-base font-semibold text-gray-800 mb-4">Calendar Names</h2>

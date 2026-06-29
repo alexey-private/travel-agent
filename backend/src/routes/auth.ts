@@ -39,7 +39,11 @@ export async function authRoutes(
     const url = auth.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
-      scope: ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/tasks'],
+      scope: [
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/tasks',
+        'https://www.googleapis.com/auth/drive.readonly',
+      ],
       state: userId,
     });
 

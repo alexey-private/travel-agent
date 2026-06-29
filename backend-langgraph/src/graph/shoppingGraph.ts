@@ -12,7 +12,9 @@ import { WishlistTool } from '../tools/shopping/WishlistTool';
 import { PriceAlertTool } from '../tools/shopping/PriceAlertTool';
 import { CalendarProvider } from '../tools/providers/CalendarProvider';
 import { TasksProvider } from '../tools/providers/TasksProvider';
+import { DriveProvider } from '../tools/providers/DriveProvider';
 import { TasksTool } from '../tools/TasksTool';
+import { DriveFilesTool } from '../tools/DriveFilesTool';
 import { SearchConversationsTool } from '../tools/SearchConversationsTool';
 import { ConversationService } from '../services/ConversationService';
 import { RAGService } from '../services/RAGService';
@@ -24,6 +26,7 @@ export function createShoppingGraph(
   calendarProvider: CalendarProvider,
   tasksProvider: TasksProvider,
   conversationService: ConversationService,
+  driveProvider?: DriveProvider,
 ): CompiledShoppingGraph {
   const tools = [
     new ProductSearchTool(ragService),
@@ -37,6 +40,7 @@ export function createShoppingGraph(
     new CalendarTool(calendarProvider),
     new TasksTool(tasksProvider),
     new SearchConversationsTool(conversationService),
+    new DriveFilesTool(driveProvider),
   ];
 
   return buildAgentGraph(

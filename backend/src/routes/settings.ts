@@ -32,7 +32,7 @@ export async function settingsRoutes(
     const reminderHref = icloudCreds?.reminderHref ?? null;
     const shoppingReminderHref = icloudCreds?.shoppingRemHref ?? null;
 
-    return { ...prefs, googleConnected, appleConnected, appleId, reminderHref, shoppingReminderHref };
+    return { ...prefs, googleConnected, googleDriveConnected: googleConnected, appleConnected, appleId, reminderHref, shoppingReminderHref };
   });
 
   // POST /api/settings?userId=xxx  — update preferences

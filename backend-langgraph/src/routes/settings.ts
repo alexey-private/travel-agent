@@ -32,7 +32,9 @@ export async function settingsRoutes(
     const reminderHref = icloudCreds?.reminderHref ?? null;
     const shoppingReminderHref = icloudCreds?.shoppingRemHref ?? null;
 
-    return { ...prefs, googleConnected, appleConnected, appleId, reminderHref, shoppingReminderHref };
+    // googleDriveConnected mirrors googleConnected — Drive scope is requested during OAuth.
+    // Users connected before Drive scope was added should reconnect to get Drive access.
+    return { ...prefs, googleConnected, googleDriveConnected: googleConnected, appleConnected, appleId, reminderHref, shoppingReminderHref };
   });
 
   // POST /api/settings?userId=xxx  — update preferences

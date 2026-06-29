@@ -10,6 +10,7 @@ export interface UserPreferences {
 
 export interface SettingsData extends UserPreferences {
   googleConnected: boolean;
+  googleDriveConnected: boolean;
   appleConnected: boolean;
   appleId: string | null;
   reminderHref: string | null;
