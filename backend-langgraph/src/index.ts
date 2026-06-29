@@ -19,6 +19,7 @@ import { exportRoutes } from './routes/export';
 import { transcribeRoutes } from './routes/transcribe';
 import { userRoutes } from './routes/users';
 import { pushRoutes } from './routes/push';
+import { startWebPushCron } from './notifier/web-push.cron';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -128,6 +129,8 @@ async function bootstrap(): Promise<void> {
 
   await fastify.listen({ port: env.PORT, host: '0.0.0.0' });
   fastify.log.info(`[LangGraph backend] listening on port ${env.PORT}`);
+
+  startWebPushCron(pool, calendarProvider, tasksProvider);
 }
 
 async function shutdown(): Promise<void> {

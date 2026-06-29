@@ -5,10 +5,13 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   CheckCircle2,
   Loader2,
   ExternalLink,
 } from "lucide-react";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { getOrCreateUserId } from "@/lib/api";
 import {
   getSettings,
@@ -30,6 +33,9 @@ function SettingsContent() {
   const [appPassword, setAppPassword] = useState("");
   const [appleConnecting, setAppleConnecting] = useState(false);
   const [appleError, setAppleError] = useState<string | null>(null);
+
+  const { status: pushStatus, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } =
+    usePushNotifications(userId);
 
   const reload = useCallback(async (uid: string) => {
     const updated = await getSettings(uid);
@@ -337,6 +343,58 @@ function SettingsContent() {
             </div>
           </section>
         )}
+
+        {/* ── Browser Notifications ───────────────────────────── */}
+        <section className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">Browser Notifications</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Daily reminders at 9:00 AM for events and tasks due tomorrow.
+              </p>
+            </div>
+
+            {pushStatus === "unsupported" && (
+              <span className="text-sm text-gray-400 shrink-0">Not supported</span>
+            )}
+
+            {pushStatus === "denied" && (
+              <span className="text-sm text-red-500 shrink-0">Blocked by browser</span>
+            )}
+
+            {pushStatus === "subscribed" && (
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
+                  <CheckCircle2 size={14} /> Enabled
+                </span>
+                <button
+                  onClick={pushUnsubscribe}
+                  className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <BellOff size={14} /> Disable
+                </button>
+              </div>
+            )}
+
+            {(pushStatus === "unsubscribed" || pushStatus === "subscribing") && (
+              <button
+                onClick={pushSubscribe}
+                disabled={pushStatus === "subscribing"}
+                className="flex items-center gap-1.5 shrink-0 text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {pushStatus === "subscribing"
+                  ? <><Loader2 size={14} className="animate-spin" /> Enabling…</>
+                  : <><Bell size={14} /> Enable notifications</>}
+              </button>
+            )}
+          </div>
+
+          {pushStatus === "denied" && (
+            <p className="text-xs text-gray-400 mt-3">
+              To enable, open browser settings and allow notifications for this site.
+            </p>
+          )}
+        </section>
 
         {/* ── Save ────────────────────────────────────────────── */}
         <div className="flex items-center gap-4">
