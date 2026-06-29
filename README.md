@@ -26,149 +26,140 @@ A full-stack AI assistant with two specialized agents — **Travel** and **Shopp
 
 ---
 
+## Features
+
+### Core
+- **Two AI agents** — Travel (flights, hotels, weather, visa, car rental, tours, spa) and Shopping (product search, price comparison, deal finder)
+- **Dual LLM support** — Anthropic Claude (default) or OpenAI GPT-4o, switchable via env var
+- **Two backend implementations** — hand-written ReAct loop (`backend/`) and LangGraph StateGraph (`backend-langgraph/`, primary)
+- **Long-term memory** — preferences extracted after every turn, injected into system prompt on next request
+- **Agentic RAG** — semantic search over curated knowledge base (pgvector, Voyage AI)
+- **Conversation history** — full session persistence with title extraction and sidebar navigation
+- **Multimodal input** — image and PDF file uploads (Anthropic native PDF support)
+- **Follow-up suggestions** — Claude Haiku generates contextual next-question chips after each response
+
+### Calendar & Tasks
+- **Google Calendar integration** — OAuth2 (Calendar + Tasks scopes); events saved to a dedicated "Travel Agent" or "Shopping" calendar; tasks saved to named Google Tasks lists
+- **Apple iCloud integration** — CalDAV via tsdav, VEVENT and VTODO; AES-256-GCM credential encryption; selectable Reminders list
+- **Provider switching** — user can switch between Google and Apple at any time from `/settings`
+- **Calendar page** (`/calendar`) — view upcoming events and tasks from the connected provider
+
+### Notifications
+- **Telegram Bot** (`backend-telegram/`) — full chat via grammY; photo, voice (Whisper transcription), and location message support; `/history`, `/tasks`, `/remind` commands
+- **Web Push Notifications** — VAPID-based browser push; daily morning digest of tomorrow's events and tasks
+
+### Settings
+- **Settings page** (`/settings`) — connect/disconnect Google and iCloud accounts, choose calendar provider, name task lists, manage push notification subscription
+
+---
+
 ## Architecture
 
 ```
 .
-├── docker-compose.yml           # PostgreSQL 16 + pgvector (dev + test)
-├── .env.example
-├── package.json                 # npm workspaces root
-├── tsconfig.base.json
-├── backend/
-│   └── src/
-│       ├── index.ts             # Fastify server bootstrap
-│       ├── config/env.ts        # Zod-validated environment
-│       ├── db/
-│       │   ├── client.ts        # pg Pool singleton
-│       │   ├── migrate.ts       # SQL migration runner
-│       │   ├── seed.ts          # Knowledge base seed data
-│       │   └── migrations/
-│       │       ├── 001_schema.sql        # users, conversations, messages, user_memories
-│       │       ├── 002_pgvector.sql      # knowledge_base + IVFFlat index
-│       │       └── 003_embedding_dim.sql # resize embedding column 1536→512 (voyage-3-lite)
-│       ├── tools/
-│       │   ├── BaseTool.ts           # Abstract base class → Anthropic Tool shape
-│       │   ├── ToolRegistry.ts       # Tool map + execute dispatcher
-│       │   ├── WebSearchTool.ts      # Tavily web search (shared)
-│       │   ├── CurrencyTool.ts       # Frankfurter API, free (shared)
-│       │   ├── travel/
-│       │   │   ├── WeatherTool.ts        # OpenWeatherMap forecast
-│       │   │   ├── CountryInfoTool.ts    # RestCountries API (free, no key)
-│       │   │   └── FlightSearchTool.ts   # Deterministic flight mock (demo data)
-│       │   └── shopping/
-│       │       ├── ProductSearchTool.ts  # Deterministic product catalog mock
-│       │       ├── PriceCompareTool.ts   # Multi-retailer price comparison mock
-│       │       ├── ProductReviewsTool.ts # Seeded review pool mock
-│       │       └── DealSearchTool.ts     # Current deals catalog mock
-│       ├── agent/
-│       │   ├── TravelAgent.ts    # ReAct loop for travel queries
-│       │   ├── ShoppingAgent.ts  # ReAct loop for shopping queries
-│       │   ├── AgentContext.ts   # Immutable per-request value object
-│       │   └── prompts.ts        # buildTravelAgentSystemPrompt + buildShoppingAgentSystemPrompt
-│       ├── services/
-│       │   ├── ConversationService.ts
-│       │   ├── MemoryService.ts      # Preference extraction + persistence (agentType-aware)
-│       │   ├── SuggestionService.ts  # Follow-up question generation (Haiku)
-│       │   ├── RAGService.ts         # Agentic retrieval-augmented generation
-│       │   └── EmbeddingService.ts   # voyage-3-lite 512-dim; random fallback in dev
-│       ├── repositories/
-│       │   ├── BaseRepository.ts
-│       │   ├── ConversationRepository.ts
-│       │   ├── MemoryRepository.ts
-│       │   └── KnowledgeRepository.ts  # pgvector cosine similarity search
-│       ├── routes/
-│       │   ├── chat.ts              # POST /api/chat → SSE stream (routes to Travel or Shopping agent)
-│       │   ├── memory.ts            # GET/DELETE /api/memory/:userId
-│       │   └── conversations.ts     # GET /api/conversations/:userId[/:conversationId/messages]
-│       └── types/
-│           ├── agent.ts
-│           ├── tools.ts
-│           └── memory.ts
-└── frontend/
-    └── src/
-        ├── app/
-        │   ├── layout.tsx         # Root HTML shell + metadata
-        │   ├── page.tsx           # 3-panel layout; userId + agentType state
-        │   └── globals.css        # Tailwind base + scrollbar utilities
-        ├── components/
-        │   ├── AgentSelector.tsx  # Travel / Shopping tab toggle
-        │   ├── ChatWindow.tsx     # SSE streaming, message list, input bar (agentType-aware)
-        │   ├── MessageBubble.tsx  # Markdown render, sources, suggestions
-        │   ├── AgentThoughts.tsx  # Collapsible real-time tool calls
-        │   ├── MemoryPanel.tsx    # Displayed + deletable preferences
-        │   └── ConversationList.tsx  # Left sidebar, conversation history
-        ├── lib/
-        │   └── api.ts             # Typed fetch wrappers + SSE stream parser
-        └── data/
-            └── starterSuggestions.ts  # Travel + shopping example prompts, filtered by agentType
+├── docker-compose.yml              # PostgreSQL 16 + pgvector
+├── .env                            # All secrets (single root env file)
+├── package.json                    # npm workspaces root
+├── backend/                        # ReAct agent (secondary, port 3001)
+├── backend-langgraph/              # LangGraph agent (primary, port 3002)
+├── backend-telegram/               # Telegram bot bridge (port 3003)
+└── frontend/                       # Next.js 14 App Router (port 3000)
 ```
 
 ### Component diagram
 
 ```
-Browser (Next.js)
+Browser (Next.js 14)
     │
-    ├── page.tsx  (Home)
-    │     ├── state: userId (localStorage), agentType, chatKey, selectedConversationId
-    │     ├── state: memoryRefresh, conversationListRefresh  (int counters → trigger re-fetch)
-    │     │
-    │     ├── AgentSelector  (Travel ✈ / Shopping 🛍 tab toggle)
-    │     │     └── sets agentType state → remounts ChatWindow via chatKey
-    │     │
-    │     ├── ConversationList
-    │     │     └── GET /api/conversations/:userId  (re-fetches on refreshTrigger)
-    │     │
-    │     ├── ChatWindow  (remounted via chatKey on conversation/agent switch)
-    │     │     ├── GET /api/conversations/:userId/:id/messages  (load history)
-    │     │     ├── POST /api/chat  →  SSE stream  (agentType passed in body)
-    │     │     │     └── lib/api.ts: streamChat()  (chunked SSE parser)
-    │     │     │           events: conversation_id | text | tool_start |
-    │     │     │                   tool_end | sources | suggestions | done
-    │     │     └── MessageBubble  (per message)
-    │     │           └── AgentThoughts  (collapsible tool steps)
-    │     │
-    │     └── MemoryPanel
-    │           ├── GET  /api/memory/:userId  (re-fetches on refreshTrigger)
-    │           └── DELETE /api/memory/:userId/:key
+    ├── /                    Chat interface (Travel / Shopping)
+    ├── /calendar            Calendar + Tasks view
+    ├── /settings            Google OAuth, iCloud CalDAV, notification prefs
     │
-    │  POST /api/chat  (SSE stream)
-    │  GET/DELETE /api/memory/:userId
-    ▼
-Fastify (Node.js)
-    ├── ChatRoute
-    │     ├── ConversationService  ──► PostgreSQL
-    │     ├── MemoryService        ──► PostgreSQL (user_memories, agentType-specific keys)
-    │     ├── RAGService           ──► EmbeddingService ──► Voyage AI API
-    │     │                        ──► KnowledgeRepository ──► pgvector
-    │     ├── TravelAgent (agentType=travel, default)
-    │     │     ├── Claude claude-sonnet-4-6
-    │     │     ├── WebSearchTool    ──► Tavily API
-    │     │     ├── WeatherTool      ──► OpenWeatherMap API
-    │     │     ├── CountryInfoTool  ──► RestCountries API
-    │     │     ├── FlightSearchTool ──► deterministic mock
-    │     │     └── CurrencyTool     ──► Frankfurter API
-    │     └── ShoppingAgent (agentType=shopping)
-    │           ├── Claude claude-sonnet-4-6
-    │           ├── ProductSearchTool  ──► deterministic mock catalog
-    │           ├── PriceCompareTool   ──► deterministic multi-retailer mock
-    │           ├── ProductReviewsTool ──► seeded review pool mock
-    │           ├── DealSearchTool     ──► deterministic deals mock
-    │           ├── WebSearchTool      ──► Tavily API
-    │           └── CurrencyTool       ──► Frankfurter API
-    └── MemoryRoute ──► MemoryRepository ──► PostgreSQL
-```
+    └─── API calls ──────────────────────────────────────────────────►
+                                                                       │
+Fastify (backend-langgraph, port 3002)                                 │
+    ├── POST /api/chat          SSE streaming, LangGraph graph         │
+    ├── GET  /api/conversations  Conversation list                     │
+    ├── GET  /api/memory         User preferences                      │
+    ├── GET  /api/calendar       Events + tasks (Google or Apple)      │
+    ├── GET  /api/settings       User settings                         │
+    ├── GET  /auth/google/start  OAuth2 redirect                       │
+    ├── POST /auth/apple/connect iCloud credential validation          │
+    ├── POST /api/push/subscribe Browser push subscription             │
+    └── GET  /api/users          User profile                          │
+         │                                                             │
+         ├── LangGraph StateGraph                                       │
+         │     ├── reason node  (Claude Sonnet / GPT-4o)              │
+         │     ├── ToolNode     (prebuilt LangGraph executor)         │
+         │     └── shouldContinue edge                                 │
+         │                                                             │
+         ├── Travel tools                                              │
+         │     ├── web_search         Tavily API                      │
+         │     ├── weather            OpenWeatherMap                   │
+         │     ├── flights            deterministic mock               │
+         │     ├── hotels             deterministic mock               │
+         │     ├── car_rental         deterministic mock               │
+         │     ├── tours              deterministic mock               │
+         │     ├── spa                deterministic mock               │
+         │     ├── visa_requirements  RestCountries + static data      │
+         │     ├── country_info       RestCountries API                │
+         │     ├── currency           Frankfurter API                  │
+         │     ├── manage_calendar    UserAwareCalendarProvider        │
+         │     ├── manage_tasks       UserAwareTasksProvider           │
+         │     └── search_conversations  pgvector RAG                  │
+         │                                                             │
+         ├── Shopping tools                                            │
+         │     ├── web_search, currency, manage_calendar, manage_tasks │
+         │     ├── product_search     deterministic mock catalog       │
+         │     ├── price_compare      multi-retailer mock              │
+         │     ├── product_reviews    seeded review pool mock          │
+         │     └── deal_search        deals catalog mock               │
+         │                                                             │
+         ├── Services                                                  │
+         │     ├── ConversationService  save + embed messages         │
+         │     ├── MemoryService        preference extraction (Haiku)  │
+         │     ├── RAGService           semantic retrieval gate        │
+         │     ├── EmbeddingService     Voyage AI / random fallback    │
+         │     └── SuggestionService    follow-up chips (Haiku)       │
+         │                                                             │
+         └── Providers                                                 │
+               ├── UserAwareCalendarProvider  → Google or Apple        │
+               ├── GoogleCalendarProvider     googleapis SDK           │
+               ├── AppleCalendarProvider      tsdav CalDAV             │
+               ├── UserAwareTasksProvider     → Google or Apple        │
+               ├── GoogleTasksProvider        googleapis Tasks API     │
+               └── AppleTasksProvider         tsdav VTODO              │
 
-**Tech stack:** Node.js 22 · TypeScript 5 · Fastify 5 · PostgreSQL 16 + pgvector · Next.js 14 · Tailwind CSS · Lucide React · react-markdown · Claude `claude-sonnet-4-6` or OpenAI `gpt-4o` (switchable) · Voyage AI (`voyage-3-lite`) · Tavily Search · OpenWeatherMap · RestCountries · Frankfurter · Jest
+Telegram Bot (backend-telegram, port 3003)
+    ├── grammY bot framework
+    ├── SSE bridge → backend-langgraph /api/chat
+    ├── Photo handler   (download → base64 → multimodal message)
+    ├── Voice handler   (OGG → PCM → Whisper transcription)
+    ├── Location handler (reverse geocoding → travel context)
+    └── Cron: daily calendar digest → Telegram message
+
+PostgreSQL 16 + pgvector
+    ├── users                  session_id ↔ internal UUID
+    ├── conversations          user_id (UUID), agent_type
+    ├── messages               role, content, agent_steps, lm_messages
+    ├── conversation_embeddings  vector(512), cosine similarity search
+    ├── user_memories          key/value preferences, agent_type-scoped
+    ├── google_tokens          OAuth2 tokens, keyed by session_id
+    ├── icloud_tokens          AES-256-GCM encrypted credentials
+    ├── user_service_preferences  calendar provider, task list names
+    ├── knowledge_base         seeded RAG documents, vector(512)
+    └── push_subscriptions     VAPID endpoint + p256dh + auth keys
+```
 
 ---
 
-## LangGraph Backend (`backend-langgraph`)
+## LangGraph Backend (`backend-langgraph`, primary)
 
-`backend-langgraph` is an alternative implementation of the same agents using **LangChain / LangGraph** instead of the hand-written ReAct loop in `backend/`. The REST API, SSE event format, database schema, and all tool logic are identical — only the agent orchestration layer differs.
+`backend-langgraph` is the **primary** implementation using **LangChain / LangGraph** StateGraph. The REST API, SSE event format, and database schema are identical to `backend/` — only the agent orchestration layer differs.
 
 ### Graph topology
 
-Both Travel and Shopping agents share the same graph shape, compiled once at startup by `buildAgentGraph` and registered on the Fastify instance via `fastify.decorate`:
+Both agents share the same graph shape, compiled once at startup and registered via `fastify.decorate`:
 
 ```
 START → [reason] → shouldContinue → [act] → [reason] → …
@@ -177,114 +168,169 @@ START → [reason] → shouldContinue → [act] → [reason] → …
                          END
 ```
 
-| Node | Implementation | Role |
-|------|---------------|------|
-| `reason` | `createReasonNode` | Calls the LLM with the full message history; returns an `AIMessage` (possibly with `tool_calls`) |
-| `act` | LangGraph built-in `ToolNode` | Extracts `tool_calls` from the last message, executes the matching tools, appends `ToolMessage` results to state |
-| `shouldContinue` | conditional edge | Routes to `act` when `tool_calls` is non-empty, otherwise to `END` |
-
-### State
-
-All data flowing through the graph is typed in `AgentState`:
-
-```typescript
-// backend-langgraph/src/graph/state.ts
-export const AgentState = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: messagesStateReducer, // append — not replace
-    default: () => [],
-  }),
-  memories: Annotation<UserMemory[]>(),   // LastValue — set once at entry
-  ragContext: Annotation<string | null>(),
-});
-```
-
-`messagesStateReducer` means every node returns only its delta (`{ messages: [newMessage] }`) and LangGraph accumulates the full history automatically.
+| Node | Role |
+|------|------|
+| `reason` | Calls LLM with full message history; returns AIMessage (with optional tool_calls) |
+| `act` | LangGraph built-in `ToolNode` — executes tool_calls, appends ToolMessage results |
+| `shouldContinue` | Routes to `act` when tool_calls non-empty, otherwise to END |
 
 ### Request flow
 
 ```
 POST /api/chat
   │
-  ├─ Promise.all([memories, history, ragContext])   ← parallel DB queries
+  ├─ userService.findOrCreateUser(sessionId)       → internalUserId (UUID)
+  ├─ Promise.all([memories, history, ragContext, prefs])
   │
-  ├─ fastify.travelGraph / fastify.shoppingGraph    ← compiled once at startup, reused here
-  │     (built via createTravelGraph / createShoppingGraph → buildAgentGraph)
-  │           ├─ tools.map(wrapTool)          ← BaseTool JSONSchema → Zod (required by ToolNode)
-  │           ├─ createReasonNode(...)         ← model = createModel('full').bindTools(tools)
-  │           ├─ new ToolNode(tools)           ← built-in executor
-  │           └─ .compile()                   ← graph is frozen
+  ├─ graph.streamEvents({ userId: sessionId, ... })
+  │     ├─ on_chat_model_stream → SSE { type: 'text' }
+  │     ├─ on_tool_start        → SSE { type: 'tool_start' }
+  │     └─ on_tool_end          → SSE { type: 'tool_end' }
   │
-  └─ graph.streamEvents({ messages: initialMessages }, { version: 'v2' })
-        │
-        ├─ on_chat_model_stream → SSE { type: 'text' }        (per token)
-        ├─ on_tool_start        → SSE { type: 'tool_start' }
-        └─ on_tool_end          → SSE { type: 'tool_end' }
+  └─ Promise.allSettled([saveAssistantMessage, extractMemories])
 ```
 
-### Tool adapter — `wrapTool`
-
-`BaseTool` (shared with `backend/`) describes input schemas as plain JSONSchema objects. LangGraph's `ToolNode` requires Zod. `wrapTool` bridges the two:
-
-```typescript
-// backend-langgraph/src/tools/wrapTool.ts
-export function wrapTool(baseTool: BaseTool): DynamicStructuredTool {
-  const schema = jsonSchemaToZod(baseTool.inputSchema); // recursive JSONSchema → Zod
-  return new DynamicStructuredTool({
-    name: baseTool.name,
-    func: async (input) => {
-      const result = await baseTool.execute(input);
-      if (!result.success) throw new Error(result.error); // LLM sees the error and self-corrects
-      return JSON.stringify(result.data);
-    },
-  });
-}
-```
-
-### RAG — two patterns
-
-| Agent | When RAG runs | Who initiates it |
-|-------|--------------|-----------------|
-| Travel | Before the graph, in the route | Always, once per request |
-| Shopping | Inside the graph, as tools | The LLM decides when and with what query |
-
-`ProductSearchTool` and `ProductReviewsTool` receive `ragService` in their constructor and call `ragService.retrieve()` directly during tool execution. This lets the model issue targeted semantic searches ("Sony WH-1000XM5 reviews") rather than a single broad pre-query.
-
-### LLM model factory
-
-```typescript
-// backend-langgraph/src/llm/createModel.ts
-createModel('fast') // → Claude Haiku / GPT-4o-mini  (memory extraction, suggestions)
-createModel('full') // → Claude Sonnet / GPT-4o      (ReAct reasoning loop)
-```
-
-Provider is selected via the same `LLM_PROVIDER` environment variable as `backend/`.
-
-### Running `backend-langgraph`
-
-```bash
-# Migrations (shares the same DB schema as backend/)
-npm run migrate --workspace=backend-langgraph
-
-# Seed knowledge base
-npm run seed --workspace=backend-langgraph
-
-# Dev server (port 3002 by default — see backend-langgraph/.env)
-npm run dev:backend-langgraph
-```
-
-Point the frontend at the LangGraph backend by setting `NEXT_PUBLIC_API_URL=http://localhost:3002` in the frontend `.env`.
+> **userId identity:** `session_id` (TEXT from browser localStorage) is used as the key for all tool repositories (`google_tokens`, `icloud_tokens`, `user_service_preferences`). `internalUserId` (UUID) is used only for conversations, messages, and user_memories tables.
 
 ### Key differences vs `backend/`
 
 | Aspect | `backend/` | `backend-langgraph/` |
 |--------|-----------|----------------------|
-| ReAct loop | Manual `for` loop with `MAX_ITERATIONS` | LangGraph graph with conditional edge |
-| State management | Local `messages[]` array in `run()` | `AgentState` with typed reducers |
+| ReAct loop | Manual `for` loop, `MAX_ITERATIONS` | LangGraph graph + conditional edge |
+| State management | Local `messages[]` array | `AgentState` with typed reducers |
 | Tool execution | `handleToolCall` + `Promise.all` | Built-in `ToolNode` |
-| Streaming | `yield` at each event site | `graph.streamEvents()` emits automatically |
+| Streaming | `yield` at each event | `graph.streamEvents()` automatically |
 | LLM abstraction | Custom `LLMClient` interface | LangChain `BaseChatModel` |
-| Adding a node | Rewrite `run()` | `graph.addNode()` + one edge |
+
+---
+
+## Google Calendar & Tasks
+
+Users connect their Google account from `/settings`. The OAuth2 flow requests both `calendar` and `tasks` scopes.
+
+### Calendar
+
+Events are written to dedicated calendars created automatically on first use:
+- **"Travel Agent"** — for travel planning events
+- **"Shopping"** — for shopping-related events
+
+`manage_calendar` tool actions: `add`, `list`, `update`, `delete`.
+
+### Tasks
+
+Tasks are written to a named Google Tasks list (default: **"Travel Plans"** for travel, **"Shopping"** for shopping). The list name is configurable in `/settings`.
+
+`manage_tasks` tool actions: `add`, `list`, `complete`, `delete`, `update`.
+
+> **Due date enforcement:** The agent always asks the user for an explicit due date — it never infers or guesses one.
+
+### OAuth2 flow
+
+```
+GET /auth/google/start?userId=<sessionId>  → Google consent screen
+GET /auth/google/callback?code=&state=     → saves tokens → /settings?google_auth=success
+GET /auth/google/status?userId=            → { connected: boolean }
+DELETE /auth/google/disconnect?userId=     → revoke tokens
+```
+
+Required env vars:
+```env
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3002/auth/google/callback
+```
+
+---
+
+## Apple iCloud (CalDAV)
+
+Users enter their Apple ID and an **app-specific password** (from [appleid.apple.com](https://appleid.apple.com)) in `/settings`. Credentials are validated via a CalDAV PROPFIND and stored AES-256-GCM encrypted.
+
+Calendar events use VEVENT; reminders use VTODO. Users can select which Reminders list receives tasks from a dropdown populated by live CalDAV discovery.
+
+Provider switching between Google and Apple is instant — the `UserAwareCalendarProvider` and `UserAwareTasksProvider` delegate based on the `calendarProvider` preference in `user_service_preferences`.
+
+Required env var:
+```env
+ENCRYPTION_KEY=<32-character-secret>
+```
+
+---
+
+## Telegram Bot
+
+A standalone `backend-telegram` workspace package bridges Telegram to the LangGraph backend via SSE.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message + feature overview |
+| `/new` | Start a new conversation |
+| `/history` | List recent conversations |
+| `/tasks` | Show tomorrow's tasks |
+| `/remind` | Subscribe to daily calendar digest |
+| `/travel`, `/shopping` | Switch agent type |
+
+### Media support
+
+- **Photos** — downloaded, converted to base64, sent as multimodal content
+- **Voice messages** — OGG decoded to PCM, transcribed via OpenAI Whisper, sent as text
+- **Location** — reverse-geocoded to a place name, prepended to the message ("I'm in Paris — ...")
+
+### Calendar cron
+
+A `node-cron` job runs daily at 08:00 and sends each subscribed user a digest of tomorrow's calendar events and tasks via Telegram.
+
+Required env vars:
+```env
+TELEGRAM_BOT_TOKEN=...
+```
+
+---
+
+## Web Push Notifications
+
+Browser push notifications (VAPID) deliver a daily morning digest of tomorrow's events and tasks to users who haven't installed the Telegram bot.
+
+### Flow
+
+1. User clicks **"Enable Notifications"** in `/settings`
+2. Browser requests `Notification` permission
+3. Service worker (`/sw.js`) registers and subscribes via `PushManager`
+4. Subscription (endpoint + p256dh + auth) sent to `POST /api/push/subscribe`
+5. Server stores subscription in `push_subscriptions` table
+
+### Daily cron (backend-langgraph)
+
+`node-cron` job runs at 08:00 daily:
+1. Queries all `push_subscriptions JOIN users`
+2. For each subscriber: calls `calendarProvider.list()` + `tasksProvider.list()`
+3. Sends notification via `web-push` library
+4. On HTTP 410 (expired): removes subscription from DB
+
+Required env vars:
+```env
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_EMAIL=mailto:your@email.com
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=...   # frontend/.env.local
+```
+
+Generate keys: `npx web-push generate-vapid-keys`
+
+---
+
+## Multimodal Input (Images & PDFs)
+
+Users can attach files to any message via the paperclip button.
+
+| Type | Anthropic | OpenAI |
+|------|-----------|--------|
+| Images | Native vision | Native vision |
+| PDF | Native document block (pdfs-2024-09-25 beta) | Server-side text extraction via `pdf-parse` |
+
+Files are sent as base64 in the request body — no server-side storage.
 
 ---
 
@@ -303,7 +349,7 @@ Point the frontend at the LangGraph backend by setting `NEXT_PUBLIC_API_URL=http
 git clone <repo-url>
 cd <repo-dir>
 cp .env.example .env
-# Edit .env — fill in your API keys
+# Fill in API keys
 ```
 
 ### 2. Start the database
@@ -311,10 +357,6 @@ cp .env.example .env
 ```bash
 docker compose up -d
 ```
-
-This starts two PostgreSQL containers:
-- `postgres` on port **5432** — development database
-- `postgres_test` on port **5433** — test database (isolated)
 
 ### 3. Install dependencies
 
@@ -325,25 +367,22 @@ npm install
 ### 4. Run migrations
 
 ```bash
-npm run migrate --workspace=backend
+npm run migrate --workspace=backend-langgraph
 ```
-
-Creates the schema (`users`, `conversations`, `messages`, `user_memories`) and installs the pgvector extension + `knowledge_base` table.
 
 ### 5. Seed the knowledge base
 
 ```bash
-npm run seed --workspace=backend
+npm run seed --workspace=backend-langgraph
 ```
-
-Embeds and stores curated travel documents (visa requirements, health tips, cultural guides) for 7 popular destinations into the `knowledge_base` table.
 
 ### 6. Start the app
 
 ```bash
-# Backend (port 3001) + Frontend (port 3000) — run in separate terminals
-npm run dev:backend
-npm run dev:frontend
+# Three separate terminals:
+npm run dev:backend-langgraph   # :3002 (primary)
+npm run dev:frontend            # :3000
+npm run dev:backend-telegram    # :3003 (optional — Telegram bot)
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -354,209 +393,59 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string (dev) |
-| `TEST_DATABASE_URL` | For tests | PostgreSQL connection string (test) |
-| `ANTHROPIC_API_KEY` | When `LLM_PROVIDER=anthropic` | Claude API key (`sk-ant-…`) |
-| `OPENAI_API_KEY` | When `LLM_PROVIDER=openai` | OpenAI API key (`sk-proj-…`) |
-| `LLM_PROVIDER` | No | LLM backend: `anthropic` (default) or `openai` |
-| `TAVILY_API_KEY` | Yes | Tavily web search API key (`tvly-…`) |
-| `OPENWEATHER_API_KEY` | Yes | OpenWeatherMap API key (travel agent only) |
-| `VOYAGE_API_KEY` | No | Voyage AI key for semantic embeddings (random vectors used in dev if absent) |
-| `PORT` | No | Backend port (default `3001`) |
-| `NODE_ENV` | No | `development` / `production` / `test` |
-| `NEXT_PUBLIC_API_URL` | Yes (frontend) | Backend URL seen by the browser |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `TEST_DATABASE_URL` | Tests | Test DB — must be a separate database on port 5432 |
+| `ANTHROPIC_API_KEY` | When `LLM_PROVIDER=anthropic` | Claude API key |
+| `OPENAI_API_KEY` | When `LLM_PROVIDER=openai` | OpenAI API key |
+| `LLM_PROVIDER` | No | `anthropic` (default) or `openai` |
+| `TAVILY_API_KEY` | Yes | Web search |
+| `OPENWEATHER_API_KEY` | Yes | Weather tool |
+| `VOYAGE_API_KEY` | No | Semantic embeddings (random vectors used in dev if absent) |
+| `GOOGLE_CLIENT_ID` | Google Calendar | OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | Google Calendar | OAuth2 client secret |
+| `GOOGLE_REDIRECT_URI` | Google Calendar | `http://localhost:3002/auth/google/callback` |
+| `ENCRYPTION_KEY` | iCloud | 32-char key for AES-256-GCM credential encryption |
+| `VAPID_PUBLIC_KEY` | Web Push | VAPID public key |
+| `VAPID_PRIVATE_KEY` | Web Push | VAPID private key |
+| `VAPID_EMAIL` | Web Push | `mailto:you@example.com` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot | Bot token from @BotFather |
+| `ALLOWED_ORIGIN` | Production | CORS origin |
+| `PORT` | No | Backend port (default `3002`) |
 
-> **RestCountries** and **Frankfurter** are fully free public APIs — no key or registration required.
-> **Shopping tools** use deterministic mock data — no external API keys needed.
-
----
-
-## How the ReAct Loop Works
-
-Both `TravelAgent` and `ShoppingAgent` implement the same **ReAct** pattern (Reasoning + Acting) as an async generator that emits SSE events to the client in real time. The routing in `POST /api/chat` selects the agent based on the `agentType` field in the request body.
-
-```
-User message  +  agentType
-     │
-     ▼
-┌────────────────────────────────────────┐
-│  1. Build messages array               │
-│     (history + RAG context + message)  │
-│  2. Call Claude with tool definitions  │
-│                                        │
-│  ┌─ Claude response ──────────────┐   │
-│  │  stop_reason = "tool_use"  ?   │   │
-│  └────────────────────────────────┘   │
-│       │ Yes                │ No        │
-│       ▼                    ▼           │
-│  Execute tool(s)      Emit final text  │
-│  Append result        Break loop       │
-│  Loop (max 10)                         │
-└────────────────────────────────────────┘
-     │
-     ▼
-emit { type: "done" }
-```
-
-**SSE event stream example (travel agent):**
-
-```
-data: {"type":"conversation_id","conversationId":"uuid"}
-data: {"type":"tool_start","tool":"get_weather","input":{"city":"Tokyo","days":5}}
-data: {"type":"tool_end","tool":"get_weather","output":{"forecast":[…]}}
-data: {"type":"text","content":"Here is your personalised Tokyo itinerary…"}
-data: {"type":"sources","sources":[{"title":"Japan Visa Guide","url":"https://…"}]}
-data: {"type":"suggestions","suggestions":["What's the best time to visit Kyoto?",…]}
-data: {"type":"done"}
-```
-
-**SSE event stream example (shopping agent):**
-
-```
-data: {"type":"conversation_id","conversationId":"uuid"}
-data: {"type":"tool_start","tool":"search_products","input":{"query":"noise-cancelling headphones"}}
-data: {"type":"tool_end","tool":"search_products","output":{"products":[…]}}
-data: {"type":"tool_start","tool":"compare_prices","input":{"product":"Sony WH-1000XM5"}}
-data: {"type":"tool_end","tool":"compare_prices","output":{"comparisons":[…]}}
-data: {"type":"text","content":"Here are the best options and where to buy them cheapest…"}
-data: {"type":"done"}
-```
-
----
-
-## Self-Correction
-
-When a tool call fails (network error, bad API key, malformed response), the error is **fed back to Claude as a `tool_result` with `is_error: true`**:
-
-```typescript
-{ type: 'tool_result', tool_use_id: id, content: `Error: ${message}`, is_error: true }
-```
-
-Claude then sees the failure in its context and can:
-- Retry with different parameters (e.g. a broader product search query)
-- Switch to an alternative tool
-- Inform the user and proceed without that data
-
-This loop continues for up to 10 iterations, so transient failures are handled gracefully without any external retry logic.
-
----
-
-## Long-Term Memory
-
-After each conversation turn, `MemoryService.extractAndSaveMemories()` sends the full exchange to **Claude Haiku** with an agent-type-specific extraction prompt:
-
-- **Travel agent** extracts: `home_city`, `preferred_airlines`, `dietary_restrictions`, `travel_budget`, `travel_style`, `passport_country`, `hotel_type`
-- **Shopping agent** extracts: `preferred_brands`, `budget_range`, `favorite_stores`, `size_preferences`, `product_categories`, `payment_method`
-
-Extracted key-value pairs are **upserted** into the `user_memories` table using `INSERT … ON CONFLICT DO UPDATE`.
-
-On the next request these preferences are injected into the system prompt so Claude personalises every response — recommending products within the user's budget, prioritising their preferred brands, etc.
-
-Users can view and delete individual preferences from the **Preferences panel** in the UI, which calls `DELETE /api/memory/:userId/:key`.
-
----
-
-## Agentic RAG
-
-Before invoking the agent, the chat route runs a **two-step retrieval pipeline**:
-
-### Step 1 — Should we query the knowledge base?
-
-`RAGService.shouldQueryKnowledgeBase(query)` calls Claude Haiku with the user's message and asks for a `yes/no` answer. If the query is conversational ("thanks!", "what did you just say?") retrieval is skipped entirely.
-
-### Step 2 — Semantic search
-
-If retrieval is warranted:
-1. `EmbeddingService.embed(query)` converts the query to a 512-dimension vector via Voyage AI (`voyage-3-lite`). In development without a `VOYAGE_API_KEY`, random unit vectors are used as a fallback.
-2. `KnowledgeRepository.findSimilar()` runs a **cosine similarity** search against the `knowledge_base` table using pgvector:
-   ```sql
-   SET ivfflat.probes = 10;  -- dev only: compensates for lists=100 index on a small dataset
-   SELECT topic, content, 1 - (embedding <=> $1) AS similarity
-   FROM knowledge_base
-   ORDER BY embedding <=> $1
-   LIMIT $2;
-   ```
-   > **Note (dev):** The IVFFlat index is built with `lists=100`. With the default `probes=1`, only 1 of 100 clusters is searched — the query returns 0 results on a tiny seed dataset. Setting `probes=10` forces a broader search. In production, rebuild the index with `lists ≈ rows / 1000` and remove this override.
-3. The top-3 chunks are prepended to the user message as inline context before Claude is called.
-
-The seeded knowledge base contains curated documents on visa requirements, health tips, currency/tipping guides, and cultural etiquette for 7 popular destinations. This gives the travel agent authoritative baseline knowledge even when web search is rate-limited.
-
----
-
-## Replacing the LLM Provider
-
-The codebase uses a **provider-agnostic `LLMClient` interface** backed by a Factory pattern. Switching providers requires no changes to business logic — only a new implementation class needs to be written.
-
-```
-src/llm/
-├── LLMClient.ts          # interface: stream() + complete()
-├── types.ts              # shared types: LLMMessage, LLMToolCall, LLMStreamEvent, …
-├── LLMClientFactory.ts   # Factory — reads LLM_PROVIDER from env
-├── AnthropicLLMClient.ts # Claude implementation (claude-sonnet-4-6 / haiku)
-└── OpenAILLMClient.ts    # OpenAI implementation (gpt-4o / gpt-4o-mini)
-```
-
-### Adding a new provider
-
-1. Create `src/llm/<Provider>LLMClient.ts` implementing `LLMClient`
-2. Add the provider name to the `LLMProvider` union in `LLMClientFactory.ts`
-3. Add a `case` in `LLMClientFactory.create()`
-4. Add the API key to `.env` and `src/config/env.ts`
-5. Set `LLM_PROVIDER=<provider>` in the environment
-
-Nothing else needs to change — `TravelAgent`, `ShoppingAgent`, `MemoryService`, `RAGService`, `SuggestionService`, all tools, the database, the SSE infrastructure, and the frontend are all provider-agnostic.
-
-### Switching to OpenAI
-
-Set in `.env`:
-```env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-proj-…
-```
-
-The `OpenAILLMClient` uses **gpt-4o** for the ReAct loop and **gpt-4o-mini** for lightweight tasks (memory extraction, suggestions), mirroring the Sonnet/Haiku split of the Anthropic client.
-
-**Message format differences handled transparently:**
-- Tool results: OpenAI requires one `{ role: "tool" }` message per result; Anthropic batches all results into a single user turn.
-- Tool calls in streaming: OpenAI sends deltas with `delta.tool_calls[].function.arguments` fragments that must be accumulated by index before parsing.
-- Finish reason: OpenAI uses `"tool_calls"` where Anthropic uses `"tool_use"`.
-
-### Key mapping from Anthropic to OpenAI
-
-| Concept | Anthropic | OpenAI |
-|---------|-----------|--------|
-| Streaming | `messages.stream()` | `chat.completions.create({ stream: true })` |
-| Tool schema | `input_schema` (JSON Schema) | `function.parameters` (JSON Schema) |
-| Tool call in response | `content[]` block of type `tool_use` | `choices[0].message.tool_calls[]` |
-| Tool result | `user` turn with `tool_result` content | `{ role: "tool", tool_call_id, content }` message |
-| Simple completion | `messages.create()` | `chat.completions.create({ stream: false })` |
+> Frontend also needs `frontend/.env.local` with `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_VAPID_PUBLIC_KEY`.
 
 ---
 
 ## Running Tests
 
 ```bash
-# Backend unit tests (all external dependencies mocked)
-npm run test:unit --workspace=backend
+# TypeScript check (both backends)
+npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
 
-# Backend integration tests (requires Docker running)
-docker compose up -d
-npm run test:integration --workspace=backend
+# Unit tests (no DB required)
+npm run test --workspace=backend-langgraph
 
-# All backend tests
-npm test --workspace=backend
-
-# Frontend unit tests
-npm test --workspace=frontend
+# All tests including integration (requires test DB)
+docker exec travel-agent-postgres-1 psql -U user -d postgres -c "CREATE DATABASE travel_agent_test;" 2>/dev/null || true
+TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+  npm run test:all --workspace=backend-langgraph
 ```
 
-### Test coverage
+### Test coverage (backend-langgraph)
 
-| Layer | Suite | Tests |
-|-------|-------|-------|
-| Backend unit | TravelAgent, ShoppingAgent, WebSearchTool, WeatherTool, MemoryService, UserService, RAGService | 56 |
-| Backend integration | POST /api/chat, GET/DELETE /api/memory, GET /api/conversations | 7 |
-| Frontend unit | AgentSelector, ChatWindow, MessageBubble, MemoryPanel, AgentThoughts, api.ts, starterSuggestions | 62 |
+| Suite | Type | Tests |
+|-------|------|-------|
+| `wrapTool` | unit | 8 |
+| `CalendarTool`, `TasksTool` | unit | 16 |
+| `WeatherTool`, `WebSearchTool` | unit | 12 |
+| `MemoryService`, `RAGService`, `UserService` | unit | 18 |
+| `travelGraph`, `shoppingGraph`, `reasonNode`, `shouldContinue` | unit | 28 |
+| `chat.p0`, `history` | unit | 25 |
+| `chat` (integration) | integration | 11 |
+| `conversations` (integration) | integration | 5 |
+| `memory` (integration) | integration | 6 |
+| `conversationRepository` (integration) | integration | 7 |
+| **Total** | | **156** |
 
 ---
 
@@ -570,69 +459,131 @@ Start or continue a conversation. Returns a **Server-Sent Events** stream.
 ```json
 {
   "userId": "session-uuid",
-  "message": "Plan a 5-day trip to Kyoto in cherry blossom season",
-  "conversationId": "optional-uuid-to-continue-a-conversation",
-  "agentType": "travel"
+  "message": "Plan a 5-day trip to Kyoto",
+  "conversationId": "optional-uuid",
+  "agentType": "travel",
+  "platform": "web",
+  "attachments": [{ "name": "ticket.pdf", "mimeType": "application/pdf", "base64": "..." }]
 }
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `userId` | string | required | Session identifier (persisted in browser localStorage) |
-| `message` | string | required | User message |
-| `conversationId` | string | — | Omit to start a new conversation |
-| `agentType` | `"travel"` \| `"shopping"` | `"travel"` | Which agent to use |
+**SSE events:**
+```
+data: {"type":"conversation_id","conversationId":"uuid"}
+data: {"type":"tool_start","tool":"web_search","input":{...}}
+data: {"type":"tool_end","tool":"web_search","output":{...}}
+data: {"type":"text","content":"Here is your itinerary..."}
+data: {"type":"sources","sources":[{"title":"...","url":"..."}]}
+data: {"type":"suggestions","suggestions":["..."]}
+data: {"type":"done"}
+```
 
-**Response:** `Content-Type: text/event-stream`
+---
 
-Each line is a JSON-encoded `AgentEvent` (see [SSE events](#how-the-react-loop-works) above).
+### `GET /api/settings?userId=`
+### `POST /api/settings?userId=`
+
+Get or update user preferences: `calendarProvider`, `calendarName`, `taskListName`, `shoppingTaskListName`, etc.
+
+---
+
+### `GET /auth/google/status?userId=`
+### `GET /auth/google/start?userId=`
+### `DELETE /auth/google/disconnect?userId=`
+
+Google OAuth2 flow. Callback: `GET /auth/google/callback?code=&state=`
+
+---
+
+### `POST /auth/apple/connect?userId=`
+
+Save and validate iCloud credentials (`appleId`, `appPassword`).
+
+---
+
+### `GET /api/calendar?userId=&agentType=`
+
+Returns upcoming events and tasks from the user's connected provider (Google or Apple).
+
+---
+
+### `POST /api/push/subscribe`
+### `DELETE /api/push/unsubscribe`
+### `GET /api/push/vapid-public-key`
+
+Web Push subscription management.
 
 ---
 
 ### `GET /api/memory/:userId`
-
-Returns all stored preferences for a user.
-
-```json
-{
-  "memories": [
-    { "key": "home_city", "value": "San Francisco" },
-    { "key": "diet", "value": "vegetarian" }
-  ]
-}
-```
-
----
-
 ### `DELETE /api/memory/:userId/:key`
 
-Removes a single preference. Returns `204 No Content`.
+User preference storage. Scoped to `agentType` query param.
 
 ---
 
 ### `GET /api/conversations/:userId`
+### `GET /api/conversations/:userId/:conversationId/messages`
+### `DELETE /api/conversations/:userId/:conversationId`
 
-Returns the conversation list for a user, newest first.
+Conversation history management.
 
-```json
-{
-  "conversations": [
-    { "id": "uuid", "title": "Plan a trip to Tokyo in April", "created_at": "2025-04-01T10:00:00Z" }
-  ]
-}
+---
+
+## How the ReAct Loop Works
+
+```
+User message + agentType
+     │
+     ▼
+┌────────────────────────────────────────┐
+│  1. Build messages (history + RAG)     │
+│  2. Call LLM with tool definitions     │
+│                                        │
+│  ┌─ LLM response ─────────────────┐   │
+│  │  has tool_calls ?              │   │
+│  └────────────────────────────────┘   │
+│       │ Yes              │ No          │
+│       ▼                  ▼            │
+│  Execute tools      Emit final text   │
+│  Append results     Break loop        │
+│  Loop continues                       │
+└────────────────────────────────────────┘
+     │
+     ▼
+SSE { type: "done" }
 ```
 
 ---
 
-### `GET /api/conversations/:userId/:conversationId/messages`
+## Long-Term Memory
 
-Returns the full message history for a conversation. Returns `403 Forbidden` if the conversation does not belong to the user.
+After each turn, `MemoryService.extractAndSaveMemories()` sends the exchange to Claude Haiku:
 
-```json
-{
-  "messages": [
-    { "role": "user", "content": "Plan a trip to Tokyo" },
-    { "role": "assistant", "content": "Here is your itinerary…", "agent_steps": [...] }
-  ]
-}
+- **Travel:** extracts `home_city`, `preferred_airlines`, `dietary_restrictions`, `travel_budget`, `travel_style`, `passport_country`, `hotel_type`
+- **Shopping:** extracts `preferred_brands`, `budget_range`, `favorite_stores`, `size_preferences`, `product_categories`
+
+Preferences are upserted into `user_memories` and injected into the system prompt on the next request. Users can view and delete preferences from the Preferences panel in the UI.
+
+---
+
+## Agentic RAG
+
+Before the agent runs, `RAGService` runs a two-step pipeline:
+
+1. **Gate** — Claude Haiku decides if retrieval is needed (skips for conversational messages)
+2. **Search** — `EmbeddingService.embed(query)` → pgvector cosine similarity → top-3 chunks prepended to the message
+
+The knowledge base contains visa requirements, health tips, currency/tipping guides, and cultural etiquette for popular travel destinations. Voyage AI `voyage-3-lite` (512 dims) is used for embeddings; random unit vectors are used as a fallback in dev.
+
+---
+
+## Replacing the LLM Provider
+
+Set in `.env`:
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-proj-…
 ```
+
+The `createModel` factory in `backend-langgraph` selects Claude Haiku/Sonnet or GPT-4o-mini/GPT-4o based on the `tier` argument. All tools, services, and the frontend are provider-agnostic.
