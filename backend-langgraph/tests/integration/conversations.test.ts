@@ -15,7 +15,7 @@ jest.mock('@/config/env', () => ({
     TAVILY_API_KEY: 'test-tavily',
     OPENWEATHER_API_KEY: 'test-weather',
     DATABASE_URL: 'postgresql://user:password@localhost:5432/travel_agent',
-    TEST_DATABASE_URL: 'postgresql://user:password@localhost:5433/travel_agent_test',
+    TEST_DATABASE_URL: process.env.TEST_DATABASE_URL ?? 'postgresql://user:password@localhost:5432/travel_agent_test',
     PORT: 3000,
     NODE_ENV: 'test',
   },

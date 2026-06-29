@@ -27,7 +27,7 @@ jest.mock('@/config/env', () => ({
     TAVILY_API_KEY: 'test-tavily',
     OPENWEATHER_API_KEY: 'test-weather',
     DATABASE_URL: 'postgresql://user:password@localhost:5432/travel_agent',
-    TEST_DATABASE_URL: 'postgresql://user:password@localhost:5433/travel_agent_test',
+    TEST_DATABASE_URL: process.env.TEST_DATABASE_URL ?? 'postgresql://user:password@localhost:5432/travel_agent_test',
     PORT: 3000,
     NODE_ENV: 'test',
   },
@@ -42,16 +42,16 @@ jest.mock('@langchain/openai', () => ({
   ChatOpenAI: jest.fn().mockImplementation(() => ({ invoke: jest.fn() })),
 }));
 
-jest.mock('@/graph/travelGraph', () => ({
-  initTravelGraph: jest.fn(),
-  getTravelGraph: jest.fn(() => ({ streamEvents: jest.fn() })),
-}));
-jest.mock('@/graph/shoppingGraph', () => ({
-  initShoppingGraph: jest.fn(),
-  getShoppingGraph: jest.fn(() => ({ streamEvents: jest.fn() })),
-}));
+// Graph module mocks are no longer needed — graphs are set as Fastify decorators.
+// We use proxy objects so each test can replace the underlying streamEvents mock.
+jest.mock('@/graph/travelGraph', () => ({}));
+jest.mock('@/graph/shoppingGraph', () => ({}));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Per-test stream event mocks — replaced in beforeEach and individual tests.
+let travelStreamEvents: jest.Mock;
+let shoppingStreamEvents: jest.Mock;
 
 function parseSseBody(body: string): Array<Record<string, unknown>> {
   return body
@@ -64,6 +64,13 @@ async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   const pool = getTestPool();
   const embeddingService = new EmbeddingService();
+
+  // Proxy objects: streamEvents delegates to the current test-level mock.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (app as any).decorate('travelGraph', { streamEvents: (...args: unknown[]) => travelStreamEvents(...args) });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (app as any).decorate('shoppingGraph', { streamEvents: (...args: unknown[]) => shoppingStreamEvents(...args) });
+
   await app.register(chatRoutes, {
     userService: new UserService(pool),
     conversationService: new ConversationService(pool),
@@ -100,20 +107,6 @@ async function* makeGraphEventsWithTool(
   yield { event: 'on_chat_model_stream', name: 'ChatAnthropic', data: { chunk: { content: finalText } } };
 }
 
-/** Get the shared streamEvents mock from the mocked travelGraph module. */
-function getStreamEvents(): jest.Mock {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod = jest.requireMock('@/graph/travelGraph') as any;
-  return mod.getTravelGraph.mock.results[0]?.value?.streamEvents as jest.Mock;
-}
-
-/** Get the shared modelInvoke mock from the mocked ChatAnthropic. */
-function getModelInvoke(): jest.Mock {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod = jest.requireMock('@langchain/anthropic') as any;
-  return mod.ChatAnthropic.mock.results[0]?.value?.invoke as jest.Mock;
-}
-
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
 // globalSetup probes the DB once; skip all integration tests when DB is unavailable.
@@ -137,17 +130,11 @@ describe('POST /api/chat (LangGraph integration)', () => {
     await clearTestDb();
     jest.clearAllMocks();
 
-    // Reset graph mock factory so each test gets a fresh streamEvents mock
-    const travelMod = jest.requireMock('@/graph/travelGraph') as { initTravelGraph: jest.Mock; getTravelGraph: jest.Mock };
-    const shoppingMod = jest.requireMock('@/graph/shoppingGraph') as { initShoppingGraph: jest.Mock; getShoppingGraph: jest.Mock };
+    // Default stream: single text chunk for most tests.
+    travelStreamEvents = jest.fn().mockReturnValue(makeGraphEvents(['Here is your Tokyo itinerary.']));
+    shoppingStreamEvents = jest.fn().mockReturnValue(makeGraphEvents(['Here is your shopping result.']));
 
-    const sharedStreamEvents = jest.fn().mockReturnValue(makeGraphEvents(['Here is your Tokyo itinerary.']));
-
-    travelMod.getTravelGraph.mockReturnValue({ streamEvents: sharedStreamEvents });
-    shoppingMod.getShoppingGraph.mockReturnValue({ streamEvents: sharedStreamEvents });
-
-    // Use a shared invoke mock: RAG (call 1) → "no", memory extraction (call 2+) → "{}"
-    // Each service creates its own ChatAnthropic instance, so the mock must be shared.
+    // Shared invoke: RAG gate → "no", memory extraction → "{}"
     const sharedInvoke = jest.fn()
       .mockResolvedValueOnce({ content: 'no' })
       .mockResolvedValue({ content: '{}' });
@@ -196,12 +183,9 @@ describe('POST /api/chat (LangGraph integration)', () => {
   });
 
   itDb('emits tool_start and tool_end events when the graph calls tools', async () => {
-    const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
-    travelMod.getTravelGraph.mockReturnValue({
-      streamEvents: jest.fn().mockReturnValue(
-        makeGraphEventsWithTool('web_search', { query: 'Tokyo hotels' }, '{"results":[]}', 'Found some hotels.'),
-      ),
-    });
+    travelStreamEvents = jest.fn().mockReturnValue(
+      makeGraphEventsWithTool('web_search', { query: 'Tokyo hotels' }, '{"results":[]}', 'Found some hotels.'),
+    );
 
     const response = await app.inject({
       method: 'POST',
@@ -282,10 +266,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     const conversationId = convResult.rows[0].id;
 
     // Reset mocks for second request
-    const travelMod2 = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
-    travelMod2.getTravelGraph.mockReturnValue({
-      streamEvents: jest.fn().mockReturnValue(makeGraphEvents(['Follow-up reply.'])),
-    });
+    travelStreamEvents = jest.fn().mockReturnValue(makeGraphEvents(['Follow-up reply.']));
     const sharedInvoke2 = jest.fn()
       .mockResolvedValueOnce({ content: 'no' })
       .mockResolvedValue({ content: '{}' });
@@ -325,10 +306,7 @@ describe('POST /api/chat (LangGraph integration)', () => {
     const anthropicMod = jest.requireMock('@langchain/anthropic') as { ChatAnthropic: jest.Mock };
     anthropicMod.ChatAnthropic.mockImplementation(() => ({ invoke: sharedInvoke }));
 
-    const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
-    travelMod.getTravelGraph.mockReturnValue({
-      streamEvents: jest.fn().mockReturnValue(makeGraphEvents(['Great, noted your preferences!'])),
-    });
+    travelStreamEvents = jest.fn().mockReturnValue(makeGraphEvents(['Great, noted your preferences!']));
 
     app = await buildApp();
 
@@ -358,27 +336,25 @@ describe('POST /api/chat (LangGraph integration)', () => {
   // ── agentType ────────────────────────────────────────────────────────────
 
   itDb('uses the shopping graph when agentType is shopping', async () => {
-    const shoppingMod = jest.requireMock('@/graph/shoppingGraph') as { getShoppingGraph: jest.Mock };
-
     await app.inject({
       method: 'POST',
       url: '/api/chat',
       payload: { userId: 'session-shop', message: 'Find me Nike shoes', agentType: 'shopping' },
     });
 
-    expect(shoppingMod.getShoppingGraph).toHaveBeenCalled();
+    expect(shoppingStreamEvents).toHaveBeenCalled();
+    expect(travelStreamEvents).not.toHaveBeenCalled();
   });
 
   itDb('defaults to travel graph when agentType is not provided', async () => {
-    const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
-
     await app.inject({
       method: 'POST',
       url: '/api/chat',
       payload: { userId: 'session-travel', message: 'Plan a trip' },
     });
 
-    expect(travelMod.getTravelGraph).toHaveBeenCalled();
+    expect(travelStreamEvents).toHaveBeenCalled();
+    expect(shoppingStreamEvents).not.toHaveBeenCalled();
   });
 
   // ── Error handling ───────────────────────────────────────────────────────
@@ -402,11 +378,8 @@ describe('POST /api/chat (LangGraph integration)', () => {
   });
 
   itDb('emits error event when graph throws', async () => {
-    const travelMod = jest.requireMock('@/graph/travelGraph') as { getTravelGraph: jest.Mock };
-    travelMod.getTravelGraph.mockReturnValue({
-      streamEvents: jest.fn().mockImplementation(async function* () {
-        throw new Error('Graph execution failed');
-      }),
+    travelStreamEvents = jest.fn().mockImplementation(async function* () {
+      throw new Error('Graph execution failed');
     });
 
     const response = await app.inject({
