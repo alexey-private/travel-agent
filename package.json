@@ -5,11 +5,13 @@
   "workspaces": [
     "backend",
     "backend-langgraph",
+    "backend-telegram",
     "frontend"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=backend",
     "dev:backend-lg": "npm run dev --workspace=backend-langgraph",
+    "dev:telegram": "npm run dev --workspace=backend-telegram",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspace=backend"
