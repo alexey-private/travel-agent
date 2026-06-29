@@ -21,8 +21,7 @@ export const AgentState = Annotation.Root({
   }),
 
   // Per-request metadata (LastValue — set once, read-only throughout the graph).
-  /** Session ID — used as userId in all tool and repo operations. */
-  sessionId: Annotation<string>(),
+  userId: Annotation<string>(),
   conversationId: Annotation<string>(),
   agentType: Annotation<'travel' | 'shopping'>(),
 

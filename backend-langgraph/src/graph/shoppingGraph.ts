@@ -42,6 +42,6 @@ export function createShoppingGraph(
   return buildAgentGraph(
     tools,
     (state: AgentStateType) =>
-      buildShoppingAgentSystemPrompt(state.memories ?? [], state.sessionId, state.taskListName, state.ragContext, state.platform),
+      buildShoppingAgentSystemPrompt(state.memories ?? [], state.userId, state.taskListName, state.ragContext, state.platform),
   );
 }

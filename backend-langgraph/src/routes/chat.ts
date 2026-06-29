@@ -73,13 +73,13 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       },
     },
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
-      const { userId: sessionId, message, conversationId: existingConvId, agentType = 'travel', platform, attachments } = request.body;
+      const { userId, message, conversationId: existingConvId, agentType = 'travel', platform, attachments } = request.body;
 
-      if (!sessionId || (!message && !(attachments && attachments.length > 0))) {
+      if (!userId || (!message && !(attachments && attachments.length > 0))) {
         return reply.status(400).send({ error: 'userId and message (or attachment) are required' });
       }
 
-      const internalUserId = await userService.findOrCreateUser(sessionId);
+      const internalUserId = await userService.findOrCreateUser(userId);
       const conversationId = await conversationService.findOrCreateConversation(
         internalUserId,
         existingConvId,
@@ -90,7 +90,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         memoryService.getMemories(internalUserId, agentType),
         conversationService.getHistory(conversationId),
         ragService.buildRagContext(message),
-        prefRepo.get(internalUserId),
+        prefRepo.get(userId),
       ]);
 
       const requestId = request.id;
@@ -168,7 +168,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       };
 
       try {
-        for await (const event of graph.streamEvents({ messages: initialMessages, sessionId, conversationId, agentType, platform, memories, taskListName, ragContext }, { version: 'v2', signal: ac.signal })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, userId, conversationId, agentType, platform, memories, taskListName, ragContext }, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
             const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string

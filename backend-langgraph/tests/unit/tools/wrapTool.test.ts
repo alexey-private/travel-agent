@@ -102,9 +102,10 @@ describe('wrapTool', () => {
     expect(parsed).toEqual({ echoed: 'hello' });
   });
 
-  it('throws when BaseTool.execute returns success: false', async () => {
+  it('returns error string when BaseTool.execute returns success: false', async () => {
     const wrapped = wrapTool(new FailingTool());
-    await expect(wrapped.invoke({ query: 'anything' })).rejects.toThrow('Something went wrong');
+    const result = await wrapped.invoke({ query: 'anything' });
+    expect(result).toBe('Error: Something went wrong');
   });
 
   it('handles nested object schema with boolean and array fields', () => {
@@ -151,6 +152,7 @@ describe('wrapTool', () => {
     }
 
     const wrapped = wrapTool(new NoErrorTool());
-    await expect(wrapped.invoke({ x: 'y' })).rejects.toThrow('Tool execution failed');
+    const result = await wrapped.invoke({ x: 'y' });
+    expect(result).toBe('Error: Tool execution failed');
   });
 });
