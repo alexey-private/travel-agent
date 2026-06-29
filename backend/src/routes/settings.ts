@@ -22,11 +22,11 @@ export async function settingsRoutes(
   fastify.get<{ Querystring: { userId?: string } }>('/api/settings', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
+    await userService.findOrCreateUser(userId);
 
-    const prefs = await prefRepo.get(internalUserId);
-    const googleConnected = !!(await googleTokenRepo.get(internalUserId));
-    const icloudCreds = await icloudTokenRepo.get(internalUserId);
+    const prefs = await prefRepo.get(userId);
+    const googleConnected = !!(await googleTokenRepo.get(userId));
+    const icloudCreds = await icloudTokenRepo.get(userId);
     const appleConnected = !!icloudCreds;
     const appleId = icloudCreds?.appleId ?? null;
     const reminderHref = icloudCreds?.reminderHref ?? null;
@@ -42,7 +42,7 @@ export async function settingsRoutes(
   }>('/api/settings', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
+    await userService.findOrCreateUser(userId);
 
     const { calendarProvider, calendarName, shoppingCalendarName, taskListName, shoppingTaskListName } = req.body ?? {};
 
@@ -50,7 +50,7 @@ export async function settingsRoutes(
       return reply.code(400).send({ error: 'calendarProvider must be "google" or "apple"' });
     }
 
-    await prefRepo.save(internalUserId, {
+    await prefRepo.save(userId, {
       calendarProvider,
       calendarName,
       shoppingCalendarName,
@@ -71,7 +71,7 @@ export async function settingsRoutes(
 
     if (!userId) return reply.code(400).send({ error: 'userId required' });
     if (!appleId || !appPassword) return reply.code(400).send({ error: 'appleId and appPassword required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
+    await userService.findOrCreateUser(userId);
 
     // Verify credentials via CalDAV login
     try {
@@ -86,7 +86,7 @@ export async function settingsRoutes(
       return reply.code(401).send({ error: 'Invalid Apple ID or app-specific password. Make sure you are using an app-specific password from appleid.apple.com.' });
     }
 
-    await icloudTokenRepo.save(internalUserId, { appleId, appPassword });
+    await icloudTokenRepo.save(userId, { appleId, appPassword });
     return { connected: true };
   });
 
@@ -94,12 +94,12 @@ export async function settingsRoutes(
   fastify.delete<{ Querystring: { userId?: string } }>('/auth/apple/disconnect', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
-    await icloudTokenRepo.delete(internalUserId);
+    await userService.findOrCreateUser(userId);
+    await icloudTokenRepo.delete(userId);
     // If user was on apple provider, switch back to google
-    const prefs = await prefRepo.get(internalUserId);
+    const prefs = await prefRepo.get(userId);
     if (prefs.calendarProvider === 'apple') {
-      await prefRepo.save(internalUserId, { calendarProvider: 'google' });
+      await prefRepo.save(userId, { calendarProvider: 'google' });
     }
     return { disconnected: true };
   });
@@ -108,8 +108,8 @@ export async function settingsRoutes(
   fastify.get<{ Querystring: { userId?: string } }>('/auth/apple/status', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
-    const creds = await icloudTokenRepo.get(internalUserId);
+    await userService.findOrCreateUser(userId);
+    const creds = await icloudTokenRepo.get(userId);
     return { connected: !!creds, appleId: creds?.appleId ?? null };
   });
 
@@ -117,8 +117,8 @@ export async function settingsRoutes(
   fastify.get<{ Querystring: { userId?: string } }>('/auth/apple/reminder-lists', async (req, reply) => {
     const { userId } = req.query;
     if (!userId) return reply.code(400).send({ error: 'userId required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
-    const creds = await icloudTokenRepo.get(internalUserId);
+    await userService.findOrCreateUser(userId);
+    const creds = await icloudTokenRepo.get(userId);
     if (!creds) return reply.code(400).send({ error: 'Apple iCloud not connected' });
 
     try {
@@ -151,12 +151,12 @@ export async function settingsRoutes(
     const { url, isShoppingList = false } = req.body ?? {};
     if (!userId) return reply.code(400).send({ error: 'userId required' });
     if (!url) return reply.code(400).send({ error: 'url required' });
-    const internalUserId = await userService.findOrCreateUser(userId);
+    await userService.findOrCreateUser(userId);
 
     if (isShoppingList) {
-      await icloudTokenRepo.saveShoppingReminderHref(internalUserId, url);
+      await icloudTokenRepo.saveShoppingReminderHref(userId, url);
     } else {
-      await icloudTokenRepo.saveReminderHref(internalUserId, url);
+      await icloudTokenRepo.saveReminderHref(userId, url);
     }
     return { saved: true };
   });

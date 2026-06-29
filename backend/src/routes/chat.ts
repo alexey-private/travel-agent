@@ -133,7 +133,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       }
 
       const context = new AgentContext(
-        internalUserId,
+        sessionId,       // userId for tool operations — keyed by sessionId in all repos
         conversationId,
         message,
         memories,

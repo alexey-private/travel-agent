@@ -8,7 +8,7 @@ import { UserMemory } from '../types/memory';
  * LangGraph passes this state between nodes on every graph step.
  *
  * Fields WITHOUT a reducer use LastValue semantics (last write wins).
- * This is correct for metadata set once at graph entry: userId, agentType, etc.
+ * This is correct for metadata set once at graph entry: sessionId, agentType, etc.
  *
  * `messages` uses messagesStateReducer — appends new messages each step,
  * which is the core mechanism behind the ReAct loop.
@@ -21,8 +21,7 @@ export const AgentState = Annotation.Root({
   }),
 
   // Per-request metadata (LastValue — set once, read-only throughout the graph).
-  userId: Annotation<string>(),
-  /** External session ID passed to tool userId params and system prompt. */
+  /** Session ID — used as userId in all tool and repo operations. */
   sessionId: Annotation<string>(),
   conversationId: Annotation<string>(),
   agentType: Annotation<'travel' | 'shopping'>(),

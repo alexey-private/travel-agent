@@ -168,7 +168,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       };
 
       try {
-        for await (const event of graph.streamEvents({ messages: initialMessages, userId: internalUserId, sessionId, conversationId, agentType, platform, memories, taskListName, ragContext }, { version: 'v2', signal: ac.signal })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, sessionId, conversationId, agentType, platform, memories, taskListName, ragContext }, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
             const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string
