@@ -41,10 +41,11 @@ export function useStreamChat({
   const send = useCallback(async (displayText: string, fullText: string, attachments?: Attachment[]) => {
     setLoading(true);
 
-    dispatch({ type: "ADD", message: { id: crypto.randomUUID(), role: "user", content: displayText } });
+    const now = new Date().toISOString();
+    dispatch({ type: "ADD", message: { id: crypto.randomUUID(), role: "user", content: displayText, createdAt: now } });
 
     const assistantMsgId = crypto.randomUUID();
-    dispatch({ type: "ADD", message: { id: assistantMsgId, role: "assistant", content: "", steps: [], streaming: true } });
+    dispatch({ type: "ADD", message: { id: assistantMsgId, role: "assistant", content: "", steps: [], streaming: true, createdAt: now } });
 
     const controller = new AbortController();
     abortRef.current = controller;

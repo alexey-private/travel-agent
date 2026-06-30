@@ -29,6 +29,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   agent_steps?: AgentEvent[] | null;
+  created_at?: string;
 }
 
 export interface ToolStep {
@@ -45,6 +46,7 @@ export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  createdAt?: string;
   /** Tool-use steps attached to this assistant message */
   steps?: ToolStep[];
   /** True while the assistant is still streaming */

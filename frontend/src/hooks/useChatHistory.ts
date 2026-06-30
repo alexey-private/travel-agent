@@ -81,6 +81,7 @@ export function useChatHistory(
             id: crypto.randomUUID(),
             role: m.role,
             content: m.content,
+            createdAt: m.created_at,
             sources: sourcesFromSteps(m.agent_steps),
             suggestions: suggestionsFromSteps(m.agent_steps),
           })),

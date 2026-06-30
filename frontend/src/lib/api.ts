@@ -122,19 +122,31 @@ export async function disconnectGoogleCalendar(userId: string): Promise<void> {
 }
 
 /** Derive a human-readable PDF filename from message content: "2026-06-30 Flights New York London" */
-export function derivePdfFilename(text: string): string {
-  const date = new Date().toISOString().split('T')[0];
+export function derivePdfFilename(text: string, createdAt?: string): string {
+  const date = (createdAt ? new Date(createdAt) : new Date()).toISOString().split('T')[0];
 
-  // Find the first H1 or H2 heading in the markdown
-  const match = text.match(/^#{1,2}\s+(.+)/m);
+  // Find the first H1–H3 heading in the markdown
+  const match = text.match(/^#{1,3}\s+(.+)/m);
   if (match) {
     const heading = match[1]
-      .replace(/[*#`_~[\]()]/g, '')        // strip markdown symbols
-      .replace(/[^\w\sÀ-ɏ]/g, ' ') // keep letters, digits, whitespace, latin extended
+      .replace(/[*#`_~[\]()]/g, '')                          // strip markdown syntax
+      .replace(/[^\w\sÀ-ɏЀ-ӿ]/g, ' ')   // keep latin, cyrillic, digits
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 60);
     if (heading.length > 3) return `${date} ${heading}`;
+  }
+
+  // Fallback: first non-empty line of plain text
+  const firstLine = text.split('\n').map(l => l.replace(/^[#>\-*\d.\s]+/, '').trim()).find(l => l.length > 5);
+  if (firstLine) {
+    const name = firstLine
+      .replace(/[*#`_~[\]()]/g, '')
+      .replace(/[^\w\sÀ-ɏЀ-ӿ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60);
+    if (name.length > 3) return `${date} ${name}`;
   }
 
   return `agent-response-${date}`;

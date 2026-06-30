@@ -44,7 +44,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
     setMenuOpen(false);
     setExporting(true);
     try {
-      const filename = derivePdfFilename(message.content);
+      const filename = derivePdfFilename(message.content, message.createdAt);
       await exportToPdf(message.content, filename);
     } finally {
       setExporting(false);
@@ -57,7 +57,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
     setDriveStatus("uploading");
     setDriveError(null);
     try {
-      const filename = derivePdfFilename(message.content);
+      const filename = derivePdfFilename(message.content, message.createdAt);
       const result = await exportToPdfDrive(message.content, userId, agentType, filename);
       setDriveLink(result.webViewLink);
       setDriveStatus("done");
