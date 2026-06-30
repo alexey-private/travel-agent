@@ -1,21 +1,15 @@
 import { google } from 'googleapis';
 import { ToolResult } from '../../types/tools';
-import { DriveProvider, DriveListParams, DriveSearchParams, DriveReadParams } from './DriveProvider';
+import { DriveProvider, DriveListParams, DriveSearchParams, DriveReadParams, DriveCreateParams } from './DriveProvider';
 import { GoogleTokenRepository } from '../../repositories/GoogleTokenRepository';
+
+const APP_FOLDER_NAME = 'AI Travel Agent';
 
 const EXPORTABLE_MIME: Record<string, string> = {
   'application/vnd.google-apps.document': 'text/plain',
   'application/vnd.google-apps.spreadsheet': 'text/csv',
   'application/vnd.google-apps.presentation': 'text/plain',
 };
-
-const READABLE_MIME = new Set([
-  'text/plain',
-  'text/csv',
-  'text/html',
-  'text/markdown',
-  'application/json',
-]);
 
 const MAX_READ_BYTES = 100_000;
 
@@ -48,19 +42,48 @@ export class GoogleDriveProvider implements DriveProvider {
       }
     });
 
-    return google.drive({ version: 'v3', auth });
+    return { drive: google.drive({ version: 'v3', auth }), tokens };
+  }
+
+  private async getOrCreateFolder(userId: string): Promise<string> {
+    const { drive, tokens } = await this.getClient(userId);
+
+    if (tokens.driveFolderId) return tokens.driveFolderId;
+
+    // Search for existing folder created by this app
+    const res = await drive.files.list({
+      q: `mimeType = 'application/vnd.google-apps.folder' and name = '${APP_FOLDER_NAME}' and trashed = false`,
+      fields: 'files(id)',
+      pageSize: 1,
+    });
+
+    const existing = res.data.files?.[0]?.id;
+    if (existing) {
+      await this.tokenRepo.saveDriveFolderId(userId, existing);
+      return existing;
+    }
+
+    const created = await drive.files.create({
+      requestBody: {
+        name: APP_FOLDER_NAME,
+        mimeType: 'application/vnd.google-apps.folder',
+      },
+      fields: 'id',
+    });
+
+    const folderId = created.data.id!;
+    await this.tokenRepo.saveDriveFolderId(userId, folderId);
+    return folderId;
   }
 
   async list(params: DriveListParams): Promise<ToolResult> {
     try {
-      const drive = await this.getClient(params.userId);
-      const q = params.folderId
-        ? `'${params.folderId}' in parents and trashed = false`
-        : `'root' in parents and trashed = false`;
+      const { drive } = await this.getClient(params.userId);
+      const folderId = await this.getOrCreateFolder(params.userId);
 
       const res = await drive.files.list({
-        q,
-        pageSize: params.pageSize ?? 20,
+        q: `'${folderId}' in parents and trashed = false`,
+        pageSize: Math.min(params.pageSize ?? 20, 50),
         fields: 'files(id,name,mimeType,modifiedTime,size,webViewLink)',
         orderBy: 'modifiedTime desc',
       });
@@ -74,7 +97,7 @@ export class GoogleDriveProvider implements DriveProvider {
         webViewLink: f.webViewLink,
       }));
 
-      return { success: true, data: { files, total: files.length, source: 'google' } };
+      return { success: true, data: { files, total: files.length, folder: APP_FOLDER_NAME, source: 'google' } };
     } catch (err) {
       return this.handleError(err);
     }
@@ -82,13 +105,15 @@ export class GoogleDriveProvider implements DriveProvider {
 
   async search(params: DriveSearchParams): Promise<ToolResult> {
     try {
-      const drive = await this.getClient(params.userId);
+      const { drive } = await this.getClient(params.userId);
+      const folderId = await this.getOrCreateFolder(params.userId);
+
       const escaped = params.query.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      const q = `fullText contains '${escaped}' and trashed = false`;
+      const q = `name contains '${escaped}' and '${folderId}' in parents and trashed = false`;
 
       const res = await drive.files.list({
         q,
-        pageSize: params.pageSize ?? 20,
+        pageSize: Math.min(params.pageSize ?? 20, 50),
         fields: 'files(id,name,mimeType,modifiedTime,size,webViewLink)',
         orderBy: 'modifiedTime desc',
       });
@@ -102,7 +127,7 @@ export class GoogleDriveProvider implements DriveProvider {
         webViewLink: f.webViewLink,
       }));
 
-      return { success: true, data: { files, total: files.length, query: params.query, source: 'google' } };
+      return { success: true, data: { files, total: files.length, query: params.query, folder: APP_FOLDER_NAME, source: 'google' } };
     } catch (err) {
       return this.handleError(err);
     }
@@ -110,13 +135,9 @@ export class GoogleDriveProvider implements DriveProvider {
 
   async read(params: DriveReadParams): Promise<ToolResult> {
     try {
-      const drive = await this.getClient(params.userId);
+      const { drive } = await this.getClient(params.userId);
 
-      const meta = await drive.files.get({
-        fileId: params.fileId,
-        fields: 'id,name,mimeType,size',
-      });
-
+      const meta = await drive.files.get({ fileId: params.fileId, fields: 'id,name,mimeType' });
       const { name, mimeType } = meta.data;
 
       // Google Workspace files: export as text
@@ -126,26 +147,49 @@ export class GoogleDriveProvider implements DriveProvider {
           { fileId: params.fileId, mimeType: exportMime },
           { responseType: 'text' },
         );
-        const content = typeof res.data === 'string'
-          ? res.data.slice(0, MAX_READ_BYTES)
-          : JSON.stringify(res.data).slice(0, MAX_READ_BYTES);
+        const content = String(res.data).slice(0, MAX_READ_BYTES);
         return { success: true, data: { name, mimeType: exportMime, content, truncated: content.length === MAX_READ_BYTES, source: 'google' } };
       }
 
-      // Plain text and similar files: download directly
-      if (READABLE_MIME.has(mimeType ?? '')) {
-        const res = await drive.files.get(
-          { fileId: params.fileId, alt: 'media' },
-          { responseType: 'text' },
-        );
-        const raw = res.data as unknown as string;
-        const content = (typeof raw === 'string' ? raw : JSON.stringify(raw)).slice(0, MAX_READ_BYTES);
-        return { success: true, data: { name, mimeType, content, truncated: content.length === MAX_READ_BYTES, source: 'google' } };
-      }
+      // Plain files: download as text
+      const res = await drive.files.get(
+        { fileId: params.fileId, alt: 'media' },
+        { responseType: 'text' },
+      );
+      const raw = res.data as unknown as string;
+      const content = (typeof raw === 'string' ? raw : JSON.stringify(raw)).slice(0, MAX_READ_BYTES);
+      return { success: true, data: { name, mimeType, content, truncated: content.length === MAX_READ_BYTES, source: 'google' } };
+    } catch (err) {
+      return this.handleError(err);
+    }
+  }
+
+  async create(params: DriveCreateParams): Promise<ToolResult> {
+    try {
+      const { drive } = await this.getClient(params.userId);
+      const folderId = await this.getOrCreateFolder(params.userId);
+
+      const mimeType = params.mimeType ?? 'text/plain';
+      const { Readable } = await import('stream');
+      const body = Readable.from([params.content]);
+
+      const res = await drive.files.create({
+        requestBody: {
+          name: params.name,
+          mimeType,
+          parents: [folderId],
+        },
+        media: { mimeType, body },
+        fields: 'id,name,webViewLink',
+      });
 
       return {
-        success: false,
-        error: `File "${name}" (${mimeType}) cannot be read as text. Only Google Docs, Sheets, plain text, CSV, JSON, and HTML files are supported.`,
+        success: true,
+        data: {
+          message: `File "${params.name}" saved to Google Drive in the "${APP_FOLDER_NAME}" folder.`,
+          file: { id: res.data.id, name: res.data.name, webViewLink: res.data.webViewLink },
+          source: 'google',
+        },
       };
     } catch (err) {
       return this.handleError(err);

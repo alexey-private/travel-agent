@@ -2,7 +2,6 @@ import { ToolResult } from '../../types/tools';
 
 export interface DriveListParams {
   userId: string;
-  folderId?: string;
   pageSize?: number;
 }
 
@@ -17,8 +16,16 @@ export interface DriveReadParams {
   fileId: string;
 }
 
+export interface DriveCreateParams {
+  userId: string;
+  name: string;
+  content: string;
+  mimeType?: string;
+}
+
 export interface DriveProvider {
   list(params: DriveListParams): Promise<ToolResult>;
   search(params: DriveSearchParams): Promise<ToolResult>;
   read(params: DriveReadParams): Promise<ToolResult>;
+  create(params: DriveCreateParams): Promise<ToolResult>;
 }
