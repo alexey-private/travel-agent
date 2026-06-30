@@ -125,7 +125,7 @@ async function bootstrap(): Promise<void> {
   await fastify.register(calendarRoutes, { calendarProvider, tasksProvider });
   fastify.log.info('Calendar routes registered');
 
-  await fastify.register(exportRoutes);
+  await fastify.register(exportRoutes, { travelDriveProvider, shoppingDriveProvider });
   await fastify.register(transcribeRoutes);
   await fastify.register(userRoutes);
   await fastify.register(pushRoutes, { pool, userService });

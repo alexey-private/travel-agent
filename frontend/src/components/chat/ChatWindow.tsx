@@ -115,7 +115,7 @@ export default function ChatWindow({
         )}
 
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} onSuggestionClick={handleSuggestionClick} />
+          <MessageBubble key={msg.id} message={msg} userId={userId} agentType={agentType} onSuggestionClick={handleSuggestionClick} />
         ))}
 
         <div ref={bottomRef} />

@@ -19,7 +19,7 @@ export interface DriveReadParams {
 export interface DriveCreateParams {
   userId: string;
   name: string;
-  content: string;
+  content: string | Buffer;
   mimeType?: string;
 }
 

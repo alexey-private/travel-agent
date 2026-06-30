@@ -1,33 +1,69 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronDown, ChevronRight, Download } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, HardDrive } from "lucide-react";
 import AgentThoughts from "./AgentThoughts";
-import { exportToPdf } from "@/lib/api";
+import { exportToPdf, exportToPdfDrive, derivePdfFilename } from "@/lib/api";
 import { type Message } from "@/types/agent";
 
 export type { Message };
 
 interface MessageBubbleProps {
   message: Message;
+  userId?: string;
+  agentType?: "travel" | "shopping";
   onSuggestionClick?: (text: string) => void;
 }
 
 const SOURCES_PREVIEW = 5;
 
-const MessageBubble = memo(function MessageBubble({ message, onSuggestionClick }: MessageBubbleProps) {
+const MessageBubble = memo(function MessageBubble({ message, userId, agentType = "travel", onSuggestionClick }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [driveStatus, setDriveStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
+  const [driveLink, setDriveLink] = useState<string | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  async function handleExportPdf() {
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
+  async function handleDownloadLocal() {
+    setMenuOpen(false);
     setExporting(true);
     try {
-      await exportToPdf(message.content);
+      const filename = derivePdfFilename(message.content);
+      await exportToPdf(message.content, filename);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleSaveToDrive() {
+    setMenuOpen(false);
+    if (!userId) return;
+    setDriveStatus("uploading");
+    setDriveError(null);
+    try {
+      const filename = derivePdfFilename(message.content);
+      const result = await exportToPdfDrive(message.content, userId, agentType, filename);
+      setDriveLink(result.webViewLink);
+      setDriveStatus("done");
+    } catch (err) {
+      setDriveError(err instanceof Error ? err.message : "Upload failed");
+      setDriveStatus("error");
     }
   }
 
@@ -102,16 +138,59 @@ const MessageBubble = memo(function MessageBubble({ message, onSuggestionClick }
 
         {/* Export to PDF — shown for completed assistant messages with content */}
         {!isUser && !message.streaming && message.content && (
-          <div className="mt-1 flex justify-end">
-            <button
-              onClick={handleExportPdf}
-              disabled={exporting}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
-              title="Download as PDF"
-            >
-              <Download size={12} />
-              {exporting ? "Exporting…" : "PDF"}
-            </button>
+          <div className="mt-1 flex justify-end items-center gap-2">
+            {/* Drive status feedback */}
+            {driveStatus === "uploading" && (
+              <span className="text-xs text-gray-400">Uploading…</span>
+            )}
+            {driveStatus === "done" && driveLink && (
+              <a
+                href={driveLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-green-600 hover:underline"
+              >
+                <HardDrive size={12} />
+                Saved to Drive
+              </a>
+            )}
+            {driveStatus === "error" && (
+              <span className="text-xs text-red-400" title={driveError ?? undefined}>Upload failed</span>
+            )}
+
+            {/* PDF dropdown */}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(v => !v)}
+                disabled={exporting || driveStatus === "uploading"}
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+                title="Download as PDF"
+              >
+                <Download size={12} />
+                {exporting ? "Exporting…" : "PDF"}
+                <ChevronDown size={10} />
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[170px] py-1">
+                  <button
+                    onClick={handleDownloadLocal}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Download size={12} />
+                    Download locally
+                  </button>
+                  <button
+                    onClick={handleSaveToDrive}
+                    disabled={!userId}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40"
+                  >
+                    <HardDrive size={12} />
+                    Save to Google Drive
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

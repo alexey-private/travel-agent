@@ -121,6 +121,25 @@ export async function disconnectGoogleCalendar(userId: string): Promise<void> {
   await fetch(`${API_URL}/auth/google/disconnect?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' });
 }
 
+/** Derive a human-readable PDF filename from message content: "2026-06-30 Flights New York London" */
+export function derivePdfFilename(text: string): string {
+  const date = new Date().toISOString().split('T')[0];
+
+  // Find the first H1 or H2 heading in the markdown
+  const match = text.match(/^#{1,2}\s+(.+)/m);
+  if (match) {
+    const heading = match[1]
+      .replace(/[*#`_~[\]()]/g, '')        // strip markdown symbols
+      .replace(/[^\w\sÀ-ɏ]/g, ' ') // keep letters, digits, whitespace, latin extended
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60);
+    if (heading.length > 3) return `${date} ${heading}`;
+  }
+
+  return `agent-response-${date}`;
+}
+
 /** Download an assistant message as a PDF file. */
 export async function exportToPdf(text: string, filename?: string): Promise<void> {
   const response = await fetch(`${API_URL}/api/export/pdf`, {
@@ -136,6 +155,25 @@ export async function exportToPdf(text: string, filename?: string): Promise<void
   a.download = `${filename ?? 'agent-response'}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Upload an assistant message as a PDF to Google Drive. Returns the file link. */
+export async function exportToPdfDrive(
+  text: string,
+  userId: string,
+  agentType: 'travel' | 'shopping',
+  filename?: string,
+): Promise<{ webViewLink: string; name: string }> {
+  const response = await fetch(`${API_URL}/api/export/pdf-to-drive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, userId, agentType, filename }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error ?? `Export failed: ${response.status}`);
+  }
+  return response.json();
 }
 
 /** Generate or retrieve a persistent userId from localStorage. */

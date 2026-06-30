@@ -1,6 +1,7 @@
 import path from 'path';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import PDFDocument from 'pdfkit';
+import { DriveProvider } from '../tools/providers/DriveProvider';
 
 // Fonts bundled with the backend — DejaVuSans covers Latin + Cyrillic + Greek etc.
 const FONTS_DIR = path.resolve(__dirname, '../assets/fonts');
@@ -17,35 +18,77 @@ interface ExportBody {
   filename?: string;
 }
 
-export async function exportRoutes(fastify: FastifyInstance): Promise<void> {
+interface ExportToDriveBody {
+  text: string;
+  userId: string;
+  agentType?: 'travel' | 'shopping';
+  filename?: string;
+}
+
+interface ExportRoutesOptions {
+  travelDriveProvider?: DriveProvider;
+  shoppingDriveProvider?: DriveProvider;
+}
+
+async function buildPdfBuffer(text: string): Promise<Buffer> {
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+  doc.registerFont('Regular',     FONT.regular);
+  doc.registerFont('Bold',        FONT.bold);
+  doc.registerFont('BoldOblique', FONT.boldOblique);
+  doc.registerFont('Oblique',     FONT.oblique);
+  doc.registerFont('Mono',        FONT.mono);
+
+  const chunks: Buffer[] = [];
+  doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+  await new Promise<void>(resolve => {
+    doc.on('end', resolve);
+    renderMarkdown(doc, text);
+    doc.end();
+  });
+
+  return Buffer.concat(chunks);
+}
+
+export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesOptions = {}): Promise<void> {
   fastify.post<{ Body: ExportBody }>(
     '/api/export/pdf',
     async (request: FastifyRequest<{ Body: ExportBody }>, reply: FastifyReply) => {
       const { text, filename = 'agent-response' } = request.body;
       if (!text) return reply.status(400).send({ error: 'text is required' });
 
-      const doc = new PDFDocument({ margin: 50, size: 'A4' });
-      doc.registerFont('Regular',     FONT.regular);
-      doc.registerFont('Bold',        FONT.bold);
-      doc.registerFont('BoldOblique', FONT.boldOblique);
-      doc.registerFont('Oblique',     FONT.oblique);
-      doc.registerFont('Mono',        FONT.mono);
-
-      const chunks: Buffer[] = [];
-      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-
-      await new Promise<void>(resolve => {
-        doc.on('end', resolve);
-        renderMarkdown(doc, text);
-        doc.end();
-      });
-
-      const pdf = Buffer.concat(chunks);
+      const pdf = await buildPdfBuffer(text);
       const safeFilename = filename.replace(/[^a-z0-9_\- ]/gi, '_');
       reply
         .header('Content-Type', 'application/pdf')
         .header('Content-Disposition', `attachment; filename="${safeFilename}.pdf"`)
         .send(pdf);
+    },
+  );
+
+  fastify.post<{ Body: ExportToDriveBody }>(
+    '/api/export/pdf-to-drive',
+    async (request: FastifyRequest<{ Body: ExportToDriveBody }>, reply: FastifyReply) => {
+      const { text, userId, agentType = 'travel', filename = 'agent-response' } = request.body;
+      if (!text)   return reply.status(400).send({ error: 'text is required' });
+      if (!userId) return reply.status(400).send({ error: 'userId is required' });
+
+      const provider = agentType === 'shopping' ? opts.shoppingDriveProvider : opts.travelDriveProvider;
+      if (!provider) return reply.status(503).send({ error: 'Google Drive is not configured on this server.' });
+
+      const pdf = await buildPdfBuffer(text);
+      const safeFilename = `${filename.replace(/[^a-z0-9_\- ]/gi, '_')}.pdf`;
+
+      const result = await provider.create({
+        userId,
+        name: safeFilename,
+        content: pdf,
+        mimeType: 'application/pdf',
+      });
+
+      if (!result.success) return reply.status(502).send({ error: result.error });
+      const data = result.data as { file?: { webViewLink?: string } } | undefined;
+      reply.send({ webViewLink: data?.file?.webViewLink, name: safeFilename });
     },
   );
 }

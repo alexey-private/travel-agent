@@ -40,13 +40,14 @@ export class MockDriveProvider implements DriveProvider {
   }
 
   async create(params: DriveCreateParams): Promise<ToolResult> {
+    const isBuffer = Buffer.isBuffer(params.content);
     const file: MockFile = {
       id: `drive_${(idCounter++).toString()}`,
       name: params.name,
       mimeType: params.mimeType ?? 'text/plain',
       modifiedTime: new Date().toISOString(),
-      size: params.content.length,
-      content: params.content,
+      size: isBuffer ? (params.content as Buffer).byteLength : (params.content as string).length,
+      content: isBuffer ? '<binary>' : (params.content as string),
       webViewLink: `https://drive.google.com/file/mock_${idCounter}`,
     };
     this.files(params.userId).push(file);
