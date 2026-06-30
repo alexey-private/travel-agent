@@ -24,6 +24,7 @@ export function getPool(): Pool {
       max: 10,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
+      allowExitOnIdle: env.NODE_ENV === 'test',
     });
 
     pool.on('error', (err) => {

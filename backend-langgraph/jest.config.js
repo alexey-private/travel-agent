@@ -24,6 +24,9 @@ const config = {
   collectCoverageFrom: ['src/**/*.ts', '!src/index.ts', '!src/db/migrate.ts', '!src/db/seed*.ts'],
   // Integration tests share a single test database — run sequentially.
   maxWorkers: 1,
+  // Fastify registers a FinalizationRegistry (CustomGC) internally which Jest
+  // incorrectly reports as an open handle. Force-exit after tests complete.
+  forceExit: true,
 };
 
 module.exports = config;

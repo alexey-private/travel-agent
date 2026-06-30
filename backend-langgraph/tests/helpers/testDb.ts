@@ -10,7 +10,7 @@ let pool: Pool | null = null;
 
 export function getTestPool(): Pool {
   if (!pool) {
-    pool = new Pool({ connectionString: TEST_DATABASE_URL });
+    pool = new Pool({ connectionString: TEST_DATABASE_URL, allowExitOnIdle: true });
   }
   return pool;
 }
