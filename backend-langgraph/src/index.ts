@@ -82,8 +82,11 @@ async function bootstrap(): Promise<void> {
   const googleTasksProvider = googleConfig
     ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
     : new MockTasksProvider();
-  const driveProvider = googleConfig
-    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+  const travelDriveProvider = googleConfig
+    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri, 'AI Travel Agent')
+    : undefined;
+  const shoppingDriveProvider = googleConfig
+    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri, 'AI Shopping Agent')
     : undefined;
 
   const icloudCalendarProvider = new ICloudCalendarProvider(icloudTokenRepo, prefRepo);
@@ -93,8 +96,8 @@ async function bootstrap(): Promise<void> {
   const tasksProvider = new UserAwareTasksProvider(googleTasksProvider, icloudRemindersProvider, prefRepo);
 
   // Compile both agent graphs once — reused across all requests via fastify.decorate.
-  fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService, driveProvider));
-  fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService, driveProvider));
+  fastify.decorate('travelGraph', createTravelGraph(calendarProvider, tasksProvider, conversationService, travelDriveProvider));
+  fastify.decorate('shoppingGraph', createShoppingGraph(ragService, calendarProvider, tasksProvider, conversationService, shoppingDriveProvider));
   fastify.log.info('Agent graphs initialised');
 
   await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, prefRepo });

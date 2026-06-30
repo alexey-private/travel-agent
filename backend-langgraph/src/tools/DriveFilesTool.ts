@@ -40,9 +40,9 @@ export class DriveFilesTool extends BaseTool {
 
   private provider: DriveProvider;
 
-  constructor(provider?: DriveProvider) {
+  constructor(provider?: DriveProvider, folderName = 'AI Travel Agent') {
     super();
-    this.provider = provider ?? new MockDriveProvider();
+    this.provider = provider ?? new MockDriveProvider(folderName);
   }
 
   async execute(input: unknown): Promise<ToolResult> {

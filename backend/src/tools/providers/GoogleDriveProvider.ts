@@ -3,7 +3,7 @@ import { ToolResult } from '../../types/tools';
 import { DriveProvider, DriveListParams, DriveSearchParams, DriveReadParams, DriveCreateParams } from './DriveProvider';
 import { GoogleTokenRepository } from '../../repositories/GoogleTokenRepository';
 
-const APP_FOLDER_NAME = 'AI Travel Agent';
+const DEFAULT_FOLDER_NAME = 'AI Travel Agent';
 
 const EXPORTABLE_MIME: Record<string, string> = {
   'application/vnd.google-apps.document': 'text/plain',
@@ -19,6 +19,7 @@ export class GoogleDriveProvider implements DriveProvider {
     private clientId: string,
     private clientSecret: string,
     private redirectUri: string,
+    private folderName = DEFAULT_FOLDER_NAME,
   ) {}
 
   private async getClient(userId: string) {
@@ -45,34 +46,50 @@ export class GoogleDriveProvider implements DriveProvider {
     return { drive: google.drive({ version: 'v3', auth }), tokens };
   }
 
+  private isShoppingFolder(): boolean {
+    return this.folderName === 'AI Shopping Agent';
+  }
+
+  private getCachedFolderId(tokens: import('../../repositories/GoogleTokenRepository').GoogleTokens): string | null | undefined {
+    return this.isShoppingFolder() ? tokens.shoppingDriveFolderId : tokens.driveFolderId;
+  }
+
+  private async saveFolder(userId: string, folderId: string): Promise<void> {
+    if (this.isShoppingFolder()) {
+      await this.tokenRepo.saveShoppingDriveFolderId(userId, folderId);
+    } else {
+      await this.tokenRepo.saveDriveFolderId(userId, folderId);
+    }
+  }
+
   private async getOrCreateFolder(userId: string): Promise<string> {
     const { drive, tokens } = await this.getClient(userId);
 
-    if (tokens.driveFolderId) return tokens.driveFolderId;
+    const cached = this.getCachedFolderId(tokens);
+    if (cached) return cached;
 
-    // Search for existing folder created by this app
     const res = await drive.files.list({
-      q: `mimeType = 'application/vnd.google-apps.folder' and name = '${APP_FOLDER_NAME}' and trashed = false`,
+      q: `mimeType = 'application/vnd.google-apps.folder' and name = '${this.folderName}' and trashed = false`,
       fields: 'files(id)',
       pageSize: 1,
     });
 
     const existing = res.data.files?.[0]?.id;
     if (existing) {
-      await this.tokenRepo.saveDriveFolderId(userId, existing);
+      await this.saveFolder(userId, existing);
       return existing;
     }
 
     const created = await drive.files.create({
       requestBody: {
-        name: APP_FOLDER_NAME,
+        name: this.folderName,
         mimeType: 'application/vnd.google-apps.folder',
       },
       fields: 'id',
     });
 
     const folderId = created.data.id!;
-    await this.tokenRepo.saveDriveFolderId(userId, folderId);
+    await this.saveFolder(userId, folderId);
     return folderId;
   }
 
@@ -97,7 +114,7 @@ export class GoogleDriveProvider implements DriveProvider {
         webViewLink: f.webViewLink,
       }));
 
-      return { success: true, data: { files, total: files.length, folder: APP_FOLDER_NAME, source: 'google' } };
+      return { success: true, data: { files, total: files.length, folder: this.folderName, source: 'google' } };
     } catch (err) {
       return this.handleError(err);
     }
@@ -127,7 +144,7 @@ export class GoogleDriveProvider implements DriveProvider {
         webViewLink: f.webViewLink,
       }));
 
-      return { success: true, data: { files, total: files.length, query: params.query, folder: APP_FOLDER_NAME, source: 'google' } };
+      return { success: true, data: { files, total: files.length, query: params.query, folder: this.folderName, source: 'google' } };
     } catch (err) {
       return this.handleError(err);
     }
@@ -186,7 +203,7 @@ export class GoogleDriveProvider implements DriveProvider {
       return {
         success: true,
         data: {
-          message: `File "${params.name}" saved to Google Drive in the "${APP_FOLDER_NAME}" folder.`,
+          message: `File "${params.name}" saved to Google Drive in the "${this.folderName}" folder.`,
           file: { id: res.data.id, name: res.data.name, webViewLink: res.data.webViewLink },
           source: 'google',
         },

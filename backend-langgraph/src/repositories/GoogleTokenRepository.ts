@@ -7,6 +7,7 @@ interface GoogleTokenRow {
   calendar_id: string | null;
   shopping_calendar_id: string | null;
   drive_folder_id: string | null;
+  shopping_drive_folder_id: string | null;
 }
 
 export interface GoogleTokens {
@@ -16,6 +17,7 @@ export interface GoogleTokens {
   calendarId?: string | null;
   shoppingCalendarId?: string | null;
   driveFolderId?: string | null;
+  shoppingDriveFolderId?: string | null;
 }
 
 export class GoogleTokenRepository extends BaseRepository {
@@ -35,7 +37,7 @@ export class GoogleTokenRepository extends BaseRepository {
 
   async get(userId: string): Promise<GoogleTokens | null> {
     const row = await this.queryOne<GoogleTokenRow>(
-      'SELECT access_token, refresh_token, expiry_date, calendar_id, shopping_calendar_id, drive_folder_id FROM google_tokens WHERE user_id = $1',
+      'SELECT access_token, refresh_token, expiry_date, calendar_id, shopping_calendar_id, drive_folder_id, shopping_drive_folder_id FROM google_tokens WHERE user_id = $1',
       [userId],
     );
     if (!row) return null;
@@ -46,6 +48,7 @@ export class GoogleTokenRepository extends BaseRepository {
       calendarId: row.calendar_id,
       shoppingCalendarId: row.shopping_calendar_id,
       driveFolderId: row.drive_folder_id,
+      shoppingDriveFolderId: row.shopping_drive_folder_id,
     };
   }
 
@@ -66,6 +69,13 @@ export class GoogleTokenRepository extends BaseRepository {
   async saveDriveFolderId(userId: string, folderId: string): Promise<void> {
     await this.execute(
       'UPDATE google_tokens SET drive_folder_id = $2, updated_at = NOW() WHERE user_id = $1',
+      [userId, folderId],
+    );
+  }
+
+  async saveShoppingDriveFolderId(userId: string, folderId: string): Promise<void> {
+    await this.execute(
+      'UPDATE google_tokens SET shopping_drive_folder_id = $2, updated_at = NOW() WHERE user_id = $1',
       [userId, folderId],
     );
   }

@@ -15,6 +15,8 @@ const store = new Map<string, MockFile[]>();
 let idCounter = 100;
 
 export class MockDriveProvider implements DriveProvider {
+  constructor(private folderName = 'AI Travel Agent') {}
+
   private files(userId: string): MockFile[] {
     if (!store.has(userId)) store.set(userId, []);
     return store.get(userId)!;
@@ -22,13 +24,13 @@ export class MockDriveProvider implements DriveProvider {
 
   async list(params: DriveListParams): Promise<ToolResult> {
     const files = this.files(params.userId).slice(0, params.pageSize ?? 20);
-    return { success: true, data: { files, total: files.length, folder: 'AI Travel Agent', source: 'mock' } };
+    return { success: true, data: { files, total: files.length, folder: this.folderName, source: 'mock' } };
   }
 
   async search(params: DriveSearchParams): Promise<ToolResult> {
     const q = params.query.toLowerCase();
     const files = this.files(params.userId).filter(f => f.name.toLowerCase().includes(q));
-    return { success: true, data: { files, total: files.length, query: params.query, folder: 'AI Travel Agent', source: 'mock' } };
+    return { success: true, data: { files, total: files.length, query: params.query, folder: this.folderName, source: 'mock' } };
   }
 
   async read(params: DriveReadParams): Promise<ToolResult> {
@@ -51,7 +53,7 @@ export class MockDriveProvider implements DriveProvider {
     return {
       success: true,
       data: {
-        message: `File "${params.name}" saved to Google Drive in the "AI Travel Agent" folder.`,
+        message: `File "${params.name}" saved to Google Drive in the "${this.folderName}" folder.`,
         file: { id: file.id, name: file.name, webViewLink: file.webViewLink },
         source: 'mock',
       },

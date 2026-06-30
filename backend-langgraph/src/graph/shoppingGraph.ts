@@ -40,7 +40,7 @@ export function createShoppingGraph(
     new CalendarTool(calendarProvider),
     new TasksTool(tasksProvider),
     new SearchConversationsTool(conversationService),
-    new DriveFilesTool(driveProvider),
+    new DriveFilesTool(driveProvider, 'AI Shopping Agent'),
   ];
 
   return buildAgentGraph(

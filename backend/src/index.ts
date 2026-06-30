@@ -107,8 +107,11 @@ async function bootstrap(): Promise<void> {
   const googleTasksProvider = googleConfig
     ? new GoogleTasksProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
     : new MockTasksProvider();
-  const driveProvider = googleConfig
-    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri)
+  const travelDriveProvider = googleConfig
+    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri, 'AI Travel Agent')
+    : undefined;
+  const shoppingDriveProvider = googleConfig
+    ? new GoogleDriveProvider(tokenRepo, googleConfig.clientId, googleConfig.clientSecret, googleConfig.redirectUri, 'AI Shopping Agent')
     : undefined;
 
   const icloudCalendarProvider = new ICloudCalendarProvider(icloudTokenRepo, prefRepo);
@@ -135,7 +138,7 @@ async function bootstrap(): Promise<void> {
   travelToolRegistry.register(calendarTool);
   travelToolRegistry.register(travelTasksTool);
   travelToolRegistry.register(new SearchConversationsTool(conversationService));
-  travelToolRegistry.register(new DriveFilesTool(driveProvider));
+  travelToolRegistry.register(new DriveFilesTool(travelDriveProvider, 'AI Travel Agent'));
 
   const shoppingToolRegistry = new ToolRegistry();
   shoppingToolRegistry.register(new ProductSearchTool(ragService));
@@ -149,7 +152,7 @@ async function bootstrap(): Promise<void> {
   shoppingToolRegistry.register(calendarTool);
   shoppingToolRegistry.register(shoppingTasksTool);
   shoppingToolRegistry.register(new SearchConversationsTool(conversationService));
-  shoppingToolRegistry.register(new DriveFilesTool(driveProvider));
+  shoppingToolRegistry.register(new DriveFilesTool(shoppingDriveProvider, 'AI Shopping Agent'));
 
   // Routes
   await fastify.register(chatRoutes, {
