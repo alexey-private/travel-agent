@@ -63,7 +63,8 @@ function parseSseBody(body: string): Array<Record<string, unknown>> {
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   const pool = getTestPool();
-  const embeddingService = new EmbeddingService();
+  // Use a stub that returns a fixed vector — avoids real API calls regardless of VOYAGE_API_KEY in env
+  const embeddingService = { embed: jest.fn().mockResolvedValue(Array(512).fill(0.1)) } as unknown as EmbeddingService;
 
   // Proxy objects: streamEvents delegates to the current test-level mock.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
