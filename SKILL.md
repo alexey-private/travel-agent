@@ -13,9 +13,9 @@ docker compose up -d
 # 2. Apply any pending migrations
 cd backend-langgraph && npm run migrate && cd ..
 
-# 3. Start backends + frontend (separate terminals)
-npm run dev:backend-lg    # :3002 — primary (LangGraph)
-npm run dev:backend       # :3001 — secondary (ReAct)
+# 3. Start backend(s) + frontend (separate terminals)
+npm run dev:backend-lg    # :3002 — primary (LangGraph), actively developed
+npm run dev:backend       # :3001 — legacy (ReAct), frozen — only if you need it for comparison
 npm run dev:frontend      # :3000
 ```
 
@@ -25,14 +25,14 @@ npm run dev:frontend      # :3000
 
 **When:** Adding a new tool to one or both agents.
 
-Files to update in **both** `backend/` and `backend-langgraph/`:
+`backend/` is frozen (see [AGENTS.md](AGENTS.md#backend-status-critical)) — only touch it if the user explicitly asks. Files to update in `backend-langgraph/`:
 
 1. Create `src/tools/MyTool.ts` extending `BaseTool` — `execute()` returns `{ success, data }` or `{ success: false, error }`, never throws
 2. Register in `travelGraph.ts` and/or `shoppingGraph.ts` (pass to `initTravelGraph` / `initShoppingGraph`)
 3. Add tool description to `src/agent/prompts.ts` — both `buildTravelAgentSystemPrompt` and `buildShoppingAgentSystemPrompt`
-4. Run both TypeScript checks
+4. Run TypeScript check
 
-**LangGraph only:** errors in `execute()` must be returned as strings via `wrapTool` — never throw.
+Errors in `execute()` must be returned as strings via `wrapTool` — never throw.
 **User-aware tools** (Calendar, Tasks): use `CalendarProvider` / `TasksProvider` — extract `userId` from tool input, not from constructor.
 
 ---
@@ -46,7 +46,6 @@ Files to update in **both** `backend/` and `backend-langgraph/`:
 ```bash
 # 1. Create migration file (next number, check existing: ls backend-langgraph/src/db/migrations/)
 touch backend-langgraph/src/db/migrations/013_my_change.sql
-cp backend-langgraph/src/db/migrations/013_my_change.sql backend/src/db/migrations/
 
 # 2. Write SQL with IF NOT EXISTS guards (migrations run idempotently)
 # 3. Apply to dev DB
@@ -57,7 +56,7 @@ docker exec travel-agent-postgres-1 psql -U user -d travel_agent_test -f /path/t
 ```
 
 Note: `ADD CONSTRAINT IF NOT EXISTS` is not supported in PostgreSQL — use a `DO $$ BEGIN ... END $$` block.
-Copy to **both** `backend/` and `backend-langgraph/`.
+`backend/` is frozen — do NOT copy the migration there unless the user asks (see [AGENTS.md](AGENTS.md#backend-status-critical)).
 
 ---
 
@@ -66,11 +65,10 @@ Copy to **both** `backend/` and `backend-langgraph/`.
 **When:** After any change to backend code, before marking a task complete.
 
 ```bash
-npx tsc -p backend/tsconfig.json --noEmit
 npx tsc -p backend-langgraph/tsconfig.json --noEmit
 ```
 
-Both must pass. If one fails, fix before proceeding.
+Must pass. `backend/` is frozen — only typecheck it if you actually touched it.
 
 ---
 
@@ -80,7 +78,7 @@ Both must pass. If one fails, fix before proceeding.
 
 ```bash
 # TypeScript check (fast, run first)
-npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
+npx tsc -p backend-langgraph/tsconfig.json --noEmit
 
 # Unit tests only (fast, no DB needed)
 npm run test --workspace=backend-langgraph
@@ -172,7 +170,7 @@ Pattern:
 2. Add credentials storage migration + repository
 3. Add to `CalendarProvider` delegation logic (checks which provider user has connected)
 4. Add auth route + frontend settings card
-5. Mirror to both backends
+5. `backend/` is frozen — implement in `backend-langgraph/` only unless the user asks otherwise
 
 Reference: [backend-langgraph/src/tools/providers/](backend-langgraph/src/tools/providers/)
 

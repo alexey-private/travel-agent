@@ -6,12 +6,13 @@ See [SKILL.md](SKILL.md) for workflow recipes.
 
 ## Project Role
 
-AI-powered travel & shopping planning assistant with two parallel backends and a Next.js frontend.
+AI-powered travel & shopping planning assistant. Started as a learning project comparing two backend architectures; has since grown into the production project. `backend-langgraph/` is now the only actively developed backend — see [Backend Status](#backend-status-critical) below.
+
 Users chat with an agent that searches flights/hotels, manages Google Calendar tasks, and recalls past conversations via vector search.
 
 **Frontend:** `http://localhost:3000`
-**Backend (LangGraph):** `http://localhost:3002` (primary)
-**Backend (ReAct):** `http://localhost:3001`
+**Backend (LangGraph):** `http://localhost:3002` — primary, actively developed
+**Backend (ReAct):** `http://localhost:3001` — legacy, frozen (see below)
 
 ---
 
@@ -21,7 +22,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 |-------|-----------|
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS |
 | Backend (primary) | Fastify, LangGraph StateGraph, `@langchain/anthropic` |
-| Backend (secondary) | Fastify, custom ReAct loop, Anthropic SDK |
+| Backend (legacy, frozen) | Fastify, custom ReAct loop, Anthropic SDK — no longer updated |
 | Database | PostgreSQL 16 + pgvector extension |
 | Embeddings | Voyage AI `voyage-3-lite` (512 dims) |
 | LLM | Anthropic Claude (default) or OpenAI (env-switchable) |
@@ -116,15 +117,19 @@ ALLOWED_ORIGIN        # CORS origin for production
 
 ---
 
-## Two-Backend Rule (CRITICAL)
+## Backend Status (CRITICAL)
 
-All changes to tools, prompts, routes, repositories, or services **must be mirrored** to both `backend/` and `backend-langgraph/`. Run after every change:
+**`backend-langgraph/` is the only actively maintained backend.** As of 2026-07-06, `backend/` (the original ReAct implementation) is frozen — kept around for reference/comparison but not receiving updates. It will eventually be deleted or left as-is; no decision has been made yet.
+
+**Do NOT mirror changes to `backend/`** unless the user explicitly asks for it. This supersedes any earlier "apply to both backends" convention baked into commit history, tests, or old docs. All changes to tools, prompts, routes, repositories, or services go into `backend-langgraph/` only. Run after every change:
 
 ```bash
-npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
+npx tsc -p backend-langgraph/tsconfig.json --noEmit
 TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
   npm run test:all --workspace=backend-langgraph
 ```
+
+If a task seems to require touching `backend/` (e.g. a shared migration file under `backend/src/db/migrations/`), ask the user first rather than assuming it should be kept in sync.
 
 ---
 
@@ -148,10 +153,11 @@ If a column exists in production but has no migration file — it will be missin
 
 1. **Run tsc + tests** — non-negotiable after any code change:
    ```bash
-   npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconfig.json --noEmit
+   npx tsc -p backend-langgraph/tsconfig.json --noEmit
    TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
      npm run test:all --workspace=backend-langgraph
    ```
+   (Only run `backend/`'s tsc/tests if a change actually touched `backend/` — it's frozen, see Backend Status above.)
 2. **Memory** — update if the task revealed a non-obvious invariant or recurring pattern.
 3. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
 4. **SKILL.md** — update if the task introduced a new recurring workflow.
