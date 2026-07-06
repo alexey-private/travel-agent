@@ -6,6 +6,8 @@
 
 import Fastify, { FastifyInstance } from 'fastify';
 import { memoryRoutes } from '@/routes/memory';
+import { UserService } from '@/services/UserService';
+import { MemoryService } from '@/services/MemoryService';
 import { closePool, getPool } from '@/db/client';
 import { setupTestDb, clearTestDb, teardownTestDb } from '../helpers/testDb';
 
@@ -33,7 +35,11 @@ jest.mock('@langchain/openai', () => ({
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(memoryRoutes);
+  const pool = getPool();
+  await app.register(memoryRoutes, {
+    userService: new UserService(pool),
+    memoryService: new MemoryService(pool),
+  });
   return app;
 }
 

@@ -101,8 +101,8 @@ async function bootstrap(): Promise<void> {
   fastify.log.info('Agent graphs initialised');
 
   await fastify.register(chatRoutes, { userService, conversationService, memoryService, ragService, suggestionService, prefRepo });
-  await fastify.register(memoryRoutes);
-  await fastify.register(conversationRoutes);
+  await fastify.register(memoryRoutes, { userService, memoryService });
+  await fastify.register(conversationRoutes, { userService, conversationService });
   if (googleConfig) {
     await fastify.register(authRoutes, {
       tokenRepo,

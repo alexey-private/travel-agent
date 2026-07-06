@@ -6,6 +6,8 @@
 
 import Fastify, { FastifyInstance } from 'fastify';
 import { conversationRoutes } from '@/routes/conversations';
+import { UserService } from '@/services/UserService';
+import { ConversationService } from '@/services/ConversationService';
 import { closePool } from '@/db/client';
 import { setupTestDb, clearTestDb, teardownTestDb, getTestPool } from '../helpers/testDb';
 
@@ -23,7 +25,11 @@ jest.mock('@/config/env', () => ({
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(conversationRoutes);
+  const pool = getTestPool();
+  await app.register(conversationRoutes, {
+    userService: new UserService(pool),
+    conversationService: new ConversationService(pool),
+  });
   return app;
 }
 

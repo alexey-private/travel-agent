@@ -1,4 +1,4 @@
-import { Pool, QueryResult, QueryResultRow } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 /**
  * Abstract base class for all repositories.
@@ -32,5 +32,20 @@ export abstract class BaseRepository {
    */
   protected async execute(sql: string, params?: unknown[]): Promise<void> {
     await this.pool.query(sql, params);
+  }
+
+  /**
+   * Runs `fn` against a single dedicated connection, releasing it afterwards.
+   * Use when multiple statements must share connection-local state
+   * (e.g. `SET ivfflat.probes` before a similarity query) — `this.pool.query()`
+   * may hand out a different connection per call, making session-scoped SET pointless.
+   */
+  protected async withClient<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      return await fn(client);
+    } finally {
+      client.release();
+    }
   }
 }

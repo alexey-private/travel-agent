@@ -32,8 +32,8 @@ export class KnowledgeRepository extends BaseRepository {
     filter?: Record<string, unknown>,
   ): Promise<KnowledgeChunk[]> {
     const vectorLiteral = `[${embedding.join(',')}]`;
-    const client = await this.pool.connect();
-    try {
+
+    return this.withClient(async (client) => {
       await client.query('SET ivfflat.probes = 10');
 
       let query: string;
@@ -61,9 +61,7 @@ export class KnowledgeRepository extends BaseRepository {
         similarity: Number(r.similarity),
         metadata: r.metadata ?? undefined,
       }));
-    } finally {
-      client.release();
-    }
+    });
   }
 
   /**

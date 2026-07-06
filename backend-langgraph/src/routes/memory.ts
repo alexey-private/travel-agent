@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { getPool } from '../db/client';
 import { UserService } from '../services/UserService';
 import { MemoryService } from '../services/MemoryService';
 
@@ -12,13 +11,18 @@ interface MemoryKeyParam extends UserIdParam {
   key: string;
 }
 
+interface MemoryRouteOptions {
+  userService: UserService;
+  memoryService: MemoryService;
+}
+
 /**
  * Memory management routes.
  *
  *   GET    /api/memory/:userId        → { memories: UserMemory[] }
  *   DELETE /api/memory/:userId/:key   → 204 No Content
  */
-export async function memoryRoutes(fastify: FastifyInstance): Promise<void> {
+export async function memoryRoutes(fastify: FastifyInstance, { userService, memoryService }: MemoryRouteOptions): Promise<void> {
   /**
    * Returns all stored memories for the given user session.
    * Creates an empty user record if one does not yet exist.
@@ -28,10 +32,6 @@ export async function memoryRoutes(fastify: FastifyInstance): Promise<void> {
     async (request: FastifyRequest<{ Params: UserIdParam; Querystring: { agentType?: string } }>, reply: FastifyReply) => {
       const { userId: sessionId } = request.params;
       const agentType = request.query.agentType === 'shopping' ? 'shopping' : 'travel';
-
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const memoryService = new MemoryService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
       const memories = await memoryService.getMemories(internalUserId, agentType);
@@ -49,10 +49,6 @@ export async function memoryRoutes(fastify: FastifyInstance): Promise<void> {
     async (request: FastifyRequest<{ Params: MemoryKeyParam; Querystring: { agentType?: string } }>, reply: FastifyReply) => {
       const { userId: sessionId, key } = request.params;
       const agentType = request.query.agentType === 'shopping' ? 'shopping' : 'travel';
-
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const memoryService = new MemoryService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
       await memoryService.deleteMemory(internalUserId, key, agentType);

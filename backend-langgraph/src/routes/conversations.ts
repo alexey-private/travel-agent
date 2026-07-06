@@ -1,17 +1,18 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { getPool } from '../db/client';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
 
-export async function conversationRoutes(fastify: FastifyInstance): Promise<void> {
+interface ConversationRouteOptions {
+  userService: UserService;
+  conversationService: ConversationService;
+}
+
+export async function conversationRoutes(fastify: FastifyInstance, { userService, conversationService }: ConversationRouteOptions): Promise<void> {
   fastify.get<{ Params: { userId: string }; Querystring: { agentType?: string } }>(
     '/api/conversations/:userId',
     async (request: FastifyRequest<{ Params: { userId: string }; Querystring: { agentType?: string } }>, reply: FastifyReply) => {
       const { userId: sessionId } = request.params;
       const agentType = request.query.agentType === 'shopping' ? 'shopping' : 'travel';
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const conversationService = new ConversationService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
       const conversations = await conversationService.listConversations(internalUserId, agentType);
@@ -27,9 +28,6 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
       reply: FastifyReply,
     ) => {
       const { userId: sessionId, conversationId } = request.params;
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const conversationService = new ConversationService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
 
@@ -48,9 +46,6 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
       reply: FastifyReply,
     ) => {
       const { userId: sessionId, conversationId } = request.params;
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const conversationService = new ConversationService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
       const owned = await userService.verifyOwnership(internalUserId, conversationId);
@@ -68,9 +63,6 @@ export async function conversationRoutes(fastify: FastifyInstance): Promise<void
       reply: FastifyReply,
     ) => {
       const { userId: sessionId, conversationId } = request.params;
-      const pool = getPool();
-      const userService = new UserService(pool);
-      const conversationService = new ConversationService(pool);
 
       const internalUserId = await userService.findOrCreateUser(sessionId);
       const owned = await userService.verifyOwnership(internalUserId, conversationId);
