@@ -27,7 +27,10 @@ RUN npm ci --omit=dev
 COPY --from=build /app/backend-langgraph/dist ./backend-langgraph/dist
 WORKDIR /app/backend-langgraph
 
-# Railway injects PORT; the app reads it via src/config/env.ts.
+# Railway does NOT auto-inject PORT for this service — set it explicitly to
+# 3002 in the Railway service variables (see DEPLOYMENT.md). The app reads it
+# via src/config/env.ts, which defaults to 3001 if PORT is unset; that default
+# mismatches the private-network port backend-telegram's BACKEND_URL expects.
 EXPOSE 3002
 
 # Idempotent migration runner (tracks schema_migrations) runs before each boot.

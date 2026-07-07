@@ -74,6 +74,7 @@ once the container is up.
 | `ENCRYPTION_KEY` | 32+ char random string, only if using iCloud |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
 | `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
+| `PORT` | `3002` — see note below, do not leave unset |
 
 `NEXT_PUBLIC_FRONTEND_URL` is read directly via `process.env` in
 [auth.ts](backend-langgraph/src/routes/auth.ts) (not through the validated
@@ -83,9 +84,21 @@ is `http://localhost:3000` — the callback will complete and tokens will
 save correctly, but the user's browser ends up redirected to localhost
 instead of the deployed frontend.
 
-`PORT` — do not set it manually; Railway injects it and
-[env.ts](backend-langgraph/src/config/env.ts) already reads
-`process.env.PORT`.
+**Set `PORT=3002` explicitly** — despite the comment in
+[Dockerfile.backend-langgraph](Dockerfile.backend-langgraph) claiming Railway
+injects it, Railway does **not** set `PORT` for this service unless you add
+it yourself, so [env.ts](backend-langgraph/src/config/env.ts) falls back to
+its default of `3001`. The public domain still works either way — Railway
+auto-detects whatever port the container actually opens and proxies to it
+(`targetPort: null`) — but `backend-telegram`'s `BACKEND_URL` talks to this
+service over the **private network** (`travel-agent.railway.internal:3002`),
+which is a plain TCP address with no smart-detection: it only connects if
+the container is actually listening on the port named in the URL. Without
+`PORT=3002` set here, every request from the Telegram bot fails with
+`Cannot reach backend: fetch failed` even though `/health` on the public
+domain returns 200 — the mismatch is invisible from the public side. Same
+underlying gotcha as `frontend`'s `PORT` below, just surfacing through the
+private network instead of a public domain.
 
 **After the first deploy**, update the Google Cloud Console OAuth
 credentials' authorized redirect URI to match `GOOGLE_REDIRECT_URI` above —
@@ -99,7 +112,7 @@ long-polling mode (`bot.start()`) — **no public domain, no exposed port**.
 | Variable | Value |
 |---|---|
 | `BOT_TOKEN` | from @BotFather |
-| `BACKEND_URL` | `http://${{backend-langgraph.RAILWAY_PRIVATE_DOMAIN}}:<port>` — use the private domain, not the public one, to avoid an unnecessary public-network hop |
+| `BACKEND_URL` | `http://${{backend-langgraph.RAILWAY_PRIVATE_DOMAIN}}:3002` — use the private domain, not the public one, to avoid an unnecessary public-network hop. The port **must** match whatever `PORT` is actually set to on the backend-langgraph service (see below) — there's no auto-detection over the private network like there is for public domains |
 | `OPENWEATHER_API_KEY` | required |
 | `OPENAI_API_KEY` | if voice transcription is enabled |
 | `NOTIFY_HOUR` | optional, defaults to `9` |
