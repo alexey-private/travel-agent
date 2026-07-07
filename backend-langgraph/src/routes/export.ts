@@ -190,27 +190,46 @@ function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
   const rows = parseTableRows(tableLines);
   if (rows.length === 0) return;
 
-  const margins = doc.page.margins as { left: number; right: number; top: number; bottom: number };
+  const margins   = doc.page.margins as { left: number; right: number; top: number; bottom: number };
   const pageWidth = doc.page.width - margins.left - margins.right;
   const colCount  = Math.max(...rows.map(r => r.length));
-  const colWidth  = pageWidth / colCount;
   const cellPad   = 5;
-  const rowH      = 20;
+  const fontSize  = 9;
+  const minRowH   = 20;
+  const minColW   = 55;
+
+  const cleanRows = rows.map(row => row.slice(0, colCount).map(cell => clean(cell)));
+
+  // Size columns proportionally to their longest content, with a floor so narrow
+  // columns (e.g. "Stars") don't get squeezed to nothing by wide neighbors.
+  const colMaxLen = new Array(colCount).fill(0);
+  cleanRows.forEach(row => row.forEach((cell, i) => { colMaxLen[i] = Math.max(colMaxLen[i], cell.length || 1); }));
+  const totalLen  = colMaxLen.reduce((a, b) => a + b, 0);
+  let colWidths   = colMaxLen.map(len => Math.max(minColW, (len / totalLen) * pageWidth));
+  const widthSum  = colWidths.reduce((a, b) => a + b, 0);
+  if (widthSum > pageWidth) colWidths = colWidths.map(w => (w / widthSum) * pageWidth);
+  const colX = colWidths.reduce<number[]>((acc, w, i) => {
+    acc.push(i === 0 ? margins.left : acc[i - 1] + colWidths[i - 1]);
+    return acc;
+  }, []);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let startY = (doc as any).y as number;
+  let y = (doc as any).y as number;
 
-  rows.forEach((row, rowIdx) => {
-    const currentY = startY + rowIdx * rowH;
+  cleanRows.forEach((cellTexts, rowIdx) => {
+    const isHeader = rowIdx === 0;
+    doc.fontSize(fontSize).font(isHeader ? 'Bold' : 'Regular');
+
+    const rowH = Math.max(
+      minRowH,
+      ...cellTexts.map((text, i) => doc.heightOfString(text, { width: colWidths[i] - cellPad * 2 }) + cellPad * 2),
+    );
 
     // Page break if needed
-    if (currentY + rowH > doc.page.height - margins.bottom) {
+    if (y + rowH > doc.page.height - margins.bottom) {
       doc.addPage();
-      startY = margins.top - rowIdx * rowH;
+      y = margins.top;
     }
-
-    const y = startY + rowIdx * rowH;
-    const isHeader = rowIdx === 0;
 
     // Header shading
     if (isHeader) {
@@ -227,8 +246,8 @@ function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
       .lineWidth(0.5)
       .stroke();
 
-    row.slice(0, colCount).forEach((cell, colIdx) => {
-      const x = margins.left + colIdx * colWidth;
+    cellTexts.forEach((text, colIdx) => {
+      const x = colX[colIdx];
 
       // Column separator
       if (colIdx > 0) {
@@ -236,21 +255,20 @@ function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
           .strokeColor('#cccccc').lineWidth(0.5).stroke();
       }
 
-      doc.fontSize(9)
-        .font(isHeader ? 'Bold' : 'Regular')
-        .fillColor('#000000')
-        .text(clean(cell), x + cellPad, y + cellPad + 2, {
-          width:     colWidth - cellPad * 2,
-          height:    rowH - cellPad,
-          lineBreak: false,
-          ellipsis:  true,
-        });
+      doc.fillColor('#000000')
+        .text(text, x + cellPad, y + cellPad, { width: colWidths[colIdx] - cellPad * 2 });
     });
+
+    y += rowH;
   });
 
-  // Advance doc cursor past the table
+  // Advance doc cursor past the table and reset x — pdfkit's text() with an
+  // explicit x leaves doc.x pinned at the last column, which otherwise wraps
+  // all following paragraphs into a sliver at the right margin.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (doc as any).y = startY + rows.length * rowH + 4;
+  (doc as any).y = y + 4;
+  doc.x = margins.left;
+  doc.fontSize(11).font('Regular');
   doc.moveDown(0.5);
 }
 
@@ -288,7 +306,8 @@ function renderInline(
 function stripEmoji(text: string): string {
   return text
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u{2600}-\u{27BF}]/gu,   '')
+    // Keep ★ U+2605 / ☆ U+2606 — used for star ratings and rendered fine by DejaVuSans.
+    .replace(/[\u{2600}-\u{2604}\u{2607}-\u{27BF}]/gu, '')
     .replace(/[\u{2B00}-\u{2BFF}]/gu,   '')
     .replace(/[\u{FE00}-\u{FEFF}]/gu,   '')
     .trim();
