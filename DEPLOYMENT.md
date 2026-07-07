@@ -70,9 +70,18 @@ once the container is up.
 | `VOYAGE_API_KEY` | optional (random-vector fallback if unset) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
+| `NEXT_PUBLIC_FRONTEND_URL` | `https://<frontend-service-domain>` — required if using Google Calendar/Tasks (see below) |
 | `ENCRYPTION_KEY` | 32+ char random string, only if using iCloud |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
 | `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
+
+`NEXT_PUBLIC_FRONTEND_URL` is read directly via `process.env` in
+[auth.ts](backend-langgraph/src/routes/auth.ts) (not through the validated
+`env` object, and not the same thing as `ALLOWED_ORIGIN`) to build the
+redirect after the Google OAuth callback finishes. Without it, the fallback
+is `http://localhost:3000` — the callback will complete and tokens will
+save correctly, but the user's browser ends up redirected to localhost
+instead of the deployed frontend.
 
 `PORT` — do not set it manually; Railway injects it and
 [env.ts](backend-langgraph/src/config/env.ts) already reads
