@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && cp -r src/assets dist/assets",
+    "build": "tsc && cp -r src/assets dist/assets && cp -r src/db/migrations dist/db/migrations",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
+    "migrate:prod": "node dist/db/migrate.js",
     "seed": "tsx src/db/seed.ts",
     "seed:shopping": "tsx src/db/seed-shopping.ts",
     "lint": "eslint src",

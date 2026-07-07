@@ -1,0 +1,42 @@
+# Build context must be the repo root (npm workspaces monorepo).
+# Railway service config: set "Root Directory" to "/" and Dockerfile Path to
+# "Dockerfile.frontend".
+#
+# NEXT_PUBLIC_* vars are inlined at BUILD time by Next.js, so they must be
+# declared as ARG here and set as plain Variables on the Railway service —
+# Railway forwards service Variables as Docker build-args for matching ARGs.
+# Changing them requires a redeploy (rebuild), not just a restart.
+
+FROM node:20-alpine AS base
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY backend/package.json ./backend/package.json
+COPY backend-langgraph/package.json ./backend-langgraph/package.json
+COPY backend-telegram/package.json ./backend-telegram/package.json
+COPY frontend/package.json ./frontend/package.json
+
+FROM base AS deps
+RUN npm ci
+
+FROM deps AS build
+COPY frontend ./frontend
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+RUN npm run build --workspace=frontend
+
+# next.config.mjs sets output: 'standalone', which traces only the deps each
+# page actually needs into .next/standalone — static assets and /public are
+# excluded by design and must be copied in manually (see Next.js docs).
+# Because this is an npm-workspaces monorepo, the traced output nests under
+# frontend/ (server.js, hoisted node_modules land one level up, next to it).
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/frontend/.next/standalone ./
+COPY --from=build /app/frontend/.next/static ./frontend/.next/static
+COPY --from=build /app/frontend/public ./frontend/public
+
+EXPOSE 3000
+CMD ["node", "frontend/server.js"]

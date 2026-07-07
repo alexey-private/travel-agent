@@ -1,0 +1,38 @@
+# Dependencies (installed fresh inside the image)
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+**/dist
+.next
+**/.next
+build
+**/build
+
+# Env files (secrets come from Railway variables, not the image)
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# VCS / editor / OS
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Logs / test artifacts
+*.log
+coverage
+**/coverage
+.jest-cache
+**/.jest-cache
+
+# Docs, large media, misc — not needed in build context
+*.md
+*.mp4
+.claude

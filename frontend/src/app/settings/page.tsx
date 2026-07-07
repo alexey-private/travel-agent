@@ -271,7 +271,7 @@ function SettingsContent() {
                           <li>Sign in with your Apple ID</li>
                           <li>Go to <strong>Sign-In and Security</strong></li>
                           <li>Click <strong>App-Specific Passwords</strong></li>
-                          <li>Click <strong>+</strong> and name it (e.g. "AI Agent")</li>
+                          <li>Click <strong>+</strong> and name it (e.g. &quot;AI Agent&quot;)</li>
                           <li>Copy the generated password (format: xxxx-xxxx-xxxx-xxxx)</li>
                         </ol>
                       </div>
