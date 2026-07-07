@@ -7,6 +7,12 @@ if (!BOT_TOKEN) throw new Error('BOT_TOKEN is required');
 
 export const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3002';
 
+// Separate from BACKEND_URL: that one is a private-network address the bot's
+// own server-to-server fetch calls use, which is unreachable from a user's
+// browser (e.g. Railway's `*.railway.internal`). Links sent to the user
+// (like /connect's OAuth link) must use a publicly reachable URL instead.
+export const BACKEND_PUBLIC_URL = process.env.BACKEND_PUBLIC_URL ?? BACKEND_URL;
+
 const bot = new Bot<BotContext>(BOT_TOKEN);
 
 bot.use(
