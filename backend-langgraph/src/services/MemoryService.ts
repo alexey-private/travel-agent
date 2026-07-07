@@ -37,7 +37,10 @@ Rules:
 Example output:
 {"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes", "current_laptop": "Lenovo IdeaPad Slim 5", "current_phone": "iPhone 15"}`;
 
-const FIRST_PERSON_RE = /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )/i;
+// English patterns use \b (works fine — they're ASCII); Russian patterns skip \b since
+// JS's default \b is ASCII-\w-based and never matches at a Cyrillic word boundary.
+const FIRST_PERSON_RE =
+  /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )|(меня зовут|я живу|я люблю|я предпочитаю|мне нравится|у меня есть|мой |моя |моё |зовут меня)/i;
 const MIN_EXTRACTABLE_LENGTH = 30;
 const EXTRACTION_EVERY_N = 3;
 

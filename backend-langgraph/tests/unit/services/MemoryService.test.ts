@@ -78,6 +78,23 @@ describe('MemoryService', () => {
       expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'budget', 'mid-range', 'travel');
     });
 
+    it('extracts from a Russian first-person message on the very first turn', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
+      mockInvoke.mockResolvedValue({
+        content: '{"name": "Алексей", "home_city": "Ashkelon"}',
+      });
+      mockRepo.upsertMemory.mockResolvedValue(undefined);
+
+      await service.extractAndSaveMemories(
+        'user-1',
+        'привет, меня зовут Алексей. Я живу в Ашкелон, Израиль. чем можешь помочь?',
+      );
+
+      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'name', 'Алексей', 'travel');
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'home_city', 'Ashkelon', 'travel');
+    });
+
     it('passes existing memories to the LLM as context', async () => {
       mockRepo.getMemories.mockResolvedValue([
         { key: 'home_city', value: 'Ashkelon' },
