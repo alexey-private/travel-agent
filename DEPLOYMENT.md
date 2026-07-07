@@ -10,23 +10,40 @@ For every app service (not the DB): **Root Directory = `/`** (repo root,
 required for the npm workspaces build context), **Builder = Dockerfile**,
 Dockerfile Path = the file listed above for that service.
 
+**Service names matter**: the `${{service.VARIABLE}}` references below only
+resolve if the service is actually named `postgres` / `backend-langgraph` as
+written. Railway defaults a "Deploy an image" service to the image name
+(e.g. `pgvector`) and a "GitHub Repo" service to the repo name (e.g.
+`travel-agent`) — rename each one via **Settings → Service Name** right
+after creating it, or adjust every `${{...}}` reference below to match
+whatever you actually named it. A wrong reference doesn't error at save
+time — it silently resolves to garbage and only surfaces later as
+`TypeError: Invalid URL` in the consuming service's runtime logs.
+
 ## 1. Postgres + pgvector
 
 Railway's built-in Postgres plugin does **not** ship the `pgvector`
 extension, so deploy it as a plain Docker service instead of using "New →
 Database":
 
-1. New service → **Deploy an image** → `pgvector/pgvector:pg16`.
-2. Add a **Volume** mounted at `/var/lib/postgresql/data` (without it, every
-   redeploy wipes the database).
+1. New service → **Deploy an image** → `pgvector/pgvector:pg16`. Rename the
+   service to `postgres` (see the naming note above — Railway defaults it to
+   `pgvector`).
+2. Volumes are **not** under this service's Settings tab. Right-click empty
+   space on the project canvas (or `⌘K`) → create a **Volume** → attach it to
+   this service → Mount Path: `/var/lib/postgresql/data`. Without it, every
+   redeploy wipes the database.
 3. Variables: `POSTGRES_DB=travel_agent`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
-   (generate a strong password).
+   (generate a strong password), and **`PGDATA=/var/lib/postgresql/data/pgdata`**.
+   Without `PGDATA`, `initdb` refuses to start with `directory
+   "/var/lib/postgresql/data" exists but is not empty (lost+found)` — Railway
+   volumes always contain a `lost+found` dir, and Postgres won't `initdb`
+   straight into a non-empty mount point. Pointing `PGDATA` at a subdirectory
+   of the mount avoids this.
 4. Do **not** expose a public domain for this service — only the other
    services on the same Railway project need to reach it, over the private
    network.
-5. Note the service name (e.g. `postgres`) — Railway lets other services
-   reference `${{postgres.RAILWAY_PRIVATE_DOMAIN}}` and you can compose
-   `DATABASE_URL` from the pieces above:
+5. Compose `DATABASE_URL` for the other services from the pieces above:
    `postgresql://${{postgres.POSTGRES_USER}}:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{postgres.POSTGRES_DB}}`
 
 ## 2. backend-langgraph
@@ -35,6 +52,13 @@ Dockerfile Path: `Dockerfile.backend-langgraph`. Its `CMD` already runs the
 idempotent migration runner (`dist/db/migrate.js`, tracked via
 `schema_migrations`) before starting the server — no separate release step
 needed. Generate a public domain for this service; health check path `/health`.
+
+Clicking **Generate Domain** before the first successful deploy shows a
+placeholder ("Public domain will be generated") instead of a real URL —
+Railway detects the port from an actual running deployment, so it can't
+finalize the domain until the service has deployed at least once. Configure
+the variables below and deploy; the real `*.up.railway.app` URL appears
+once the container is up.
 
 | Variable | Value |
 |---|---|
@@ -84,8 +108,18 @@ Variables on this service:
 |---|---|
 | `NEXT_PUBLIC_API_URL` | `https://<backend-langgraph-public-domain>` |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | same value as `VAPID_PUBLIC_KEY` on backend-langgraph, if using web push |
+| `PORT` | `3000` |
 
-Changing either of these requires a redeploy (rebuild), not just a restart.
+Changing any of these requires a redeploy (rebuild for the `NEXT_PUBLIC_*`
+ones, restart is enough for `PORT`), not just a restart.
+
+Set `PORT=3000` explicitly — Railway auto-injects `PORT=8080` for services
+that don't set their own, but the standalone Next.js server this Dockerfile
+produces listens on whatever `PORT` it's given, and the generated domain
+targets port 3000 (matching the Dockerfile's `EXPOSE 3000`). Without this
+variable the domain returns `502` even though the build and container start
+up fine — check the actual "Local: http://...:<port>" line in the runtime
+logs if this happens again.
 
 ## 5. GitHub auto-deploy
 
@@ -115,6 +149,25 @@ auto-deploys code that already passed CI.
 - Check `conversation_embeddings` gets populated (confirms the `vector`
   extension migration applied) and that vector search recall works via the
   chat UI referencing an earlier conversation.
+
+## Troubleshooting
+
+Install the Railway CLI (`npm i -g @railway/cli`, may need `sudo`) and run
+`railway login` + `railway link --project travel-agent` once from a checkout
+of this repo. After that:
+
+```bash
+railway status                            # per-service deploy status
+railway logs --service <name>             # runtime logs (build logs too, mid-build)
+railway variable list --service <name>    # variable names (add --kv for values — careful, prints secrets)
+railway variable set KEY=value --service <name>
+```
+
+`railway logs` is the fastest way to diagnose a `502 Application failed to
+respond`: it almost always means the container crashed on boot (missing
+required env var → `env.ts`'s zod schema throws, or a DB connection error in
+`migrate.js`, which blocks `index.js` from ever starting since the
+Dockerfile `CMD` is `migrate.js && index.js`) rather than a networking issue.
 
 ## Cost note
 
