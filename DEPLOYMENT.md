@@ -67,6 +67,7 @@ once the container is up.
 | `ANTHROPIC_API_KEY` | your key |
 | `TAVILY_API_KEY` | required |
 | `OPENWEATHER_API_KEY` | required |
+| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`, used by the web frontend's mic button) — without it the endpoint returns `503`. Separate from the same-named variable on `backend-telegram`, which powers voice notes sent to the bot instead |
 | `VOYAGE_API_KEY` | optional (random-vector fallback if unset) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
