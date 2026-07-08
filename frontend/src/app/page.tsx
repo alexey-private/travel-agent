@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Plane, Settings, CalendarDays } from "lucide-react";
+import { Plane, Settings, CalendarDays, Sparkles } from "lucide-react";
 import ChatWindow from "@/components/chat/ChatWindow";
 import MemoryPanel, { type MemoryPanelHandle } from "@/components/memory/MemoryPanel";
 import ConversationList, { type ConversationListHandle } from "@/components/conversations/ConversationList";
@@ -75,6 +75,9 @@ export default function Home() {
         <AgentSelector value={agentType} onChange={handleAgentChange} />
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400 font-mono">{userId.slice(0, 8)}…</span>
+          <Link href="/features" title="What this app can do" className="text-gray-400 hover:text-gray-700 transition-colors">
+            <Sparkles size={18} />
+          </Link>
           <Link href="/calendar" title="Calendar & Tasks" className="text-gray-400 hover:text-gray-700 transition-colors">
             <CalendarDays size={18} />
           </Link>
