@@ -1,6 +1,7 @@
 "use client";
 
 import { Plane, ShoppingBag } from "lucide-react";
+import { SHOPPING_ENABLED } from "@/lib/config";
 
 export type AgentType = "travel" | "shopping";
 
@@ -9,15 +10,19 @@ interface AgentSelectorProps {
   onChange: (agentType: AgentType) => void;
 }
 
-const AGENTS: { type: AgentType; label: string; Icon: typeof Plane }[] = [
+const ALL_AGENTS: { type: AgentType; label: string; Icon: typeof Plane }[] = [
   { type: "travel", label: "Travel", Icon: Plane },
   { type: "shopping", label: "Shopping", Icon: ShoppingBag },
 ];
+
+const AGENTS = SHOPPING_ENABLED ? ALL_AGENTS : ALL_AGENTS.filter((a) => a.type !== "shopping");
 
 /**
  * Tab-style toggle for switching between Travel and Shopping agents.
  */
 export default function AgentSelector({ value, onChange }: AgentSelectorProps) {
+  if (AGENTS.length < 2) return null;
+
   return (
     <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
       {AGENTS.map(({ type, label, Icon }) => {

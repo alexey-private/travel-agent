@@ -131,6 +131,7 @@ Variables on this service:
 |---|---|
 | `NEXT_PUBLIC_API_URL` | `https://<backend-langgraph-public-domain>` |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | same value as `VAPID_PUBLIC_KEY` on backend-langgraph, if using web push |
+| `NEXT_PUBLIC_SHOPPING_ENABLED` | optional — set to `false` to hide the Shopping tab (defaults to enabled/`true` if unset) |
 | `PORT` | `3000` |
 
 Changing any of these requires a redeploy (rebuild for the `NEXT_PUBLIC_*`
