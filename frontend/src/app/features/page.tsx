@@ -54,6 +54,8 @@ const PRODUCTIVITY: Feature[] = [
   },
 ];
 
+const TELEGRAM_BOT_URL = "https://t.me/my_ai_travel_agent_bot";
+
 const TELEGRAM_COMMANDS: { command: string; description: string }[] = [
   { command: "/start", description: "Welcome message and feature overview" },
   { command: "/connect", description: "Link your Telegram account to your web app session" },
@@ -127,6 +129,15 @@ export default function FeaturesPage() {
             location for on-the-go travel context. Use <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">/connect</code>{" "}
             to link it to your web account so calendar and tasks stay in sync.
           </p>
+          <a
+            href={TELEGRAM_BOT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mb-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <Send size={14} />
+            Open @my_ai_travel_agent_bot
+          </a>
           <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
             {TELEGRAM_COMMANDS.map(({ command, description }) => (
               <div key={command} className="flex items-center gap-4 px-4 py-2.5 text-sm">
