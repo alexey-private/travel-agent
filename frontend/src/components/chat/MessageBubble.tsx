@@ -121,7 +121,11 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                   blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-3 text-gray-600 my-2">{children}</blockquote>,
                   a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{children}</a>,
                   hr: () => <hr className="border-gray-200 my-2" />,
-                  table: ({ children }) => <table className="text-xs border-collapse w-full my-2">{children}</table>,
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto my-2 -mx-1">
+                      <table className="text-xs border-collapse w-full">{children}</table>
+                    </div>
+                  ),
                   th: ({ children }) => <th className="border border-gray-200 px-2 py-1 bg-gray-50 font-semibold text-left">{children}</th>,
                   td: ({ children }) => <td className="border border-gray-200 px-2 py-1">{children}</td>,
                 }}

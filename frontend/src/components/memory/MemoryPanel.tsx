@@ -70,7 +70,7 @@ const MemoryPanel = forwardRef<MemoryPanelHandle, MemoryPanelProps>(
     const memoryList = memories ?? [];
 
     return (
-      <aside className="w-64 border-l border-gray-200 flex flex-col bg-gray-50 shrink-0">
+      <aside className="w-64 h-full border-l border-gray-200 flex flex-col bg-gray-50 shrink-0">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             <Brain size={15} />
