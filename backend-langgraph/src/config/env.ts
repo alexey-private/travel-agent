@@ -46,7 +46,7 @@ const envSchema = z.object({
   VAPID_EMAIL: z.string().optional(),
 
   // Server
-  PORT: z.coerce.number().int().positive().default(3001),
+  PORT: z.coerce.number().int().positive().default(3002),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   // Production CORS allowlist — set to the frontend URL (e.g. https://app.example.com).
   // Omit in development to allow any origin.

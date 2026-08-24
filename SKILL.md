@@ -13,9 +13,9 @@ docker compose up -d
 # 2. Apply any pending migrations
 cd backend-langgraph && npm run migrate && cd ..
 
-# 3. Start backend(s) + frontend (separate terminals)
-npm run dev:backend-lg    # :3002 — primary (LangGraph), actively developed
-npm run dev:backend       # :3001 — legacy (ReAct), frozen — only if you need it for comparison
+# 3. Start backend + frontend (separate terminals)
+npm run dev:backend-lg    # :3002 — LangGraph backend
+npm run dev:telegram      # :3003 — Telegram bridge (optional)
 npm run dev:frontend      # :3000
 ```
 
@@ -25,7 +25,7 @@ npm run dev:frontend      # :3000
 
 **When:** Adding a new tool to one or both agents.
 
-`backend/` is frozen (see [AGENTS.md](AGENTS.md#backend-status-critical)) — only touch it if the user explicitly asks. Files to update in `backend-langgraph/`:
+Files to update in `backend-langgraph/`:
 
 1. Create `src/tools/MyTool.ts` extending `BaseTool` — `execute()` returns `{ success, data }` or `{ success: false, error }`, never throws
 2. Register in `travelGraph.ts` and/or `shoppingGraph.ts` (pass to `initTravelGraph` / `initShoppingGraph`)
@@ -56,7 +56,6 @@ docker exec travel-agent-postgres-1 psql -U user -d travel_agent_test -f /path/t
 ```
 
 Note: `ADD CONSTRAINT IF NOT EXISTS` is not supported in PostgreSQL — use a `DO $$ BEGIN ... END $$` block.
-`backend/` is frozen — do NOT copy the migration there unless the user asks (see [AGENTS.md](AGENTS.md#backend-status-critical)).
 
 ---
 
@@ -68,7 +67,7 @@ Note: `ADD CONSTRAINT IF NOT EXISTS` is not supported in PostgreSQL — use a `D
 npx tsc -p backend-langgraph/tsconfig.json --noEmit
 ```
 
-Must pass. `backend/` is frozen — only typecheck it if you actually touched it.
+Must pass. Also run `npm run typecheck --workspace=backend-telegram` if you touched the bot.
 
 ---
 
@@ -170,7 +169,6 @@ Pattern:
 2. Add credentials storage migration + repository
 3. Add to `CalendarProvider` delegation logic (checks which provider user has connected)
 4. Add auth route + frontend settings card
-5. `backend/` is frozen — implement in `backend-langgraph/` only unless the user asks otherwise
 
 Reference: [backend-langgraph/src/tools/providers/](backend-langgraph/src/tools/providers/)
 

@@ -10,7 +10,6 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY backend/package.json ./backend/package.json
 COPY backend-langgraph/package.json ./backend-langgraph/package.json
 COPY backend-telegram/package.json ./backend-telegram/package.json
 COPY frontend/package.json ./frontend/package.json

@@ -3,8 +3,7 @@
 One Railway project, four services, built from the Dockerfiles at the repo
 root ([Dockerfile.backend-langgraph](Dockerfile.backend-langgraph),
 [Dockerfile.backend-telegram](Dockerfile.backend-telegram),
-[Dockerfile.frontend](Dockerfile.frontend)). `backend/` (legacy ReAct) is not
-deployed — it's frozen.
+[Dockerfile.frontend](Dockerfile.frontend)).
 
 For every app service (not the DB): **Root Directory = `/`** (repo root,
 required for the npm workspaces build context), **Builder = Dockerfile**,
@@ -75,7 +74,7 @@ once the container is up.
 | `ENCRYPTION_KEY` | 32+ char random string, only if using iCloud |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
 | `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
-| `PORT` | `3002` — see note below, do not leave unset |
+| `PORT` | `3002` — recommended; see note below |
 
 `NEXT_PUBLIC_FRONTEND_URL` is read directly via `process.env` in
 [auth.ts](backend-langgraph/src/routes/auth.ts) (not through the validated
@@ -85,21 +84,27 @@ is `http://localhost:3000` — the callback will complete and tokens will
 save correctly, but the user's browser ends up redirected to localhost
 instead of the deployed frontend.
 
-**Set `PORT=3002` explicitly** — despite the comment in
-[Dockerfile.backend-langgraph](Dockerfile.backend-langgraph) claiming Railway
-injects it, Railway does **not** set `PORT` for this service unless you add
-it yourself, so [env.ts](backend-langgraph/src/config/env.ts) falls back to
-its default of `3001`. The public domain still works either way — Railway
-auto-detects whatever port the container actually opens and proxies to it
-(`targetPort: null`) — but `backend-telegram`'s `BACKEND_URL` talks to this
-service over the **private network** (`travel-agent.railway.internal:3002`),
-which is a plain TCP address with no smart-detection: it only connects if
-the container is actually listening on the port named in the URL. Without
-`PORT=3002` set here, every request from the Telegram bot fails with
-`Cannot reach backend: fetch failed` even though `/health` on the public
-domain returns 200 — the mismatch is invisible from the public side. Same
-underlying gotcha as `frontend`'s `PORT` below, just surfacing through the
-private network instead of a public domain.
+**About `PORT`** — Railway does **not** inject `PORT` into this service
+(despite what you might expect), so the container falls back to the default in
+[env.ts](backend-langgraph/src/config/env.ts). That default is now **3002**,
+matching `EXPOSE 3002` and the private-network port `backend-telegram`'s
+`BACKEND_URL` points at, so leaving `PORT` unset is safe. Setting it anyway is
+still recommended: it makes the port visible in the Railway UI instead of
+implicit in the source.
+
+Historical note, kept because the failure mode is easy to re-create by
+setting `PORT` to something *wrong*: the public domain works regardless —
+Railway auto-detects whatever port the container actually opens and proxies
+to it (`targetPort: null`). But `backend-telegram` reaches this service over
+the **private network** (`travel-agent.railway.internal:3002`), a plain TCP
+address with no such detection — it connects only if the container really
+listens on the port named in the URL. A mismatch makes every Telegram request
+fail with `Cannot reach backend: fetch failed` while `/health` on the public
+domain still returns 200, so the breakage is invisible from the public side.
+Same underlying gotcha as `frontend`'s `PORT` below, just surfacing through
+the private network instead of a public domain. Until 2026-08-24 the default
+was `3001` (inherited from the deleted legacy `backend/` workspace), which
+made this the *default* outcome rather than a misconfiguration.
 
 **After the first deploy**, update the Google Cloud Console OAuth
 credentials' authorized redirect URI to match `GOOGLE_REDIRECT_URI` above —

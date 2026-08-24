@@ -3,18 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "backend",
     "backend-langgraph",
     "backend-telegram",
     "frontend"
   ],
   "scripts": {
-    "dev:backend": "npm run dev --workspace=backend",
     "dev:backend-lg": "npm run dev --workspace=backend-langgraph",
     "dev:telegram": "npm run dev --workspace=backend-telegram",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
-    "test": "npm run test --workspace=backend"
+    "test": "npm run test --workspaces --if-present",
+    "test:all": "npm run test:all --workspace=backend-langgraph && npm run test:all --workspace=backend-telegram && npm run test --workspace=frontend"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0"

@@ -8,7 +8,6 @@ WORKDIR /app
 # the workspace graph declared in the root package.json, even though only
 # backend-langgraph is built/run from this image.
 COPY package.json package-lock.json ./
-COPY backend/package.json ./backend/package.json
 COPY backend-langgraph/package.json ./backend-langgraph/package.json
 COPY backend-telegram/package.json ./backend-telegram/package.json
 COPY frontend/package.json ./frontend/package.json
@@ -27,10 +26,11 @@ RUN npm ci --omit=dev
 COPY --from=build /app/backend-langgraph/dist ./backend-langgraph/dist
 WORKDIR /app/backend-langgraph
 
-# Railway does NOT auto-inject PORT for this service — set it explicitly to
-# 3002 in the Railway service variables (see DEPLOYMENT.md). The app reads it
-# via src/config/env.ts, which defaults to 3001 if PORT is unset; that default
-# mismatches the private-network port backend-telegram's BACKEND_URL expects.
+# Railway does NOT auto-inject PORT for this service. src/config/env.ts
+# defaults to 3002 — the same port as EXPOSE below and as the private-network
+# address backend-telegram's BACKEND_URL points at — so an unset PORT is safe.
+# DEPLOYMENT.md still sets it explicitly, to keep the wiring visible in the
+# Railway UI rather than implicit in the code.
 EXPOSE 3002
 
 # Idempotent migration runner (tracks schema_migrations) runs before each boot.

@@ -31,7 +31,7 @@ A full-stack AI assistant with two specialized agents — **Travel** and **Shopp
 ### Core
 - **Two AI agents** — Travel (flights, hotels, weather, visa, car rental, tours, spa) and Shopping (product search, price comparison, deal finder)
 - **Dual LLM support** — Anthropic Claude (default) or OpenAI GPT-4o, switchable via env var
-- **Two backend implementations** — hand-written ReAct loop (`backend/`) and LangGraph StateGraph (`backend-langgraph/`, primary)
+- **LangGraph StateGraph backend** — evolved from a hand-written ReAct loop; see [Design history](#design-history-from-a-hand-written-react-loop-to-langgraph)
 - **Long-term memory** — preferences extracted after every turn, injected into system prompt on next request
 - **Agentic RAG** — semantic search over curated knowledge base (pgvector, Voyage AI)
 - **Conversation history** — full session persistence with title extraction and sidebar navigation
@@ -60,8 +60,7 @@ A full-stack AI assistant with two specialized agents — **Travel** and **Shopp
 ├── docker-compose.yml              # PostgreSQL 16 + pgvector
 ├── .env                            # All secrets (single root env file)
 ├── package.json                    # npm workspaces root
-├── backend/                        # ReAct agent (secondary, port 3001)
-├── backend-langgraph/              # LangGraph agent (primary, port 3002)
+├── backend-langgraph/              # LangGraph agent (port 3002)
 ├── backend-telegram/               # Telegram bot bridge (port 3003)
 └── frontend/                       # Next.js 14 App Router (port 3000)
 ```
@@ -192,11 +191,19 @@ POST /api/chat
 
 > **userId identity:** `session_id` (TEXT from browser localStorage) is used as the key for all tool repositories (`google_tokens`, `icloud_tokens`, `user_service_preferences`). `internalUserId` (UUID) is used only for conversations, messages, and user_memories tables.
 
-### Key differences vs `backend/`
+### Design history: from a hand-written ReAct loop to LangGraph
 
-| Aspect | `backend/` | `backend-langgraph/` |
-|--------|-----------|----------------------|
-| ReAct loop | Manual `for` loop, `MAX_ITERATIONS` | LangGraph graph + conditional edge |
+The project began as a side-by-side comparison of two backend implementations of the
+same agent: a hand-written ReAct loop (`backend/`) and this LangGraph StateGraph
+(`backend-langgraph/`). The hand-written version was frozen once the LangGraph one
+reached parity and was removed from the tree on 2026-08-24; its source is archived at
+the git tag `legacy-react-backend` (`git checkout legacy-react-backend -- backend/`).
+
+What the migration actually changed:
+
+| Aspect | Hand-written ReAct | LangGraph StateGraph |
+|--------|-------------------|----------------------|
+| ReAct loop | Manual `for` loop, `MAX_ITERATIONS` | Graph + conditional edge |
 | State management | Local `messages[]` array | `AgentState` with typed reducers |
 | Tool execution | `handleToolCall` + `Promise.all` | Built-in `ToolNode` |
 | Streaming | `yield` at each event | `graph.streamEvents()` automatically |
@@ -380,9 +387,9 @@ npm run seed --workspace=backend-langgraph
 
 ```bash
 # Three separate terminals:
-npm run dev:backend-langgraph   # :3002 (primary)
-npm run dev:frontend            # :3000
-npm run dev:backend-telegram    # :3003 (optional — Telegram bot)
+npm run dev:backend-lg    # :3002 (LangGraph backend)
+npm run dev:frontend      # :3000
+npm run dev:telegram      # :3003 (optional — Telegram bot)
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
