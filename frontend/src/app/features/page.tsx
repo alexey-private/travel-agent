@@ -126,7 +126,7 @@ export default function FeaturesPage() {
           </div>
           <p className="text-sm text-gray-600 mb-4">
             Chat with the same agent from Telegram — send text, photos, voice messages (auto-transcribed), or your
-            location for on-the-go travel context. Use <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">/connect</code>{" "}
+            location for on-the-go travel context. Use <code className="text-xs bg-gray-100 px-1 py-0.5 rounded-sm">/connect</code>{" "}
             to link it to your web account so calendar and tasks stay in sync.
           </p>
           <a

@@ -151,7 +151,7 @@ export default function ChatWindow({
                   <img
                     src={`data:${att.mimeType};base64,${att.base64}`}
                     alt={att.name}
-                    className="h-8 w-8 object-cover rounded"
+                    className="h-8 w-8 object-cover rounded-sm"
                   />
                 ) : (
                   <FileText size={16} className="text-red-500 shrink-0" />
@@ -224,7 +224,7 @@ export default function ChatWindow({
             )}
           </button>
           <textarea
-            className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
+            className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
             placeholder={
               agentType === "shopping"
                 ? "Ask me about products…  (Shift+Enter for new line)"

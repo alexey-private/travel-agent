@@ -33,7 +33,7 @@ export default function AgentSelector({ value, onChange }: AgentSelectorProps) {
             onClick={() => onChange(type)}
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               active
-                ? "bg-white text-blue-600 shadow-sm"
+                ? "bg-white text-blue-600 shadow-xs"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >

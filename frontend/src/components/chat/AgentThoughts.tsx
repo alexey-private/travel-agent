@@ -55,7 +55,7 @@ const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
         <div className="px-3 py-2 bg-white space-y-2">
           <div>
             <p className="text-xs font-semibold text-gray-500 mb-1">Input</p>
-            <pre className="text-xs bg-gray-50 rounded p-2 overflow-auto max-h-32 text-gray-700 whitespace-pre-wrap">
+            <pre className="text-xs bg-gray-50 rounded-sm p-2 overflow-auto max-h-32 text-gray-700 whitespace-pre-wrap">
               {formatValue(step.input)}
             </pre>
           </div>

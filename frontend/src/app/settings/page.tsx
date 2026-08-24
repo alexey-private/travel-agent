@@ -252,7 +252,7 @@ function SettingsContent() {
                         value={appleId}
                         onChange={(e) => setAppleId(e.target.value)}
                         placeholder="you@icloud.com"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                     </div>
                     <div>
@@ -262,7 +262,7 @@ function SettingsContent() {
                         value={appPassword}
                         onChange={(e) => setAppPassword(e.target.value)}
                         placeholder="xxxx-xxxx-xxxx-xxxx"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                       <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
                         <p className="font-medium">How to get an app-specific password:</p>
@@ -333,7 +333,7 @@ function SettingsContent() {
                 type="text"
                 value={settings.calendarName}
                 onChange={(e) => setSettings({ ...settings, calendarName: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -342,7 +342,7 @@ function SettingsContent() {
                 type="text"
                 value={settings.shoppingCalendarName}
                 onChange={(e) => setSettings({ ...settings, shoppingCalendarName: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -359,7 +359,7 @@ function SettingsContent() {
                   type="text"
                   value={settings.taskListName}
                   onChange={(e) => setSettings({ ...settings, taskListName: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -368,7 +368,7 @@ function SettingsContent() {
                   type="text"
                   value={settings.shoppingTaskListName}
                   onChange={(e) => setSettings({ ...settings, shoppingTaskListName: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>

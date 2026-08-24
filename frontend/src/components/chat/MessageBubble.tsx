@@ -85,7 +85,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
 
         {/* Streaming "thinking" indicator before any text arrives */}
         {!isUser && message.streaming && !message.content && (message.steps?.length ?? 0) === 0 && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-gray-200 shadow-xs">
             <span className="flex gap-1">
               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
@@ -97,7 +97,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
         {/* Bubble text */}
         {message.content && (
           <div
-            className={`px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
+            className={`px-4 py-3 rounded-2xl shadow-xs text-sm leading-relaxed ${
               isUser
                 ? "bg-blue-600 text-white rounded-tr-sm whitespace-pre-wrap"
                 : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm"
@@ -117,7 +117,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                   h1: ({ children }) => <h1 className="text-base font-bold mb-1 mt-2">{children}</h1>,
                   h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2">{children}</h2>,
                   h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2">{children}</h3>,
-                  code: ({ children }) => <code className="bg-gray-100 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+                  code: ({ children }) => <code className="bg-gray-100 rounded-sm px-1 py-0.5 text-xs font-mono">{children}</code>,
                   blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-3 text-gray-600 my-2">{children}</blockquote>,
                   a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{children}</a>,
                   hr: () => <hr className="border-gray-200 my-2" />,

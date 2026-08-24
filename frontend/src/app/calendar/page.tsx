@@ -386,7 +386,7 @@ export default function CalendarPage() {
                 >
                   <button
                     onClick={() => handleCompleteTask(task.id)}
-                    className="text-gray-300 hover:text-green-500 transition-colors flex-shrink-0"
+                    className="text-gray-300 hover:text-green-500 transition-colors shrink-0"
                     title="Mark complete"
                     disabled={task.status === "completed" || task.status === "COMPLETED"}
                   >
