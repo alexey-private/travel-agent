@@ -1,6 +1,6 @@
 import { StateGraph, START, END } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { DynamicStructuredTool } from '@langchain/core/tools';
+import { StructuredToolInterface } from '@langchain/core/tools';
 import { AgentState, AgentStateType } from './state';
 import { createReasonNode } from './nodes/reasonNode';
 import { shouldContinue } from './nodes/shouldContinue';
@@ -23,7 +23,7 @@ export function buildAgentGraph(
   tools: BaseTool[],
   buildSystemPrompt: (state: AgentStateType) => string,
 ) {
-  const langchainTools: DynamicStructuredTool[] = tools.map(wrapTool);
+  const langchainTools: StructuredToolInterface[] = tools.map(wrapTool);
 
   return new StateGraph(AgentState)
     .addNode('reason', createReasonNode(buildSystemPrompt, langchainTools))

@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import LRU from 'lru-cache';
+import { LRUCache } from 'lru-cache';
 import { KnowledgeRepository } from '../repositories/KnowledgeRepository';
 import { EmbeddingService } from './EmbeddingService';
 import { KnowledgeChunk } from '../types/memory';
@@ -19,7 +19,9 @@ const MIN_SIMILARITY = 0.65;
 export class RAGService {
   private knowledgeRepo: KnowledgeRepository;
   private embeddingService: EmbeddingService;
-  private ragContextCache = new LRU<string, string | null>({ max: RAG_CACHE_MAX, maxAge: RAG_CACHE_TTL_MS });
+  // lru-cache v11 requires the value type to be non-nullable, so a "no relevant
+  // context" result is cached as a wrapper object rather than a bare null.
+  private ragContextCache = new LRUCache<string, { value: string | null }>({ max: RAG_CACHE_MAX, ttl: RAG_CACHE_TTL_MS });
 
   constructor(pool: Pool, embeddingService: EmbeddingService) {
     this.knowledgeRepo = new KnowledgeRepository(pool);
@@ -60,7 +62,7 @@ export class RAGService {
    */
   async buildRagContext(query: string): Promise<string | null> {
     const cached = this.ragContextCache.get(query);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return cached.value;
 
     let chunks;
     try {
@@ -73,7 +75,7 @@ export class RAGService {
       ? null
       : relevant.map(c => `[${c.topic}]\n${c.content}`).join('\n\n---\n\n');
 
-    this.ragContextCache.set(query, result);
+    this.ragContextCache.set(query, { value: result });
     return result;
   }
 }
