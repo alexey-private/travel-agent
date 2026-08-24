@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { HumanMessage, ToolMessage, MessageContentComplex } from '@langchain/core/messages';
+import { HumanMessage, ToolMessage, ContentBlock } from '@langchain/core/messages';
 import { PDFParse } from 'pdf-parse';
 import { UserService } from '../services/UserService';
 import { ConversationService } from '../services/ConversationService';
@@ -122,7 +122,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       const humanMsg = await (async () => {
         if (!attachments || attachments.length === 0) return new HumanMessage(userContent);
         // Build multimodal content: text first, then binary attachments
-        const content: MessageContentComplex[] = [{ type: 'text', text: userContent }];
+        const content: ContentBlock[] = [{ type: 'text', text: userContent }];
         for (const att of attachments) {
           if (att.mimeType.startsWith('image/')) {
             content.push({ type: 'image_url', image_url: { url: `data:${att.mimeType};base64,${att.base64}` } });

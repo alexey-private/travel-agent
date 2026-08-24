@@ -2,7 +2,13 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // LangChain v1 ships dual (ESM/CJS) type declarations behind an "exports" map.
+    // Legacy node10 resolution picks up two distinct copies of the same types,
+    // which makes e.g. StructuredToolInterface incompatible with itself. node16
+    // honours the exports map; emit stays CommonJS since the package is CJS.
+    "module": "node16",
+    "moduleResolution": "node16"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

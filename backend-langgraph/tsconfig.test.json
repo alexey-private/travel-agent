@@ -3,6 +3,11 @@
   "compilerOptions": {
     "rootDir": ".",
     "types": ["jest", "node"],
+    // ts-jest transpiles to CommonJS; the node16 hybrid module kind inherited from
+    // tsconfig.json would require isolatedModules, which breaks jest.mock hoisting here.
+    // Type-checking still runs against tsconfig.json via `tsc --noEmit`.
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "paths": {
       "@/*": ["src/*"]
     }
