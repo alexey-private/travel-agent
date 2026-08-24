@@ -9,25 +9,34 @@ For every app service (not the DB): **Root Directory = `/`** (repo root,
 required for the npm workspaces build context), **Builder = Dockerfile**,
 Dockerfile Path = the file listed above for that service.
 
-**Service names matter**: the `${{service.VARIABLE}}` references below only
-resolve if the service is actually named `postgres` / `backend-langgraph` as
-written. Railway defaults a "Deploy an image" service to the image name
-(e.g. `pgvector`) and a "GitHub Repo" service to the repo name (e.g.
-`travel-agent`) — rename each one via **Settings → Service Name** right
-after creating it, or adjust every `${{...}}` reference below to match
-whatever you actually named it. A wrong reference doesn't error at save
-time — it silently resolves to garbage and only surfaces later as
-`TypeError: Invalid URL` in the consuming service's runtime logs.
+**Service names**: two of the four Railway services are *not* named after
+the workspace they run. Railway names a "Deploy an image" service after the
+image and a "GitHub Repo" service after the repo, and those defaults were
+kept:
 
-## 1. Postgres + pgvector
+| Railway service | Runs | Dockerfile / image |
+|---|---|---|
+| `travel-agent` | `backend-langgraph/` | `Dockerfile.backend-langgraph` |
+| `pgvector` | Postgres 16 + pgvector | `pgvector/pgvector:pg16` |
+| `backend-telegram` | `backend-telegram/` | `Dockerfile.backend-telegram` |
+| `frontend` | `frontend/` | `Dockerfile.frontend` |
+
+These are the names to pass to `railway logs --service …` and the names every
+`${{service.VARIABLE}}` reference below is written against. If you rebuild the
+project from scratch and choose different ones, update every `${{...}}`
+reference to match — a wrong reference doesn't error at save time, it
+silently resolves to garbage and only surfaces later as `TypeError: Invalid
+URL` in the consuming service's runtime logs.
+
+## 1. Postgres + pgvector — Railway service `pgvector`
 
 Railway's built-in Postgres plugin does **not** ship the `pgvector`
 extension, so deploy it as a plain Docker service instead of using "New →
 Database":
 
-1. New service → **Deploy an image** → `pgvector/pgvector:pg16`. Rename the
-   service to `postgres` (see the naming note above — Railway defaults it to
-   `pgvector`).
+1. New service → **Deploy an image** → `pgvector/pgvector:pg16`. Railway
+   names the service `pgvector` after the image — keep that name, it is what
+   the `${{pgvector.*}}` references below resolve against.
 2. Volumes are **not** under this service's Settings tab. Right-click empty
    space on the project canvas (or `⌘K`) → create a **Volume** → attach it to
    this service → Mount Path: `/var/lib/postgresql/data`. Without it, every
@@ -43,9 +52,9 @@ Database":
    services on the same Railway project need to reach it, over the private
    network.
 5. Compose `DATABASE_URL` for the other services from the pieces above:
-   `postgresql://${{postgres.POSTGRES_USER}}:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{postgres.POSTGRES_DB}}`
+   `postgresql://${{pgvector.POSTGRES_USER}}:${{pgvector.POSTGRES_PASSWORD}}@${{pgvector.RAILWAY_PRIVATE_DOMAIN}}:5432/${{pgvector.POSTGRES_DB}}`
 
-## 2. backend-langgraph
+## 2. backend-langgraph — Railway service `travel-agent`
 
 Dockerfile Path: `Dockerfile.backend-langgraph`. Its `CMD` already runs the
 idempotent migration runner (`dist/db/migrate.js`, tracked via
@@ -110,7 +119,7 @@ made this the *default* outcome rather than a misconfiguration.
 credentials' authorized redirect URI to match `GOOGLE_REDIRECT_URI` above —
 the old `localhost` one won't work in production.
 
-## 3. backend-telegram
+## 3. backend-telegram — Railway service `backend-telegram`
 
 Dockerfile Path: `Dockerfile.backend-telegram`. This runs grammY in
 long-polling mode (`bot.start()`) — **no public domain, no exposed port**.
@@ -118,13 +127,13 @@ long-polling mode (`bot.start()`) — **no public domain, no exposed port**.
 | Variable | Value |
 |---|---|
 | `BOT_TOKEN` | from @BotFather |
-| `BACKEND_URL` | `http://${{backend-langgraph.RAILWAY_PRIVATE_DOMAIN}}:3002` — use the private domain, not the public one, to avoid an unnecessary public-network hop for the bot's own server-to-server calls (chat, history, calendar cron). The port **must** match whatever `PORT` is actually set to on the backend-langgraph service (see below) — there's no auto-detection over the private network like there is for public domains |
-| `BACKEND_PUBLIC_URL` | `https://<backend-langgraph-public-domain>` — **required**, separate from `BACKEND_URL` above. Used only for links sent *to the user* (currently `/connect`'s Google OAuth link). `*.railway.internal` addresses only resolve inside Railway's private network — a user's own browser can't open them, so without this set explicitly the `/connect` link is broken even though every other bot feature works fine |
+| `BACKEND_URL` | `http://${{travel-agent.RAILWAY_PRIVATE_DOMAIN}}:3002` (resolves to `travel-agent.railway.internal`) — use the private domain, not the public one, to avoid an unnecessary public-network hop for the bot's own server-to-server calls (chat, history, calendar cron). The port **must** match whatever `PORT` is actually set to on the `travel-agent` service (see below) — there's no auto-detection over the private network like there is for public domains |
+| `BACKEND_PUBLIC_URL` | `https://<travel-agent-public-domain>` — **required**, separate from `BACKEND_URL` above. Used only for links sent *to the user* (currently `/connect`'s Google OAuth link). `*.railway.internal` addresses only resolve inside Railway's private network — a user's own browser can't open them, so without this set explicitly the `/connect` link is broken even though every other bot feature works fine |
 | `OPENWEATHER_API_KEY` | required |
 | `OPENAI_API_KEY` | if voice transcription is enabled |
 | `NOTIFY_HOUR` | optional, defaults to `9` |
 
-## 4. frontend
+## 4. frontend — Railway service `frontend`
 
 Dockerfile Path: `Dockerfile.frontend`. Generate a public domain.
 
@@ -157,9 +166,13 @@ Connect each of the 3 app services to the same GitHub repo/branch (`main`).
 In each service's settings, set **Watch Paths** so an unrelated change
 doesn't trigger a pointless rebuild:
 
-- backend-langgraph: `backend-langgraph/**`, `Dockerfile.backend-langgraph`
-- backend-telegram: `backend-telegram/**`, `Dockerfile.backend-telegram`
-- frontend: `frontend/**`, `Dockerfile.frontend`
+- `travel-agent`: `backend-langgraph/**`, `Dockerfile.backend-langgraph`
+- `backend-telegram`: `backend-telegram/**`, `Dockerfile.backend-telegram`
+- `frontend`: `frontend/**`, `Dockerfile.frontend`
+
+Note that a change to `package.json` / `package-lock.json` at the repo root
+matches none of these, so a dependency change alone will not trigger a
+rebuild — touch the relevant Dockerfile or redeploy by hand.
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) runs tsc + full test
 suite (incl. integration tests against a real `pgvector/pgvector:pg16`
@@ -170,11 +183,11 @@ auto-deploys code that already passed CI.
 
 ## 6. First-deploy smoke test
 
-- `GET https://<backend-langgraph-domain>/health` → `{"status":"ok",...}`
+- `GET https://<travel-agent-domain>/health` → `{"status":"ok",...}`
 - Open the frontend URL, send a chat message, confirm a reply streams back.
 - Google OAuth connect flow in Settings (if configured) completes and
   redirects back correctly.
-- Message the Telegram bot — confirm it reaches backend-langgraph over the
+- Message the Telegram bot — confirm it reaches `travel-agent` over the
   private network and replies.
 - Check `conversation_embeddings` gets populated (confirms the `vector`
   extension migration applied) and that vector search recall works via the
@@ -186,9 +199,13 @@ Install the Railway CLI (`npm i -g @railway/cli`, may need `sudo`) and run
 `railway login` + `railway link --project travel-agent` once from a checkout
 of this repo. After that:
 
+`<name>` below is one of `travel-agent`, `pgvector`, `backend-telegram`,
+`frontend` (see the service-name table at the top).
+
 ```bash
 railway status                            # per-service deploy status
 railway logs --service <name>             # runtime logs (build logs too, mid-build)
+railway logs --service <name> --network   # private-network flow log: shows which port inbound TCP actually lands on
 railway variable list --service <name>    # variable names (add --kv for values — careful, prints secrets)
 railway variable set KEY=value --service <name>
 ```
