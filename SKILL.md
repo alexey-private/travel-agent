@@ -178,7 +178,7 @@ Reference: [backend-langgraph/src/tools/providers/](backend-langgraph/src/tools/
 
 **When:** Starting the planned frontend optimization work.
 
-Priority order (see [memory/project_frontend_refactor_plan.md](~/.claude/projects/-home-alexey-Jobs-exams-navan-cognition-AI-assignment-travel-agent/memory/project_frontend_refactor_plan.md)):
+Priority order (see [memory/project_frontend_refactor_plan.md](~/.claude/projects/-home-alexey-Jobs-travel-agent/memory/project_frontend_refactor_plan.md)):
 
 **P0 (do first):**
 1. Centralize `API_URL` → `src/lib/config.ts`

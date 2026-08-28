@@ -158,6 +158,12 @@ If a column exists in production but has no migration file — it will be missin
    TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
      npm run test:all --workspace=backend-langgraph
    ```
-2. **Memory** — update if the task revealed a non-obvious invariant or recurring pattern.
-3. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
-4. **SKILL.md** — update if the task introduced a new recurring workflow.
+2. **Run `/code-review`** — MANDATORY after ANY code change or addition, no exceptions.
+   Not optional, not "if it looks risky", not only for large changes. A one-line fix
+   counts. tsc + green tests are NOT a substitute: they cannot see a test that passes
+   against the broken code too, a standards violation, or a spec requirement missed.
+   Run it before reporting the task as done, act on every real finding, and state the
+   outcome of both axes (Standards / Spec) in the report.
+3. **Memory** — update if the task revealed a non-obvious invariant or recurring pattern.
+4. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
+5. **SKILL.md** — update if the task introduced a new recurring workflow.
