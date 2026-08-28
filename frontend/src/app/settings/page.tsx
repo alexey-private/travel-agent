@@ -21,13 +21,19 @@ import {
   SettingsData,
 } from "@/lib/settingsApi";
 import { API_URL } from "@/lib/config";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
+import { useT } from "@/i18n/useT";
+import type { TKey } from "@/i18n/dictionaries";
 
 function SettingsContent() {
+  const t = useT();
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  // The banner colour used to be inferred from the English copy ("Failed…"),
+  // which stops working the moment the copy is translated — hence the flag.
+  const [saveMsg, setSaveMsg] = useState<{ text: string; error: boolean } | null>(null);
 
   const [appleId, setAppleId] = useState("");
   const [appPassword, setAppPassword] = useState("");
@@ -55,14 +61,19 @@ function SettingsContent() {
 
     const googleAuth = searchParams.get("google_auth");
     if (googleAuth === "success") {
-      setSaveMsg("Google Calendar connected successfully.");
+      setSaveMsg({ text: t("settings.googleConnectSuccess"), error: false });
       window.history.replaceState({}, "", "/settings");
     } else if (googleAuth === "error") {
       const reason = searchParams.get("reason");
-      setSaveMsg(`Google connection failed: ${reason ?? "unknown error"}`);
+      setSaveMsg({
+        text: t("settings.googleConnectFailed", {
+          reason: reason ?? t("settings.googleConnectFailedUnknown"),
+        }),
+        error: true,
+      });
       window.history.replaceState({}, "", "/settings");
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   const handleSelectProvider = useCallback((provider: "google" | "apple") => {
     if (!settings) return;
@@ -82,13 +93,13 @@ function SettingsContent() {
         taskListName: settings.taskListName,
         shoppingTaskListName: settings.shoppingTaskListName,
       });
-      setSaveMsg("Settings saved.");
+      setSaveMsg({ text: t("settings.saved"), error: false });
     } catch {
-      setSaveMsg("Failed to save settings.");
+      setSaveMsg({ text: t("settings.saveFailed"), error: true });
     } finally {
       setSaving(false);
     }
-  }, [userId, settings]);
+  }, [userId, settings, t]);
 
   const handleConnectApple = useCallback(async () => {
     if (!userId) return;
@@ -99,11 +110,13 @@ function SettingsContent() {
       setAppPassword("");
       await reload(userId);
     } catch (err) {
-      setAppleError((err as Error).message);
+      // connectApple relays the backend's own message when there is one, and an
+      // ApiError key otherwise; translate() lets both through correctly.
+      setAppleError(t((err as Error).message as TKey));
     } finally {
       setAppleConnecting(false);
     }
-  }, [userId, appleId, appPassword, reload]);
+  }, [userId, appleId, appPassword, reload, t]);
 
   const handleDisconnectApple = useCallback(async () => {
     if (!userId) return;
@@ -134,16 +147,24 @@ function SettingsContent() {
         <Link href="/" className="text-gray-500 hover:text-gray-800 transition-colors">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="text-lg font-semibold text-gray-800">Settings</h1>
+        <h1 className="text-lg font-semibold text-gray-800 me-auto">{t("settings.title")}</h1>
       </header>
 
       <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
 
+        {/* ── Language ──────────────────────────────────────────── */}
+        <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-6 py-6">
+            <h2 className="text-base font-semibold text-gray-800 mb-3">{t("common.language")}</h2>
+            <LanguageSwitcher />
+          </div>
+        </section>
+
         {/* ── Calendar & Tasks Provider ─────────────────────────── */}
         <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 pt-6 pb-4">
-            <h2 className="text-base font-semibold text-gray-800">Calendar &amp; Tasks Provider</h2>
-            <p className="text-sm text-gray-500 mt-1">Only one service is active at a time.</p>
+            <h2 className="text-base font-semibold text-gray-800">{t("settings.providerTitle")}</h2>
+            <p className="text-sm text-gray-500 mt-1">{t("settings.providerHint")}</p>
           </div>
 
           {/* Google Card */}
@@ -164,14 +185,14 @@ function SettingsContent() {
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-800">Google Calendar &amp; Tasks</span>
+                  <span className="text-sm font-medium text-gray-800">{t("settings.googleTitle")}</span>
                   {settings.googleConnected && (
                     <span className="flex items-center gap-1 text-green-600 text-xs font-medium">
-                      <CheckCircle2 size={12} /> Connected
+                      <CheckCircle2 size={12} /> {t("settings.connected")}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">Google Calendar and Google Tasks</p>
+                <p className="text-xs text-gray-500 mt-0.5">{t("settings.googleHint")}</p>
               </div>
             </div>
 
@@ -179,12 +200,12 @@ function SettingsContent() {
               <div className="px-4 pb-4 border-t border-blue-200 mt-1 pt-4">
                 {settings.googleConnected ? (
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-600">Google account connected.</p>
+                    <p className="text-sm text-gray-600">{t("settings.googleConnectedNote")}</p>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDisconnectGoogle(); }}
                       className="text-sm text-red-500 hover:text-red-700 hover:underline"
                     >
-                      Disconnect
+                      {t("settings.disconnect")}
                     </button>
                   </div>
                 ) : (
@@ -193,7 +214,7 @@ function SettingsContent() {
                     onClick={(e) => e.stopPropagation()}
                     className="inline-block bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    Connect Google Calendar
+                    {t("settings.connectGoogleCalendar")}
                   </a>
                 )}
               </div>
@@ -218,14 +239,14 @@ function SettingsContent() {
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-800">Apple iCloud</span>
+                  <span className="text-sm font-medium text-gray-800">{t("settings.appleTitle")}</span>
                   {settings.appleConnected && (
                     <span className="flex items-center gap-1 text-green-600 text-xs font-medium">
-                      <CheckCircle2 size={12} /> Connected
+                      <CheckCircle2 size={12} /> {t("settings.connected")}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">Apple Calendar via iCloud — tasks appear as calendar events</p>
+                <p className="text-xs text-gray-500 mt-0.5">{t("settings.appleHint")}</p>
               </div>
             </div>
 
@@ -234,45 +255,45 @@ function SettingsContent() {
                 {settings.appleConnected ? (
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-gray-600">
-                      Connected as <span className="font-medium">{settings.appleId}</span>
+                      {t("settings.connectedAs", { appleId: settings.appleId ?? "" })}
                     </p>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDisconnectApple(); }}
                       className="text-sm text-red-500 hover:text-red-700 hover:underline"
                     >
-                      Disconnect
+                      {t("settings.disconnect")}
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Apple ID</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.appleIdLabel")}</label>
                       <input
                         type="email"
                         value={appleId}
                         onChange={(e) => setAppleId(e.target.value)}
-                        placeholder="you@icloud.com"
+                        placeholder={t("settings.appleIdPlaceholder")}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">App-specific password</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">{t("settings.appPasswordLabel")}</label>
                       <input
                         type="password"
                         value={appPassword}
                         onChange={(e) => setAppPassword(e.target.value)}
-                        placeholder="xxxx-xxxx-xxxx-xxxx"
+                        placeholder={t("settings.appPasswordPlaceholder")}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                       <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1">
-                        <p className="font-medium">How to get an app-specific password:</p>
+                        <p className="font-medium">{t("settings.appPasswordHowTo")}</p>
                         <ol className="list-decimal list-inside space-y-0.5 text-amber-700">
-                          <li>Open <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">appleid.apple.com <ExternalLink size={9} /></a></li>
-                          <li>Sign in with your Apple ID</li>
-                          <li>Go to <strong>Sign-In and Security</strong></li>
-                          <li>Click <strong>App-Specific Passwords</strong></li>
-                          <li>Click <strong>+</strong> and name it (e.g. &quot;AI Agent&quot;)</li>
-                          <li>Copy the generated password (format: xxxx-xxxx-xxxx-xxxx)</li>
+                          <li>{t("settings.appPasswordStepOpen")} <a href="https://appleid.apple.com/account/manage" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center gap-0.5">appleid.apple.com <ExternalLink size={9} /></a></li>
+                          <li>{t("settings.appPasswordStepSignIn")}</li>
+                          <li>{t("settings.appPasswordStepGoTo")} <strong>{t("settings.appPasswordSignInAndSecurity")}</strong></li>
+                          <li>{t("settings.appPasswordStepClick")} <strong>{t("settings.appPasswordAppSpecificPasswords")}</strong></li>
+                          <li>{t("settings.appPasswordStepClick")} <strong>+</strong> {t("settings.appPasswordStepNameIt")}</li>
+                          <li>{t("settings.appPasswordStepCopy")}</li>
                         </ol>
                       </div>
                     </div>
@@ -283,7 +304,7 @@ function SettingsContent() {
                       className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-50 transition-colors"
                     >
                       {appleConnecting && <Loader2 size={14} className="animate-spin" />}
-                      Connect Apple iCloud
+                      {t("settings.connectApple")}
                     </button>
                   </div>
                 )}
@@ -297,38 +318,34 @@ function SettingsContent() {
           <div className="px-6 py-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-800">Google Drive</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Let the agent read your Drive files (Google Docs, Sheets, plain text, CSV).
-                </p>
+                <h2 className="text-base font-semibold text-gray-800">{t("settings.driveTitle")}</h2>
+                <p className="text-sm text-gray-500 mt-1">{t("settings.driveHint")}</p>
               </div>
               {settings.googleDriveConnected ? (
                 <span className="flex items-center gap-1 text-green-600 text-sm font-medium shrink-0 mt-0.5">
-                  <CheckCircle2 size={14} /> Connected
+                  <CheckCircle2 size={14} /> {t("settings.connected")}
                 </span>
               ) : (
                 <a
                   href={`${API_URL}/auth/google/start?userId=${encodeURIComponent(userId)}`}
                   className="inline-block shrink-0 bg-white border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Connect Google
+                  {t("settings.connectGoogle")}
                 </a>
               )}
             </div>
             {settings.googleDriveConnected && (
-              <p className="text-xs text-gray-400 mt-3">
-                Drive access is granted via your Google connection. To revoke, disconnect Google Calendar above.
-              </p>
+              <p className="text-xs text-gray-400 mt-3">{t("settings.driveConnectedNote")}</p>
             )}
           </div>
         </section>
 
         {/* ── Calendar Names ───────────────────────────────────── */}
         <section className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">Calendar Names</h2>
+          <h2 className="text-base font-semibold text-gray-800 mb-4">{t("settings.calendarNamesTitle")}</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Travel calendar name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.travelCalendarName")}</label>
               <input
                 type="text"
                 value={settings.calendarName}
@@ -337,7 +354,7 @@ function SettingsContent() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Shopping calendar name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.shoppingCalendarName")}</label>
               <input
                 type="text"
                 value={settings.shoppingCalendarName}
@@ -351,10 +368,10 @@ function SettingsContent() {
         {/* ── Task List Names (Google only) ────────────────────── */}
         {isGoogle && (
           <section className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-800 mb-4">Task List Names</h2>
+            <h2 className="text-base font-semibold text-gray-800 mb-4">{t("settings.taskListNamesTitle")}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Travel task list</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.travelTaskList")}</label>
                 <input
                   type="text"
                   value={settings.taskListName}
@@ -363,7 +380,7 @@ function SettingsContent() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Shopping task list</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("settings.shoppingTaskList")}</label>
                 <input
                   type="text"
                   value={settings.shoppingTaskListName}
@@ -379,30 +396,28 @@ function SettingsContent() {
         <section className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-base font-semibold text-gray-800">Browser Notifications</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Daily reminders at 9:00 AM for events and tasks due tomorrow.
-              </p>
+              <h2 className="text-base font-semibold text-gray-800">{t("settings.notificationsTitle")}</h2>
+              <p className="text-sm text-gray-500 mt-1">{t("settings.notificationsHint")}</p>
             </div>
 
             {pushStatus === "unsupported" && (
-              <span className="text-sm text-gray-400 shrink-0">Not supported</span>
+              <span className="text-sm text-gray-400 shrink-0">{t("settings.notSupported")}</span>
             )}
 
             {pushStatus === "denied" && (
-              <span className="text-sm text-red-500 shrink-0">Blocked by browser</span>
+              <span className="text-sm text-red-500 shrink-0">{t("settings.blockedByBrowser")}</span>
             )}
 
             {pushStatus === "subscribed" && (
               <div className="flex items-center gap-3 shrink-0">
                 <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
-                  <CheckCircle2 size={14} /> Enabled
+                  <CheckCircle2 size={14} /> {t("settings.enabled")}
                 </span>
                 <button
                   onClick={pushUnsubscribe}
                   className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  <BellOff size={14} /> Disable
+                  <BellOff size={14} /> {t("settings.disable")}
                 </button>
               </div>
             )}
@@ -414,16 +429,14 @@ function SettingsContent() {
                 className="flex items-center gap-1.5 shrink-0 text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {pushStatus === "subscribing"
-                  ? <><Loader2 size={14} className="animate-spin" /> Enabling…</>
-                  : <><Bell size={14} /> Enable notifications</>}
+                  ? <><Loader2 size={14} className="animate-spin" /> {t("settings.enabling")}</>
+                  : <><Bell size={14} /> {t("settings.enableNotifications")}</>}
               </button>
             )}
           </div>
 
           {pushStatus === "denied" && (
-            <p className="text-xs text-gray-400 mt-3">
-              To enable, open browser settings and allow notifications for this site.
-            </p>
+            <p className="text-xs text-gray-400 mt-3">{t("settings.deniedHint")}</p>
           )}
         </section>
 
@@ -435,11 +448,11 @@ function SettingsContent() {
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 size={14} className="animate-spin" />}
-            Save settings
+            {t("settings.save")}
           </button>
           {saveMsg && (
-            <span className={`text-sm ${saveMsg.startsWith("Failed") || saveMsg.startsWith("Google connection failed") ? "text-red-600" : "text-green-600"}`}>
-              {saveMsg}
+            <span className={`text-sm ${saveMsg.error ? "text-red-600" : "text-green-600"}`}>
+              {saveMsg.text}
             </span>
           )}
         </div>

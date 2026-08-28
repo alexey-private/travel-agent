@@ -10,6 +10,8 @@ import {
   MAX_FILE_BYTES,
   formatBytes,
 } from "@/lib/fileUtils";
+import type { TKey } from "@/i18n/dictionaries";
+import type { TVars } from "@/i18n/types";
 
 export interface PendingTextFile {
   name: string;
@@ -27,7 +29,12 @@ export interface UseFileAttachmentsResult {
   buildDisplayLabel: (baseText: string) => string;
 }
 
-export function useFileAttachments(): UseFileAttachmentsResult {
+/**
+ * Hooks cannot call useT() on their own behalf here — the translator is passed
+ * in by the component that owns the surface, so the alert speaks the same
+ * language as the rest of the chat window.
+ */
+export function useFileAttachments(t: (key: TKey, vars?: TVars) => string): UseFileAttachmentsResult {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [textFiles, setTextFiles] = useState<PendingTextFile[]>([]);
 
@@ -38,7 +45,7 @@ export function useFileAttachments(): UseFileAttachmentsResult {
 
     for (const file of files) {
       if (file.size > MAX_FILE_BYTES) {
-        alert(`"${file.name}" is ${formatBytes(file.size)} — files over 5 MB may be slow to process.`);
+        alert(t("errors.fileLarge", { name: file.name, size: formatBytes(file.size) }));
       }
       if (isBinaryAttachment(file)) {
         const base64 = await readAsBase64(file);
@@ -48,7 +55,7 @@ export function useFileAttachments(): UseFileAttachmentsResult {
         setTextFiles((prev) => [...prev, { name: file.name, content }]);
       }
     }
-  }, []);
+  }, [t]);
 
   const removeAttachment = useCallback((name: string) => {
     setAttachments((prev) => prev.filter((a) => a.name !== name));

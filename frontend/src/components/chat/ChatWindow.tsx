@@ -9,6 +9,7 @@ import { useChatHistory } from "@/hooks/useChatHistory";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useFileAttachments } from "@/hooks/useFileAttachments";
 import { useVoiceRecording } from "@/hooks/useVoiceRecording";
+import { useT } from "@/i18n/useT";
 
 interface ChatWindowProps {
   userId: string;
@@ -33,6 +34,7 @@ export default function ChatWindow({
   onConversationCreated,
   onReplyComplete,
 }: ChatWindowProps) {
+  const t = useT();
   const { messages, dispatch } = useChatHistory(userId, initialConversationId);
   const { loading, send } = useStreamChat({
     userId,
@@ -41,6 +43,7 @@ export default function ChatWindow({
     onConversationCreated,
     onReplyComplete,
     dispatch,
+    t,
   });
   const {
     attachments,
@@ -51,7 +54,7 @@ export default function ChatWindow({
     clearAll,
     buildMessageText,
     buildDisplayLabel,
-  } = useFileAttachments();
+  } = useFileAttachments(t);
 
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -59,7 +62,7 @@ export default function ChatWindow({
 
   const { voiceState, toggleRecording } = useVoiceRecording((text) => {
     void send(text, text, []);
-  });
+  }, t);
 
   // Auto-scroll to bottom on new content
   useEffect(() => {
@@ -104,12 +107,10 @@ export default function ChatWindow({
           <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
             <p className="text-2xl mb-2">{agentType === "shopping" ? "🛒" : "✈️"}</p>
             <p className="text-sm font-medium">
-              {agentType === "shopping" ? "Ready to help you shop?" : "Ready to plan your perfect trip?"}
+              {agentType === "shopping" ? t("chat.emptyShoppingTitle") : t("chat.emptyTravelTitle")}
             </p>
             <p className="text-xs mt-1">
-              {agentType === "shopping"
-                ? "Ask me about products, prices, reviews, deals…"
-                : "Ask me about destinations, visas, weather, hotels…"}
+              {agentType === "shopping" ? t("chat.emptyShoppingHint") : t("chat.emptyTravelHint")}
             </p>
           </div>
         )}
@@ -160,7 +161,7 @@ export default function ChatWindow({
                 <button
                   onClick={() => removeAttachment(att.name)}
                   className="ml-0.5 text-gray-400 hover:text-gray-600 shrink-0"
-                  aria-label={`Remove ${att.name}`}
+                  aria-label={t("chat.removeAttachment", { name: att.name })}
                 >
                   <X size={12} />
                 </button>
@@ -176,7 +177,7 @@ export default function ChatWindow({
                 <button
                   onClick={() => removeTextFile(tf.name)}
                   className="ml-0.5 text-gray-400 hover:text-gray-600 shrink-0"
-                  aria-label={`Remove ${tf.name}`}
+                  aria-label={t("chat.removeAttachment", { name: tf.name })}
                 >
                   <X size={12} />
                 </button>
@@ -197,7 +198,7 @@ export default function ChatWindow({
           />
           {/* Paperclip button */}
           <button
-            aria-label="Attach file"
+            aria-label={t("chat.attachFile")}
             onClick={() => fileInputRef.current?.click()}
             disabled={loading}
             className="h-11 w-11 rounded-xl border border-gray-300 text-gray-500 flex items-center justify-center hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
@@ -206,7 +207,7 @@ export default function ChatWindow({
           </button>
           {/* Microphone button */}
           <button
-            aria-label={voiceState === "recording" ? "Stop recording" : "Record voice message"}
+            aria-label={voiceState === "recording" ? t("chat.stopRecording") : t("chat.recordVoice")}
             onClick={toggleRecording}
             disabled={loading || voiceState === "transcribing"}
             className={`h-11 w-11 rounded-xl border flex items-center justify-center transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -226,9 +227,7 @@ export default function ChatWindow({
           <textarea
             className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
             placeholder={
-              agentType === "shopping"
-                ? "Ask me about products…  (Shift+Enter for new line)"
-                : "Ask me to plan a trip…  (Shift+Enter for new line)"
+              agentType === "shopping" ? t("chat.placeholderShopping") : t("chat.placeholderTravel")
             }
             rows={1}
             value={input}
@@ -237,7 +236,7 @@ export default function ChatWindow({
             disabled={loading}
           />
           <button
-            aria-label="Send"
+            aria-label={t("chat.send")}
             onClick={() => void sendMessage()}
             disabled={loading || !hasContent}
             className="h-11 w-11 rounded-xl bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"

@@ -8,9 +8,12 @@ import MemoryPanel, { type MemoryPanelHandle } from "@/components/memory/MemoryP
 import ConversationList, { type ConversationListHandle } from "@/components/conversations/ConversationList";
 import AgentSelector, { type AgentType } from "@/components/shared/AgentSelector";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { getOrCreateUserId } from "@/lib/api";
+import { useT } from "@/i18n/useT";
 
 export default function Home() {
+  const t = useT();
   const [userId, setUserId] = useState<string | null>(null);
   const [agentType, setAgentType] = useState<AgentType>("travel");
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export default function Home() {
   if (!userId) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="text-gray-400 text-sm">Loading…</div>
+        <div className="text-gray-400 text-sm">{t("common.loading")}</div>
       </div>
     );
   }
@@ -75,29 +78,30 @@ export default function Home() {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            aria-label="Toggle conversations"
+            aria-label={t("common.toggleConversations")}
             className="md:hidden text-gray-500 hover:text-gray-700 transition-colors shrink-0"
           >
             <Menu size={20} />
           </button>
           <Plane size={20} className="text-blue-600 shrink-0" />
-          <span className="font-semibold text-gray-800 hidden sm:inline truncate">AI Agent</span>
+          <span className="font-semibold text-gray-800 hidden sm:inline truncate">{t("common.appName")}</span>
         </div>
         <AgentSelector value={agentType} onChange={handleAgentChange} />
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <LanguageSwitcher />
           <span className="text-xs text-gray-400 font-mono hidden md:inline">{userId.slice(0, 8)}…</span>
-          <Link href="/features" title="What this app can do" className="hidden sm:inline text-gray-400 hover:text-gray-700 transition-colors">
+          <Link href="/features" title={t("common.navFeatures")} className="hidden sm:inline text-gray-400 hover:text-gray-700 transition-colors">
             <Sparkles size={18} />
           </Link>
-          <Link href="/calendar" title="Calendar & Tasks" className="text-gray-400 hover:text-gray-700 transition-colors">
+          <Link href="/calendar" title={t("common.navCalendar")} className="text-gray-400 hover:text-gray-700 transition-colors">
             <CalendarDays size={18} />
           </Link>
-          <Link href="/settings" title="Settings" className="hidden sm:inline text-gray-400 hover:text-gray-700 transition-colors">
+          <Link href="/settings" title={t("common.navSettings")} className="hidden sm:inline text-gray-400 hover:text-gray-700 transition-colors">
             <Settings size={18} />
           </Link>
           <button
             onClick={() => setMemoryOpen((v) => !v)}
-            aria-label="Toggle preferences"
+            aria-label={t("common.togglePreferences")}
             className="lg:hidden text-gray-400 hover:text-gray-700 transition-colors"
           >
             <Brain size={18} />
@@ -134,7 +138,7 @@ export default function Home() {
 
         {/* Chat area */}
         <main className="flex flex-col flex-1 min-w-0 min-h-0">
-          <ErrorBoundary>
+          <ErrorBoundary fallback={t("errors.boundaryFallback")}>
             <ChatWindow
               key={chatKey}
               userId={userId}
@@ -160,7 +164,7 @@ export default function Home() {
             memoryOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-          <ErrorBoundary>
+          <ErrorBoundary fallback={t("errors.boundaryFallback")}>
             <MemoryPanel ref={memoryPanelRef} userId={userId} agentType={agentType} />
           </ErrorBoundary>
         </div>

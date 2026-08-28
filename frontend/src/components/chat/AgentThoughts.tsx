@@ -3,6 +3,7 @@
 import { memo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { type ToolStep } from "@/types/agent";
+import { useT } from "@/i18n/useT";
 
 export type { ToolStep };
 
@@ -17,6 +18,7 @@ function formatValue(value: unknown): string {
 }
 
 const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -54,7 +56,7 @@ const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
       {expanded && (
         <div className="px-3 py-2 bg-white space-y-2">
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1">Input</p>
+            <p className="text-xs font-semibold text-gray-500 mb-1">{t("chat.stepInput")}</p>
             <pre className="text-xs bg-gray-50 rounded-sm p-2 overflow-auto max-h-32 text-gray-700 whitespace-pre-wrap">
               {formatValue(step.input)}
             </pre>
@@ -63,7 +65,7 @@ const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
           {!step.pending && (
             <div>
               <p className="text-xs font-semibold text-gray-500 mb-1">
-                {step.error ? "Error" : "Output"}
+                {step.error ? t("chat.stepError") : t("chat.stepOutput")}
               </p>
               <pre
                 className={`text-xs rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap ${
@@ -83,6 +85,7 @@ const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
 });
 
 const AgentThoughts = memo(function AgentThoughts({ steps, streaming }: AgentThoughtsProps) {
+  const t = useT();
   const [open, setOpen] = useState(true);
 
   if (steps.length === 0 && !streaming) return null;
@@ -95,8 +98,8 @@ const AgentThoughts = memo(function AgentThoughts({ steps, streaming }: AgentTho
       >
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         {streaming && steps.length === 0
-          ? "Agent is thinking…"
-          : `Agent used ${steps.length} tool${steps.length !== 1 ? "s" : ""}`}
+          ? t("chat.thinking")
+          : t("chat.toolsUsed", { count: steps.length })}
       </button>
 
       {open && (

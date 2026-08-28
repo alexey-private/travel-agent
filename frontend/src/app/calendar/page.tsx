@@ -15,8 +15,19 @@ import {
   CalendarEvent,
   Task,
 } from "@/lib/calendarApi";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
+import { useT } from "@/i18n/useT";
+import type { TKey } from "@/i18n/dictionaries";
 
 type Tab = "events" | "tasks";
+
+/** Category values travel to the backend as-is; only the label is translated. */
+const CATEGORIES: { value: string; key: TKey }[] = [
+  { value: "travel", key: "calendar.categoryTravel" },
+  { value: "shopping", key: "calendar.categoryShopping" },
+  { value: "reminder", key: "calendar.categoryReminder" },
+  { value: "other", key: "calendar.categoryOther" },
+];
 
 interface EventEditState {
   title: string;
@@ -41,6 +52,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
 };
 
 export default function CalendarPage() {
+  const t = useT();
   const [userId, setUserId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("events");
 
@@ -113,7 +125,7 @@ export default function CalendarPage() {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    if (!userId || !confirm("Delete this event?")) return;
+    if (!userId || !confirm(t("calendar.confirmDeleteEvent"))) return;
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
     try {
       await deleteEvent(userId, eventId);
@@ -165,7 +177,7 @@ export default function CalendarPage() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!userId || !confirm("Delete this task?")) return;
+    if (!userId || !confirm(t("calendar.confirmDeleteTask"))) return;
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     try {
       await deleteTask(userId, taskId);
@@ -184,23 +196,24 @@ export default function CalendarPage() {
         <Link href="/" className="text-gray-400 hover:text-gray-700 transition-colors">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="font-semibold text-gray-800">Calendar &amp; Tasks</h1>
+        <h1 className="font-semibold text-gray-800 me-auto">{t("calendar.title")}</h1>
+        <LanguageSwitcher />
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Tabs */}
         <div className="flex border-b border-gray-200 mb-6">
-          {(["events", "tasks"] as Tab[]).map((t) => (
+          {(["events", "tasks"] as Tab[]).map((tabName) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabName}
+              onClick={() => setTab(tabName)}
               className={`px-5 py-2 text-sm font-medium capitalize transition-colors ${
-                tab === t
+                tab === tabName
                   ? "border-b-2 border-blue-500 text-blue-600"
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {t === "events" ? "Events" : "Tasks"}
+              {tabName === "events" ? t("calendar.tabEvents") : t("calendar.tabTasks")}
             </button>
           ))}
         </div>
@@ -212,8 +225,8 @@ export default function CalendarPage() {
             <span className="flex-1">
               {error}
               {error.includes('reconnect') && (
-                <Link href="/settings" className="ml-2 underline font-medium hover:text-red-900">
-                  Go to Settings
+                <Link href="/settings" className="ms-2 underline font-medium hover:text-red-900">
+                  {t("calendar.goToSettings")}
                 </Link>
               )}
             </span>
@@ -232,7 +245,7 @@ export default function CalendarPage() {
           /* ── Events list ── */
           <div className="space-y-2">
             {events.length === 0 && (
-              <p className="text-center text-gray-400 py-8">No upcoming events.</p>
+              <p className="text-center text-gray-400 py-8">{t("calendar.noEvents")}</p>
             )}
             {events.map((evt) =>
               editingEvent === evt.id ? (
@@ -240,7 +253,7 @@ export default function CalendarPage() {
                 <div key={evt.id} className="bg-white border border-blue-200 rounded-xl p-4 space-y-3">
                   <input
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    placeholder="Title"
+                    placeholder={t("calendar.formTitle")}
                     value={eventForm.title}
                     onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
                   />
@@ -261,7 +274,7 @@ export default function CalendarPage() {
                   <input
                     type="date"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    placeholder="End date (optional)"
+                    placeholder={t("calendar.formEndDate")}
                     value={eventForm.endDate}
                     min={eventForm.date}
                     onChange={(e) => setEventForm({ ...eventForm, endDate: e.target.value })}
@@ -271,14 +284,14 @@ export default function CalendarPage() {
                     value={eventForm.category}
                     onChange={(e) => setEventForm({ ...eventForm, category: e.target.value })}
                   >
-                    {["travel", "shopping", "reminder", "other"].map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {CATEGORIES.map(({ value, key }) => (
+                      <option key={value} value={value}>{t(key)}</option>
                     ))}
                   </select>
                   <textarea
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none"
                     rows={2}
-                    placeholder="Description (optional)"
+                    placeholder={t("calendar.formDescription")}
                     value={eventForm.description}
                     onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
                   />
@@ -287,7 +300,7 @@ export default function CalendarPage() {
                       onClick={() => setEditingEvent(null)}
                       className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
                     >
-                      Cancel
+                      {t("calendar.cancel")}
                     </button>
                     <button
                       onClick={saveEvent}
@@ -295,7 +308,7 @@ export default function CalendarPage() {
                       className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1"
                     >
                       {saving && <Loader2 size={12} className="animate-spin" />}
-                      Save
+                      {t("calendar.save")}
                     </button>
                   </div>
                 </div>
@@ -313,14 +326,14 @@ export default function CalendarPage() {
                   <button
                     onClick={() => startEditEvent(evt)}
                     className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
-                    title="Edit"
+                    title={t("calendar.edit")}
                   >
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={() => handleDeleteEvent(evt.id)}
                     className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                    title="Delete"
+                    title={t("calendar.delete")}
                   >
                     <Trash2 size={15} />
                   </button>
@@ -332,7 +345,7 @@ export default function CalendarPage() {
           /* ── Tasks list ── */
           <div className="space-y-2">
             {tasks.length === 0 && (
-              <p className="text-center text-gray-400 py-8">No pending tasks.</p>
+              <p className="text-center text-gray-400 py-8">{t("calendar.noTasks")}</p>
             )}
             {tasks.map((task) =>
               editingTask === task.id ? (
@@ -340,7 +353,7 @@ export default function CalendarPage() {
                 <div key={task.id} className="bg-white border border-blue-200 rounded-xl p-4 space-y-3">
                   <input
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    placeholder="Title"
+                    placeholder={t("calendar.formTitle")}
                     value={taskForm.title}
                     onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                   />
@@ -353,7 +366,7 @@ export default function CalendarPage() {
                   <textarea
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none"
                     rows={2}
-                    placeholder="Notes (optional)"
+                    placeholder={t("calendar.formNotes")}
                     value={taskForm.notes}
                     onChange={(e) => setTaskForm({ ...taskForm, notes: e.target.value })}
                   />
@@ -362,7 +375,7 @@ export default function CalendarPage() {
                       onClick={() => setEditingTask(null)}
                       className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
                     >
-                      Cancel
+                      {t("calendar.cancel")}
                     </button>
                     <button
                       onClick={saveTask}
@@ -370,7 +383,7 @@ export default function CalendarPage() {
                       className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1"
                     >
                       {saving && <Loader2 size={12} className="animate-spin" />}
-                      Save
+                      {t("calendar.save")}
                     </button>
                   </div>
                 </div>
@@ -387,7 +400,7 @@ export default function CalendarPage() {
                   <button
                     onClick={() => handleCompleteTask(task.id)}
                     className="text-gray-300 hover:text-green-500 transition-colors shrink-0"
-                    title="Mark complete"
+                    title={t("calendar.markComplete")}
                     disabled={task.status === "completed" || task.status === "COMPLETED"}
                   >
                     <CheckSquare size={18} />
@@ -397,20 +410,20 @@ export default function CalendarPage() {
                       {task.title}
                     </p>
                     {task.due && (
-                      <p className="text-xs text-gray-400">due {task.due}</p>
+                      <p className="text-xs text-gray-400">{t("calendar.due", { date: task.due })}</p>
                     )}
                   </div>
                   <button
                     onClick={() => startEditTask(task)}
                     className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
-                    title="Edit"
+                    title={t("calendar.edit")}
                   >
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={() => handleDeleteTask(task.id)}
                     className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                    title="Delete"
+                    title={t("calendar.delete")}
                   >
                     <Trash2 size={15} />
                   </button>

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef, type DependencyList } from "r
 interface AsyncState<T> {
   data: T | null;
   loading: boolean;
+  /** A dictionary key when the failure came from the API; raw text otherwise. */
   error: string | null;
 }
 
@@ -25,7 +26,7 @@ export function useAsync<T>(
     setState((s) => ({ ...s, loading: true, error: null }));
     fnRef.current().then(
       (data) => setState({ data, loading: false, error: null }),
-      (err: unknown) => setState({ data: null, loading: false, error: err instanceof Error ? err.message : "Unknown error" }),
+      (err: unknown) => setState({ data: null, loading: false, error: err instanceof Error ? err.message : "errors.unknown" }),
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

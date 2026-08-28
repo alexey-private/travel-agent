@@ -5,7 +5,8 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { renderWithI18n } from "../helpers/renderWithI18n";
 import userEvent from "@testing-library/user-event";
 import ChatWindow from "@/components/chat/ChatWindow";
 import * as api from "@/lib/api";
@@ -25,18 +26,18 @@ function mockStream(events: AgentEvent[]) {
 
 describe("ChatWindow — initial render", () => {
   it("shows the empty-state prompt", () => {
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     expect(screen.getByText(/ready to plan/i)).toBeInTheDocument();
   });
 
   it("renders the textarea and send button", () => {
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     expect(screen.getByPlaceholderText(/plan a trip/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /send/i })).toBeInTheDocument();
   });
 
   it("send button is disabled when input is empty", () => {
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
   });
 });
@@ -47,7 +48,7 @@ describe("ChatWindow — sending messages", () => {
   it("adds user and assistant bubbles after sending", async () => {
     mockStream([{ type: "text", content: "Here is your plan" }, { type: "done" }]);
 
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Plan a trip to Tokyo");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -57,7 +58,7 @@ describe("ChatWindow — sending messages", () => {
 
   it("clears the input after sending", async () => {
     mockStream([{ type: "done" }]);
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     const textarea = screen.getByRole("textbox");
     await userEvent.type(textarea, "Hello");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
@@ -71,7 +72,7 @@ describe("ChatWindow — sending messages", () => {
       () => new Promise<void>((r) => { resolve = r; }),
     );
 
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -81,7 +82,7 @@ describe("ChatWindow — sending messages", () => {
 
   it("submits on Enter key", async () => {
     mockStream([{ type: "done" }]);
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     const textarea = screen.getByRole("textbox");
     await userEvent.type(textarea, "Go to Paris");
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
@@ -89,7 +90,7 @@ describe("ChatWindow — sending messages", () => {
   });
 
   it("does NOT submit on Shift+Enter", async () => {
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     const textarea = screen.getByRole("textbox");
     await userEvent.type(textarea, "Line one");
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
@@ -102,7 +103,7 @@ describe("ChatWindow — agentType prop", () => {
 
   it("passes agentType to streamChat (default: travel)", async () => {
     mockStream([{ type: "done" }]);
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "hi");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -113,7 +114,7 @@ describe("ChatWindow — agentType prop", () => {
 
   it("passes agentType='shopping' to streamChat when set", async () => {
     mockStream([{ type: "done" }]);
-    render(<ChatWindow userId="u1" agentType="shopping" />);
+    renderWithI18n(<ChatWindow userId="u1" agentType="shopping" />);
     await userEvent.type(screen.getByRole("textbox"), "find headphones");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -132,7 +133,7 @@ describe("ChatWindow — SSE event handling", () => {
       { type: "done" },
     ]);
 
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -147,7 +148,7 @@ describe("ChatWindow — SSE event handling", () => {
       { type: "done" },
     ]);
 
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Search");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -157,7 +158,7 @@ describe("ChatWindow — SSE event handling", () => {
   it("shows error text when streamChat throws", async () => {
     mockStreamChat.mockRejectedValue(new Error("Network failure"));
 
-    render(<ChatWindow userId="u1" />);
+    renderWithI18n(<ChatWindow userId="u1" />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -170,7 +171,7 @@ describe("ChatWindow — SSE event handling", () => {
     mockStream([{ type: "done" }]);
     const onReplyComplete = jest.fn();
 
-    render(<ChatWindow userId="u1" onReplyComplete={onReplyComplete} />);
+    renderWithI18n(<ChatWindow userId="u1" onReplyComplete={onReplyComplete} />);
     await userEvent.type(screen.getByRole("textbox"), "Hi");
     await userEvent.click(screen.getByRole("button", { name: /send/i }));
 

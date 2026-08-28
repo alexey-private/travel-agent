@@ -4,6 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { streamChat } from "@/lib/api";
 import { type MessagesAction, type Attachment } from "@/types/agent";
 import { type AgentType } from "@/components/shared/AgentSelector";
+import type { TKey } from "@/i18n/dictionaries";
+import type { TVars } from "@/i18n/types";
 
 interface UseStreamChatOptions {
   userId: string;
@@ -12,6 +14,8 @@ interface UseStreamChatOptions {
   onConversationCreated?: (id: string) => void;
   onReplyComplete?: () => void;
   dispatch: React.Dispatch<MessagesAction>;
+  /** Passed in by the owning component — hooks cannot call useT() for it. */
+  t: (key: TKey, vars?: TVars) => string;
 }
 
 interface UseStreamChatResult {
@@ -28,6 +32,7 @@ export function useStreamChat({
   onConversationCreated,
   onReplyComplete,
   dispatch,
+  t,
 }: UseStreamChatOptions): UseStreamChatResult {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId ?? null);
@@ -87,13 +92,15 @@ export function useStreamChat({
       );
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
-      const errMsg = err instanceof Error ? err.message : "Unknown error";
-      dispatch({ type: "MARK_ERROR", id: assistantMsgId, error: `Error: ${errMsg}` });
+      // ApiError carries a dictionary key as its message; anything else is
+      // already human-readable, and translate() returns an unknown key as-is.
+      const errMsg = err instanceof Error ? t(err.message as TKey) : t("errors.unknown");
+      dispatch({ type: "MARK_ERROR", id: assistantMsgId, error: `${t("chat.stepError")}: ${errMsg}` });
     } finally {
       setLoading(false);
       onReplyComplete?.();
     }
-  }, [userId, agentType, onConversationCreated, onReplyComplete, dispatch]);
+  }, [userId, agentType, onConversationCreated, onReplyComplete, dispatch, t]);
 
   return { loading, conversationId, send, abortRef };
 }

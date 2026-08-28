@@ -1,4 +1,5 @@
 import { API_URL } from "./config";
+import { ApiError } from "./apiError";
 import { type Attachment, type AgentEvent, type Conversation, type UserMemory, type ChatMessage } from "@/types/agent";
 
 export type { Attachment, AgentEvent, Conversation, UserMemory, ChatMessage } from "@/types/agent";
@@ -24,7 +25,7 @@ export async function streamChat(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`Chat request failed: ${response.status}`);
+    throw new ApiError("errors.chatRequestFailed", response.status);
   }
 
   const reader = response.body.getReader();
@@ -59,7 +60,7 @@ export async function streamChat(
 /** Fetch all stored memories for a user filtered by agent type. */
 export async function fetchMemories(userId: string, agentType: "travel" | "shopping" = "travel"): Promise<UserMemory[]> {
   const response = await fetch(`${API_URL}/api/memory/${userId}?agentType=${agentType}`);
-  if (!response.ok) throw new Error(`Failed to fetch memories: ${response.status}`);
+  if (!response.ok) throw new ApiError("errors.fetchMemoriesFailed", response.status);
   const data = (await response.json()) as { memories: UserMemory[] };
   return data.memories;
 }
@@ -79,7 +80,7 @@ export async function fetchMessages(
   const response = await fetch(
     `${API_URL}/api/conversations/${userId}/${conversationId}/messages`,
   );
-  if (!response.ok) throw new Error(`Failed to fetch messages: ${response.status}`);
+  if (!response.ok) throw new ApiError("errors.fetchMessagesFailed", response.status);
   const data = (await response.json()) as { messages: ChatMessage[] };
   return data.messages;
 }
@@ -87,19 +88,19 @@ export async function fetchMessages(
 /** Delete a conversation and all its messages. */
 export async function deleteConversation(userId: string, conversationId: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/conversations/${userId}/${conversationId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`Failed to delete conversation: ${res.status}`);
+  if (!res.ok) throw new ApiError("errors.deleteConversationFailed", res.status);
 }
 
 /** Clear all messages from a conversation (keeps the conversation). */
 export async function clearConversationMessages(userId: string, conversationId: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/conversations/${userId}/${conversationId}/messages`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`Failed to clear messages: ${res.status}`);
+  if (!res.ok) throw new ApiError("errors.clearMessagesFailed", res.status);
 }
 
 /** Fetch all conversations for a user filtered by agent type, newest first. */
 export async function fetchConversations(userId: string, agentType: "travel" | "shopping" = "travel"): Promise<Conversation[]> {
   const response = await fetch(`${API_URL}/api/conversations/${userId}?agentType=${agentType}`);
-  if (!response.ok) throw new Error(`Failed to fetch conversations: ${response.status}`);
+  if (!response.ok) throw new ApiError("errors.fetchConversationsFailed", response.status);
   const data = (await response.json()) as { conversations: Conversation[] };
   return data.conversations;
 }
@@ -159,7 +160,7 @@ export async function exportToPdf(text: string, filename?: string): Promise<void
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, filename }),
   });
-  if (!response.ok) throw new Error(`Export failed: ${response.status}`);
+  if (!response.ok) throw new ApiError("errors.exportFailed", response.status);
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -183,7 +184,9 @@ export async function exportToPdfDrive(
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error ?? `Export failed: ${response.status}`);
+    const detail = (err as { error?: string }).error;
+    if (detail) throw new Error(detail);
+    throw new ApiError("errors.exportFailed", response.status);
   }
   return response.json();
 }

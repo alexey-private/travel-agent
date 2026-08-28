@@ -55,7 +55,12 @@ describe("fetchMemories", () => {
       status: 500,
     } as Response);
 
-    await expect(fetchMemories("user-1")).rejects.toThrow("500");
+    // The message is the bare translation key; the status lives on the instance
+    // so a caller can log it without the user ever seeing a raw HTTP code.
+    await expect(fetchMemories("user-1")).rejects.toMatchObject({
+      message: "errors.fetchMemoriesFailed",
+      status: 500,
+    });
   });
 });
 
@@ -136,7 +141,10 @@ describe("streamChat", () => {
       body: null,
     } as unknown as Response);
 
-    await expect(streamChat("u1", "hi", null, jest.fn())).rejects.toThrow("503");
+    await expect(streamChat("u1", "hi", null, jest.fn())).rejects.toMatchObject({
+      message: "errors.chatRequestFailed",
+      status: 503,
+    });
   });
 
   it("ignores malformed SSE lines without throwing", async () => {

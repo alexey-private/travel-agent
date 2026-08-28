@@ -2,10 +2,15 @@
 
 import { useState, useRef, useCallback } from "react";
 import { API_URL } from "@/lib/config";
+import type { TKey } from "@/i18n/dictionaries";
+import type { TVars } from "@/i18n/types";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
 
-export function useVoiceRecording(onTranscribed: (text: string) => void) {
+export function useVoiceRecording(
+  onTranscribed: (text: string) => void,
+  t: (key: TKey, vars?: TVars) => string,
+) {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -17,7 +22,7 @@ export function useVoiceRecording(onTranscribed: (text: string) => void) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      alert("Microphone access denied. Please allow microphone access and try again.");
+      alert(t("errors.microphoneDenied"));
       return;
     }
 
@@ -55,7 +60,7 @@ export function useVoiceRecording(onTranscribed: (text: string) => void) {
     recorder.start();
     recorderRef.current = recorder;
     setVoiceState("recording");
-  }, [voiceState, onTranscribed]);
+  }, [voiceState, onTranscribed, t]);
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop();

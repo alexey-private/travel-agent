@@ -4,7 +4,8 @@
  */
 
 import React from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { screen, waitFor, fireEvent } from "@testing-library/react";
+import { renderWithI18n } from "../helpers/renderWithI18n";
 import MemoryPanel from "@/components/memory/MemoryPanel";
 import * as api from "@/lib/api";
 
@@ -17,14 +18,14 @@ describe("MemoryPanel", () => {
 
   it("renders the panel heading", async () => {
     mockFetchMemories.mockResolvedValue([]);
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     expect(screen.getByText(/preferences/i)).toBeInTheDocument();
     await waitFor(() => expect(mockFetchMemories).toHaveBeenCalledTimes(1));
   });
 
   it("shows empty-state message when there are no memories", async () => {
     mockFetchMemories.mockResolvedValue([]);
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() =>
       expect(screen.getByText(/no preferences saved/i)).toBeInTheDocument(),
     );
@@ -35,7 +36,7 @@ describe("MemoryPanel", () => {
       { key: "home_city", value: "San Francisco" },
       { key: "budget", value: "mid" },
     ]);
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() => expect(screen.getByText("San Francisco")).toBeInTheDocument());
     expect(screen.getByText("mid")).toBeInTheDocument();
     // Keys are displayed with underscores replaced
@@ -46,7 +47,7 @@ describe("MemoryPanel", () => {
     mockFetchMemories.mockResolvedValue([{ key: "diet", value: "vegetarian" }]);
     mockDeleteMemory.mockResolvedValue(undefined);
 
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() => screen.getByText("vegetarian"));
 
     // Hover to reveal delete button then click
@@ -62,7 +63,7 @@ describe("MemoryPanel", () => {
 
   it("shows error message when fetchMemories fails", async () => {
     mockFetchMemories.mockRejectedValue(new Error("Network error"));
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() =>
       expect(screen.getByText(/network error/i)).toBeInTheDocument(),
     );
@@ -70,7 +71,7 @@ describe("MemoryPanel", () => {
 
   it("re-fetches memories when the refresh button is clicked twice", async () => {
     mockFetchMemories.mockResolvedValue([]);
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() => expect(mockFetchMemories).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByTitle(/refresh memories/i));
@@ -79,7 +80,7 @@ describe("MemoryPanel", () => {
 
   it("re-fetches when the refresh button is clicked", async () => {
     mockFetchMemories.mockResolvedValue([]);
-    render(<MemoryPanel userId="u1" agentType="travel" />);
+    renderWithI18n(<MemoryPanel userId="u1" agentType="travel" />);
     await waitFor(() => expect(mockFetchMemories).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByTitle(/refresh memories/i));

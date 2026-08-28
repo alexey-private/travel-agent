@@ -191,3 +191,23 @@ Priority order (see [memory/project_frontend_refactor_plan.md](~/.claude/project
 **P2:** Folder structure, `useReducer` for streaming state, `React.memo`, React Query.
 
 After each P0/P1 item: `cd frontend && npm run build && npm run lint`.
+
+---
+
+## SKILL: add-ui-string
+
+**When:** Any user-visible text is added to the frontend — a label, a `title`, an `aria-label`, a `placeholder`, or the text of an `alert()`.
+
+1. Add the key to `frontend/src/i18n/locales/en.ts`. Name it `<namespace>.<camelCase>`, where the namespace is the surface it belongs to: `common.*`, `chat.*`, `memory.*`, `conversations.*`, `settings.*`, `calendar.*`, `features.*`, `errors.*`.
+2. Add the **same key** to `he.ts` and `ru.ts` with the translated value.
+3. Read it in the component with `const t = useT();` → `{t("namespace.key")}`.
+
+`Dictionary` is inferred from `en.ts` and `he.ts`/`ru.ts` are annotated with it, so a missed or misspelled key in either translation is a compile error — `npx tsc -p frontend/tsconfig.json --noEmit` is the check.
+
+Values with a number that changes the shape of the word are declared `as PluralForms` (`one` / `few` / `many` / `other`); selection runs through `Intl.PluralRules`, and `other` is the fallback for a form a locale asks for but the entry lacks. Other interpolation uses `{name}` placeholders passed as `t("key", { name })`.
+
+**Not translated:** `console.*` output, localStorage keys, `data-testid`, CSS class names, `agentType` values, calendar category values, and the names of the external Google/Apple calendars and task lists.
+
+**Hooks and `lib/*`** cannot call `useT()`. A hook takes `t` as a parameter from the component that owns the surface (`useFileAttachments(t)`); a module in `lib/` throws `new ApiError("errors.<key>", status)` and the surface showing the error translates `err.message`.
+
+Component tests render through `renderWithI18n` from `src/__tests__/helpers/renderWithI18n.tsx` — `useT()` throws outside the provider.

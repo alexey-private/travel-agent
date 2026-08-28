@@ -5,6 +5,7 @@ import { MessageSquare, Plus, Trash2 } from "lucide-react";
 import { fetchConversations, deleteConversation, type Conversation } from "@/lib/api";
 import { formatDate } from "@/lib/dateUtils";
 import { useAsync } from "@/hooks/useAsync";
+import { useT } from "@/i18n/useT";
 
 export interface ConversationListHandle {
   reload: () => void;
@@ -21,6 +22,7 @@ interface ConversationListProps {
 
 const ConversationList = forwardRef<ConversationListHandle, ConversationListProps>(
   function ConversationList({ userId, agentType, selectedId, onSelect, onNewChat, onDelete }, ref) {
+    const t = useT();
     const { data, reload, setData } = useAsync<Conversation[]>(
       () => fetchConversations(userId, agentType),
       [userId, agentType],
@@ -52,17 +54,17 @@ const ConversationList = forwardRef<ConversationListHandle, ConversationListProp
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-gray-700 transition-colors"
           >
             <Plus size={15} />
-            New chat
+            {t("conversations.newChat")}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
           {conversations.length === 0 && (
-            <p className="px-4 py-3 text-xs text-gray-500">No conversations yet</p>
+            <p className="px-4 py-3 text-xs text-gray-500">{t("conversations.empty")}</p>
           )}
           {conversations.map((c) => {
             const isActive = c.id === selectedId;
-            const title = c.title?.slice(0, 60) ?? "New conversation";
+            const title = c.title?.slice(0, 60) ?? t("conversations.untitled");
             const isDeleting = deletingId === c.id;
             return (
               <div
@@ -85,7 +87,7 @@ const ConversationList = forwardRef<ConversationListHandle, ConversationListProp
                   onClick={(e) => void handleDelete(e, c.id)}
                   disabled={isDeleting}
                   className="opacity-0 group-hover:opacity-100 shrink-0 p-2 mt-1 text-gray-500 hover:text-red-400 transition-all disabled:opacity-30"
-                  title="Delete conversation"
+                  title={t("conversations.delete")}
                 >
                   <Trash2 size={12} />
                 </button>

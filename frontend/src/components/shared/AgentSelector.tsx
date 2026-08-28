@@ -2,6 +2,8 @@
 
 import { Plane, ShoppingBag } from "lucide-react";
 import { SHOPPING_ENABLED } from "@/lib/config";
+import { useT } from "@/i18n/useT";
+import type { TKey } from "@/i18n/dictionaries";
 
 export type AgentType = "travel" | "shopping";
 
@@ -10,9 +12,9 @@ interface AgentSelectorProps {
   onChange: (agentType: AgentType) => void;
 }
 
-const ALL_AGENTS: { type: AgentType; label: string; Icon: typeof Plane }[] = [
-  { type: "travel", label: "Travel", Icon: Plane },
-  { type: "shopping", label: "Shopping", Icon: ShoppingBag },
+const ALL_AGENTS: { type: AgentType; labelKey: TKey; Icon: typeof Plane }[] = [
+  { type: "travel", labelKey: "common.agentTravel", Icon: Plane },
+  { type: "shopping", labelKey: "common.agentShopping", Icon: ShoppingBag },
 ];
 
 const AGENTS = SHOPPING_ENABLED ? ALL_AGENTS : ALL_AGENTS.filter((a) => a.type !== "shopping");
@@ -21,11 +23,13 @@ const AGENTS = SHOPPING_ENABLED ? ALL_AGENTS : ALL_AGENTS.filter((a) => a.type !
  * Tab-style toggle for switching between Travel and Shopping agents.
  */
 export default function AgentSelector({ value, onChange }: AgentSelectorProps) {
+  const t = useT();
+
   if (AGENTS.length < 2) return null;
 
   return (
     <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-      {AGENTS.map(({ type, label, Icon }) => {
+      {AGENTS.map(({ type, labelKey, Icon }) => {
         const active = value === type;
         return (
           <button
@@ -38,7 +42,7 @@ export default function AgentSelector({ value, onChange }: AgentSelectorProps) {
             }`}
           >
             <Icon size={14} />
-            <span className="hidden sm:inline">{label}</span>
+            <span className="hidden sm:inline">{t(labelKey)}</span>
           </button>
         );
       })}

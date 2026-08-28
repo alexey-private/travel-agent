@@ -7,6 +7,8 @@ import { ChevronDown, ChevronRight, Download, HardDrive } from "lucide-react";
 import AgentThoughts from "./AgentThoughts";
 import { exportToPdf, exportToPdfDrive, derivePdfFilename } from "@/lib/api";
 import { type Message } from "@/types/agent";
+import { useT } from "@/i18n/useT";
+import type { TKey } from "@/i18n/dictionaries";
 
 export type { Message };
 
@@ -20,6 +22,7 @@ interface MessageBubbleProps {
 const SOURCES_PREVIEW = 5;
 
 const MessageBubble = memo(function MessageBubble({ message, userId, agentType = "travel", onSuggestionClick }: MessageBubbleProps) {
+  const t = useT();
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -62,7 +65,9 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
       setDriveLink(result.webViewLink);
       setDriveStatus("done");
     } catch (err) {
-      setDriveError(err instanceof Error ? err.message : "Upload failed");
+      // ApiError.message is a dictionary key; translate() passes anything
+      // it does not recognise straight through, so raw prose survives too.
+      setDriveError(err instanceof Error ? t(err.message as TKey) : t("chat.uploadFailed"));
       setDriveStatus("error");
     }
   }
@@ -72,7 +77,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
       <div className={`max-w-[85%] ${isUser ? "order-1" : "order-2"}`}>
         {/* Role label */}
         <p className={`text-xs text-gray-400 mb-1 ${isUser ? "text-right" : "text-left"}`}>
-          {isUser ? "You" : "Travel Agent"}
+          {isUser ? t("chat.roleYou") : t("chat.roleAgent")}
         </p>
 
         {/* Agent thoughts (tool calls) — only for assistant */}
@@ -145,7 +150,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
           <div className="mt-1 flex justify-end items-center gap-2">
             {/* Drive status feedback */}
             {driveStatus === "uploading" && (
-              <span className="text-xs text-gray-400">Uploading…</span>
+              <span className="text-xs text-gray-400">{t("chat.uploading")}</span>
             )}
             {driveStatus === "done" && driveLink && (
               <a
@@ -155,11 +160,11 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                 className="flex items-center gap-1 text-xs text-green-600 hover:underline"
               >
                 <HardDrive size={12} />
-                Saved to Drive
+                {t("chat.savedToDrive")}
               </a>
             )}
             {driveStatus === "error" && (
-              <span className="text-xs text-red-400" title={driveError ?? undefined}>Upload failed</span>
+              <span className="text-xs text-red-400" title={driveError ?? undefined}>{t("chat.uploadFailed")}</span>
             )}
 
             {/* PDF dropdown */}
@@ -168,10 +173,10 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                 onClick={() => setMenuOpen(v => !v)}
                 disabled={exporting || driveStatus === "uploading"}
                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
-                title="Download as PDF"
+                title={t("chat.downloadAsPdf")}
               >
                 <Download size={12} />
-                {exporting ? "Exporting…" : "PDF"}
+                {exporting ? t("chat.exporting") : t("chat.pdf")}
                 <ChevronDown size={10} />
               </button>
 
@@ -182,7 +187,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     <Download size={12} />
-                    Download locally
+                    {t("chat.downloadLocally")}
                   </button>
                   <button
                     onClick={handleSaveToDrive}
@@ -190,7 +195,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40"
                   >
                     <HardDrive size={12} />
-                    Save to Google Drive
+                    {t("chat.saveToDrive")}
                   </button>
                 </div>
               )}
@@ -201,7 +206,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
         {/* Sources */}
         {!isUser && (message.sources?.length ?? 0) > 0 && (
           <div className="mt-1.5 px-1">
-            <p className="text-xs text-gray-400 font-medium mb-1">Sources</p>
+            <p className="text-xs text-gray-400 font-medium mb-1">{t("chat.sources")}</p>
             <ul className="space-y-0.5">
               {message.sources!.slice(0, SOURCES_PREVIEW).map((s, i) => (
                 <li key={i} className="flex items-start gap-1">
@@ -238,8 +243,8 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
               >
                 {sourcesExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 {sourcesExpanded
-                  ? "Show less"
-                  : `${message.sources!.length - SOURCES_PREVIEW} more…`}
+                  ? t("chat.showLess")
+                  : t("chat.showMore", { count: message.sources!.length - SOURCES_PREVIEW })}
               </button>
             )}
           </div>

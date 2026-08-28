@@ -1,4 +1,6 @@
 import { API_URL } from "./config";
+import { ApiError } from "./apiError";
+import type { Locale } from "@/i18n/config";
 
 export interface UserPreferences {
   calendarProvider: "google" | "apple";
@@ -6,6 +8,7 @@ export interface UserPreferences {
   shoppingCalendarName: string;
   taskListName: string;
   shoppingTaskListName: string;
+  language: Locale;
 }
 
 export interface SettingsData extends UserPreferences {
@@ -19,7 +22,7 @@ export interface SettingsData extends UserPreferences {
 
 export async function getSettings(userId: string): Promise<SettingsData> {
   const res = await fetch(`${API_URL}/api/settings?userId=${encodeURIComponent(userId)}`);
-  if (!res.ok) throw new Error(`Failed to load settings: ${res.status}`);
+  if (!res.ok) throw new ApiError("errors.loadSettingsFailed", res.status);
   return res.json() as Promise<SettingsData>;
 }
 
@@ -29,7 +32,7 @@ export async function saveSettings(userId: string, prefs: Partial<UserPreference
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
   });
-  if (!res.ok) throw new Error(`Failed to save settings: ${res.status}`);
+  if (!res.ok) throw new ApiError("errors.saveSettingsFailed", res.status);
 }
 
 export async function connectApple(userId: string, appleId: string, appPassword: string): Promise<void> {
@@ -40,7 +43,8 @@ export async function connectApple(userId: string, appleId: string, appPassword:
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error ?? `Failed to connect Apple iCloud: ${res.status}`);
+    if (data.error) throw new Error(data.error);
+    throw new ApiError("errors.connectAppleFailed", res.status);
   }
 }
 
@@ -48,7 +52,7 @@ export async function disconnectApple(userId: string): Promise<void> {
   const res = await fetch(`${API_URL}/auth/apple/disconnect?userId=${encodeURIComponent(userId)}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error(`Failed to disconnect Apple iCloud: ${res.status}`);
+  if (!res.ok) throw new ApiError("errors.disconnectAppleFailed", res.status);
 }
 
 export async function getAppleStatus(userId: string): Promise<{ connected: boolean; appleId: string | null }> {
@@ -76,5 +80,5 @@ export async function saveAppleReminderList(userId: string, url: string, isShopp
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, isShoppingList }),
   });
-  if (!res.ok) throw new Error(`Failed to save reminder list: ${res.status}`);
+  if (!res.ok) throw new ApiError("errors.saveReminderListFailed", res.status);
 }
