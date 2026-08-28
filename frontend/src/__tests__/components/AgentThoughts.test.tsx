@@ -7,6 +7,7 @@ import React from "react";
 import { screen, fireEvent } from "@testing-library/react";
 import { renderWithI18n } from "../helpers/renderWithI18n";
 import AgentThoughts, { type ToolStep } from "@/components/chat/AgentThoughts";
+import { MIRROR_UNDER_RTL } from "@/i18n/direction";
 
 function makeStep(overrides: Partial<ToolStep> = {}): ToolStep {
   return {
@@ -81,5 +82,26 @@ describe("AgentThoughts", () => {
     // Expand the step
     fireEvent.click(screen.getByRole("button", { name: /web_search/i }));
     expect(screen.getByText("Tool failed")).toBeInTheDocument();
+  });
+});
+
+describe("AgentThoughts — icon direction", () => {
+  // A chevron pointing at the content it opens is a direction, not a box, so
+  // logical properties leave it alone. Under rtl it has to be flipped or it
+  // points away from the panel it expands.
+  const toggleIcon = () =>
+    screen.getByRole("button", { name: /tool/i }).querySelector("svg")!;
+
+  it("flips the collapsed chevron under a right-to-left locale", () => {
+    renderWithI18n(<AgentThoughts steps={[makeStep()]} streaming={false} />);
+    // The panel opens expanded; collapsing it is what brings out the sideways
+    // chevron, and only a sideways one has a direction to get wrong.
+    fireEvent.click(screen.getByRole("button", { name: /tool/i }));
+    expect(toggleIcon().getAttribute("class")).toContain(MIRROR_UNDER_RTL);
+  });
+
+  it("leaves the expanded chevron alone — it points down in both directions", () => {
+    renderWithI18n(<AgentThoughts steps={[makeStep()]} streaming={false} />);
+    expect(toggleIcon().getAttribute("class")).not.toContain("scale-x");
   });
 });

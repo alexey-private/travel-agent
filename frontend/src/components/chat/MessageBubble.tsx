@@ -8,6 +8,7 @@ import AgentThoughts from "./AgentThoughts";
 import { exportToPdf, exportToPdfDrive, derivePdfFilename } from "@/lib/api";
 import { type Message } from "@/types/agent";
 import { useT } from "@/i18n/useT";
+import { MIRROR_UNDER_RTL } from "@/i18n/direction";
 import type { TKey } from "@/i18n/dictionaries";
 
 export type { Message };
@@ -76,7 +77,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
       <div className={`max-w-[85%] ${isUser ? "order-1" : "order-2"}`}>
         {/* Role label */}
-        <p className={`text-xs text-gray-400 mb-1 ${isUser ? "text-right" : "text-left"}`}>
+        <p className={`text-xs text-gray-400 mb-1 ${isUser ? "text-end" : "text-start"}`}>
           {isUser ? t("chat.roleYou") : t("chat.roleAgent")}
         </p>
 
@@ -90,7 +91,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
 
         {/* Streaming "thinking" indicator before any text arrives */}
         {!isUser && message.streaming && !message.content && (message.steps?.length ?? 0) === 0 && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-gray-200 shadow-xs">
+          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-ss-sm bg-white border border-gray-200 shadow-xs">
             <span className="flex gap-1">
               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
@@ -102,10 +103,11 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
         {/* Bubble text */}
         {message.content && (
           <div
+            dir="auto"
             className={`px-4 py-3 rounded-2xl shadow-xs text-sm leading-relaxed ${
               isUser
-                ? "bg-blue-600 text-white rounded-tr-sm whitespace-pre-wrap"
-                : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm"
+                ? "bg-blue-600 text-white rounded-se-sm whitespace-pre-wrap"
+                : "bg-white border border-gray-200 text-gray-800 rounded-ss-sm"
             }`}
           >
             {isUser ? (
@@ -115,15 +117,15 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                 remarkPlugins={[remarkGfm]}
                 components={{
                   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                  ul: ({ children }) => <ul className="list-disc ps-4 mb-2 space-y-0.5">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal ps-4 mb-2 space-y-0.5">{children}</ol>,
                   li: ({ children }) => <li className="leading-relaxed">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                   h1: ({ children }) => <h1 className="text-base font-bold mb-1 mt-2">{children}</h1>,
                   h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2">{children}</h2>,
                   h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2">{children}</h3>,
                   code: ({ children }) => <code className="bg-gray-100 rounded-sm px-1 py-0.5 text-xs font-mono">{children}</code>,
-                  blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-300 pl-3 text-gray-600 my-2">{children}</blockquote>,
+                  blockquote: ({ children }) => <blockquote className="border-s-2 border-gray-300 ps-3 text-gray-600 my-2">{children}</blockquote>,
                   a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{children}</a>,
                   hr: () => <hr className="border-gray-200 my-2" />,
                   table: ({ children }) => (
@@ -131,7 +133,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                       <table className="text-xs border-collapse w-full">{children}</table>
                     </div>
                   ),
-                  th: ({ children }) => <th className="border border-gray-200 px-2 py-1 bg-gray-50 font-semibold text-left">{children}</th>,
+                  th: ({ children }) => <th className="border border-gray-200 px-2 py-1 bg-gray-50 font-semibold text-start">{children}</th>,
                   td: ({ children }) => <td className="border border-gray-200 px-2 py-1">{children}</td>,
                 }}
               >
@@ -140,7 +142,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
             )}
             {/* Blinking cursor while streaming text */}
             {!isUser && message.streaming && (
-              <span className="inline-block w-0.5 h-4 bg-gray-400 animate-pulse ml-0.5 align-text-bottom" />
+              <span className="inline-block w-0.5 h-4 bg-gray-400 animate-pulse ms-0.5 align-text-bottom" />
             )}
           </div>
         )}
@@ -181,7 +183,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[170px] py-1">
+                <div className="absolute end-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[170px] py-1">
                   <button
                     onClick={handleDownloadLocal}
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
@@ -241,7 +243,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                 onClick={() => setSourcesExpanded((v) => !v)}
                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mt-1"
               >
-                {sourcesExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                {sourcesExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} className={MIRROR_UNDER_RTL} />}
                 {sourcesExpanded
                   ? t("chat.showLess")
                   : t("chat.showMore", { count: message.sources!.length - SOURCES_PREVIEW })}
@@ -257,7 +259,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
               <button
                 key={i}
                 onClick={() => onSuggestionClick?.(s)}
-                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
+                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors text-start"
               >
                 {s}
               </button>

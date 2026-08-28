@@ -131,7 +131,7 @@ export default function ChatWindow({
               <button
                 key={s}
                 onClick={() => handleSuggestionClick(s)}
-                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors text-left"
+                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors text-start"
               >
                 {s}
               </button>
@@ -160,7 +160,7 @@ export default function ChatWindow({
                 <span className="truncate">{att.name}</span>
                 <button
                   onClick={() => removeAttachment(att.name)}
-                  className="ml-0.5 text-gray-400 hover:text-gray-600 shrink-0"
+                  className="ms-0.5 text-gray-400 hover:text-gray-600 shrink-0"
                   aria-label={t("chat.removeAttachment", { name: att.name })}
                 >
                   <X size={12} />
@@ -176,7 +176,7 @@ export default function ChatWindow({
                 <span className="truncate">{tf.name}</span>
                 <button
                   onClick={() => removeTextFile(tf.name)}
-                  className="ml-0.5 text-gray-400 hover:text-gray-600 shrink-0"
+                  className="ms-0.5 text-gray-400 hover:text-gray-600 shrink-0"
                   aria-label={t("chat.removeAttachment", { name: tf.name })}
                 >
                   <X size={12} />
@@ -225,6 +225,7 @@ export default function ChatWindow({
             )}
           </button>
           <textarea
+            dir="auto"
             className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[44px] max-h-32 scrollbar-thin"
             placeholder={
               agentType === "shopping" ? t("chat.placeholderShopping") : t("chat.placeholderTravel")

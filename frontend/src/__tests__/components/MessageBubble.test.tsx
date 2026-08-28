@@ -109,3 +109,18 @@ describe("MessageBubble — Drive upload failure", () => {
     expect(status.getAttribute("title")).not.toContain("errors.");
   });
 });
+
+describe("MessageBubble — text direction", () => {
+  // The agent follows the language of the message, not the UI setting, so a
+  // Hebrew reply can land in an English interface. Only the browser can tell
+  // which way a given body reads.
+  it("lets the browser pick the direction of an assistant message", () => {
+    renderWithI18n(<MessageBubble message={makeMessage({ content: "שלום, מצאתי 3 טיסות" })} />);
+    expect(screen.getByText(/שלום/).closest("[dir]")).toHaveAttribute("dir", "auto");
+  });
+
+  it("does the same for a user message", () => {
+    renderWithI18n(<MessageBubble message={makeMessage({ role: "user", content: "שלום" })} />);
+    expect(screen.getByText("שלום").closest("[dir]")).toHaveAttribute("dir", "auto");
+  });
+});

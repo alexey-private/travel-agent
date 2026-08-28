@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { type ToolStep } from "@/types/agent";
 import { useT } from "@/i18n/useT";
+import { MIRROR_UNDER_RTL } from "@/i18n/direction";
 
 export type { ToolStep };
 
@@ -25,7 +26,7 @@ const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
     <div className="border border-gray-200 rounded-lg overflow-hidden text-sm">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors text-start"
       >
         {step.pending ? (
           <Loader2 size={14} className="animate-spin text-blue-500 shrink-0" />
@@ -49,7 +50,7 @@ const ToolStepRow = memo(function ToolStepRow({ step }: { step: ToolStep }) {
         {expanded ? (
           <ChevronDown size={14} className="text-gray-400 shrink-0" />
         ) : (
-          <ChevronRight size={14} className="text-gray-400 shrink-0" />
+          <ChevronRight size={14} className={`text-gray-400 shrink-0 ${MIRROR_UNDER_RTL}`} />
         )}
       </button>
 
@@ -96,14 +97,14 @@ const AgentThoughts = memo(function AgentThoughts({ steps, streaming }: AgentTho
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700 mb-2"
       >
-        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} className={MIRROR_UNDER_RTL} />}
         {streaming && steps.length === 0
           ? t("chat.thinking")
           : t("chat.toolsUsed", { count: steps.length })}
       </button>
 
       {open && (
-        <div className="space-y-1 pl-1">
+        <div className="space-y-1 ps-1">
           {steps.map((step) => (
             <ToolStepRow key={step.id} step={step} />
           ))}

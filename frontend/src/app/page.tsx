@@ -10,16 +10,24 @@ import AgentSelector, { type AgentType } from "@/components/shared/AgentSelector
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { useUserId } from "@/hooks/useUserId";
-import { useT } from "@/i18n/useT";
+import { useT, useLocale } from "@/i18n/useT";
 
 export default function Home() {
   const t = useT();
+  const { dir } = useLocale();
   const userId = useUserId();
   const [agentType, setAgentType] = useState<AgentType>("travel");
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+
+  // translate-x has no logical counterpart in Tailwind, so the off-screen
+  // direction of each slide-in panel is picked explicitly. Getting this wrong
+  // parks a "hidden" panel on top of the chat instead of outside the viewport.
+  const isRtl = dir === "rtl";
+  const sidebarHidden = isRtl ? "translate-x-full" : "-translate-x-full";
+  const memoryHidden = isRtl ? "-translate-x-full" : "translate-x-full";
 
   const conversationListRef = useRef<ConversationListHandle>(null);
   const memoryPanelRef = useRef<MemoryPanelHandle>(null);
@@ -117,8 +125,8 @@ export default function Home() {
 
         {/* Conversation sidebar — slides in on mobile, static on desktop */}
         <div
-          className={`fixed md:static inset-y-0 left-0 z-40 md:z-auto transform transition-transform duration-200 ease-in-out md:translate-x-0 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          className={`fixed md:static inset-y-0 start-0 z-40 md:z-auto transform transition-transform duration-200 ease-in-out md:translate-x-0 ${
+            sidebarOpen ? "translate-x-0" : sidebarHidden
           }`}
         >
           <ConversationList
@@ -156,8 +164,8 @@ export default function Home() {
 
         {/* Memory panel — slides in on mobile/tablet, static on desktop */}
         <div
-          className={`fixed lg:static inset-y-0 right-0 z-40 lg:z-auto transform transition-transform duration-200 ease-in-out lg:translate-x-0 ${
-            memoryOpen ? "translate-x-0" : "translate-x-full"
+          className={`fixed lg:static inset-y-0 end-0 z-40 lg:z-auto transform transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+            memoryOpen ? "translate-x-0" : memoryHidden
           }`}
         >
           <ErrorBoundary fallback={t("errors.boundaryFallback")}>

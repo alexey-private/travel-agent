@@ -17,6 +17,7 @@ import {
 } from "@/lib/calendarApi";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { useT } from "@/i18n/useT";
+import { MIRROR_UNDER_RTL } from "@/i18n/direction";
 import type { TKey } from "@/i18n/dictionaries";
 
 type Tab = "events" | "tasks";
@@ -194,7 +195,7 @@ export default function CalendarPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-4">
         <Link href="/" className="text-gray-400 hover:text-gray-700 transition-colors">
-          <ArrowLeft size={20} />
+          <ArrowLeft size={20} className={MIRROR_UNDER_RTL} />
         </Link>
         <h1 className="font-semibold text-gray-800 me-auto">{t("calendar.title")}</h1>
         <LanguageSwitcher />
@@ -230,7 +231,7 @@ export default function CalendarPage() {
                 </Link>
               )}
             </span>
-            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+            <button onClick={() => setError(null)} className="ms-auto text-red-400 hover:text-red-600">
               <X size={12} />
             </button>
           </div>

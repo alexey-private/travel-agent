@@ -75,7 +75,7 @@ const ConversationList = forwardRef<ConversationListHandle, ConversationListProp
               >
                 <button
                   onClick={() => onSelect(c.id)}
-                  className="flex-1 text-left px-3 py-2.5 flex items-start gap-2 min-w-0"
+                  className="flex-1 text-start px-3 py-2.5 flex items-start gap-2 min-w-0"
                 >
                   <MessageSquare size={13} className="mt-0.5 shrink-0 text-gray-400" />
                   <div className="min-w-0 flex-1">

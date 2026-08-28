@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { useT } from "@/i18n/useT";
+import { MIRROR_UNDER_RTL } from "@/i18n/direction";
 import type { TKey } from "@/i18n/dictionaries";
 
 interface Feature {
@@ -83,7 +84,7 @@ export default function FeaturesPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="flex items-center gap-3 px-6 py-3 bg-white border-b border-gray-200">
         <Link href="/" title={t("features.backToChat")} className="text-gray-400 hover:text-gray-700 transition-colors">
-          <ArrowLeft size={18} />
+          <ArrowLeft size={18} className={MIRROR_UNDER_RTL} />
         </Link>
         <span className="font-semibold text-gray-800 me-auto">{t("features.title")}</span>
         <LanguageSwitcher />
