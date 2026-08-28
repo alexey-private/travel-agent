@@ -1,6 +1,7 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { createModel } from '../llm/createModel';
+import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '../i18n/locale';
 
 export class SuggestionService {
   private readonly model: BaseChatModel;
@@ -13,6 +14,7 @@ export class SuggestionService {
     userMessage: string,
     assistantReply: string,
     agentType: 'travel' | 'shopping' = 'travel',
+    language: Locale = DEFAULT_LOCALE,
   ): Promise<string[]> {
     if (!assistantReply.trim()) return [];
 
@@ -25,6 +27,7 @@ export class SuggestionService {
 
 Rules:
 - Output ONLY a valid JSON array of 3 strings
+- Write every question in ${LANGUAGE_NAMES[language]}
 - Each question must be short (under 10 words)
 - Write questions from the user's perspective (use "my", "I", "me" — not "your" or "you")
 - No explanation, no markdown, no extra text

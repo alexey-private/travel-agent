@@ -1,6 +1,7 @@
 import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 import { BaseMessage } from '@langchain/core/messages';
 import { UserMemory } from '../types/memory';
+import { Locale, DEFAULT_LOCALE } from '../i18n/locale';
 
 /**
  * Shared state for both Travel and Shopping LangGraph agents.
@@ -37,6 +38,18 @@ export const AgentState = Annotation.Root({
   /** Client platform — controls response formatting in the system prompt. */
   platform: Annotation<'web' | 'telegram' | undefined>({
     default: () => undefined,
+    reducer: (_, next) => next,
+  }),
+
+  /**
+   * User's language — controls the response language in the system prompt.
+   *
+   * Defaulted rather than left undefined: a graph entered without a language
+   * still has to produce a prompt, and English is the answer every other layer
+   * falls back to.
+   */
+  language: Annotation<Locale>({
+    default: () => DEFAULT_LOCALE,
     reducer: (_, next) => next,
   }),
 });

@@ -19,6 +19,39 @@
 - Новый параметр `language` добавляется **последним** в существующие сигнатуры, со значением по умолчанию `DEFAULT_LOCALE` — так ни один существующий вызов не ломается.
 - Коммиты — только по явному разрешению пользователя.
 
+**Отклонения от плана, принятые при реализации:**
+
+- **Блок `## Language` переписан после живой проверки.** Формулировка из плана
+  («by default … reply in THAT language instead») не работала: агент с настройкой
+  `he` отвечал на иврите и на английский вопрос. Приоритет инвертирован явно, с
+  примером, и добавлено «do this silently» — иначе агент проговаривал выбранный
+  язык первой строкой ответа.
+- **Добавлен `src/i18n/detectReplyLocale.ts`.** Пункт готовности «follow-up
+  подсказки — на языке ответа» иначе не выполняется: `getSuggestions` получал
+  язык настройки, и под английским ответом появлялись ивритские подсказки.
+- **`FIRST_PERSON_RE` без `אוהב` и `מעדיף`.** В иврите настоящее время первого и
+  третьего лица совпадает («אני אוהב» / «הוא אוהב»), поэтому голые глаголы дают
+  ложные срабатывания на фразах не о пользователе. `אני` и `שלי` этот случай уже
+  покрывают.
+- **Тесты сервисов написаны в стиле своих файлов** — через общий `mockInvoke`, а
+  не `jest.spyOn((service as any).model, …)`, как в плане: файлы уже мокают
+  модель на уровне модуля.
+- **Ключи `errors.*` заведены только под коды, достижимые из UI** — остальные коды
+  никуда не показываются, и заводить под них переводы на три языка означало бы
+  держать мёртвые записи в словарях. Неизвестный код откатывается на общий ключ
+  вызывающего, так что пробел в словаре не выносит сырой ключ на экран.
+- **Поиск ключа по коду вынесен в `frontend/src/lib/errorCode.ts`** и подключён ко
+  всем местам `api.ts` / `settingsApi.ts`, показывающим ошибку пользователю, — а не
+  только к двум, где раньше протекал английский. Так §5.5 выполняется по букве:
+  «фронт переводит по `code`, с fallback».
+- **Имена ключей — camelCase, а не код дословно.** `add-ui-string` в SKILL.md
+  требует `<namespace>.<camelCase>`; snake_case кода конвертируется в месте
+  поиска, а не заводится в словаре как есть.
+- **Английские значения `errors.*` написаны как текст для человека**, а не
+  скопированы из поля `error` (`"text is required"`): поле `error` осталось
+  прежним для логов и существующих потребителей, а словарная запись — это то,
+  что читает пользователь.
+
 ---
 
 ### Task 1: Блок Language в системных промптах
@@ -41,7 +74,7 @@
   ): string;
   ```
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend-langgraph/tests/unit/agent/prompts.test.ts`:
 
@@ -96,14 +129,14 @@ describe.each(builders)('%s system prompt — language block', (_name, build) =>
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npx jest tests/unit/agent/prompts.test.ts --rootDir backend-langgraph
 ```
 Ожидается: FAIL — блока `## Language` в промпте нет.
 
-- [ ] **Step 3: Добавить блок в prompts.ts**
+- [x] **Step 3: Добавить блок в prompts.ts**
 
 Добавить импорт в начало `backend-langgraph/src/agent/prompts.ts`:
 
@@ -118,9 +151,12 @@ function languageSection(language: Locale): string {
   const name = LANGUAGE_NAMES[language];
   return `
 ## Language — ALWAYS apply
-The user's language is ${name}.
-- Write your ENTIRE response in ${name} by default.
-- If the user's latest message is clearly written in a different language, reply in THAT language instead.
+The user's interface language is ${name}, but the language of their LATEST message overrides it.
+- Work out which language the latest user message is written in. Do this silently: never announce
+  the language you picked, and never open a response by naming it.
+- If it is not ${name} — for example the message is in English while the setting says ${name} —
+  reply in THAT language, and ignore the setting for this turn.
+- If the latest message is in ${name}, or its language is unclear, write your ENTIRE response in ${name}.
 - Tool results come back in English, including error messages. Translate their content into the
   response language — never surface raw English tool output or tool error text to the user.
 - Keep unchanged: airport/IATA codes, airline and hotel names, product model names, currency codes, URLs.
@@ -154,14 +190,14 @@ ${languageSection(language)}
 
 То же самое в `buildShoppingAgentSystemPrompt`.
 
-- [ ] **Step 4: Убедиться, что тест проходит**
+- [x] **Step 4: Убедиться, что тест проходит**
 
 ```bash
 npx jest tests/unit/agent/prompts.test.ts --rootDir backend-langgraph
 ```
 Ожидается: PASS, 14 тестов (7 × 2 билдера).
 
-- [ ] **Step 5: Проверить, что снапшот-тест reasonNode не сломался**
+- [x] **Step 5: Проверить, что снапшот-тест reasonNode не сломался**
 
 ```bash
 npx jest tests/unit/graph/reasonNode.test.ts --rootDir backend-langgraph
@@ -169,7 +205,7 @@ npx jest tests/unit/graph/reasonNode.test.ts --rootDir backend-langgraph
 Если тест сверяет промпт целиком — обновить ожидание, добавив новый блок. Если
 проверяет вхождения подстрок — должен остаться зелёным без правок.
 
-- [ ] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add backend-langgraph/src/agent/prompts.ts backend-langgraph/tests/unit/agent/prompts.test.ts
@@ -196,7 +232,7 @@ git commit -m "feat(i18n): add a language section to both agent system prompts"
 вкладке секунду назад, а запись в БД идёт асинхронно. Если `body.language`
 отличается от сохранённого — значение дописывается в БД, не блокируя стрим.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend-langgraph/tests/unit/graph/languageState.test.ts`:
 
@@ -233,14 +269,14 @@ describe('AgentState.language', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npx jest tests/unit/graph/languageState.test.ts --rootDir backend-langgraph
 ```
 Ожидается: FAIL — в `AgentState.spec` нет ключа `language`.
 
-- [ ] **Step 3: Добавить поле в состояние**
+- [x] **Step 3: Добавить поле в состояние**
 
 В `backend-langgraph/src/graph/state.ts` добавить импорт и аннотацию:
 
@@ -256,7 +292,7 @@ import { Locale, DEFAULT_LOCALE } from '../i18n/locale';
   }),
 ```
 
-- [ ] **Step 4: Пробросить в билдеры промптов**
+- [x] **Step 4: Пробросить в билдеры промптов**
 
 В `backend-langgraph/src/graph/travelGraph.ts`:
 
@@ -278,7 +314,7 @@ import { Locale, DEFAULT_LOCALE } from '../i18n/locale';
 Идентичная правка в `backend-langgraph/src/graph/shoppingGraph.ts` с
 `buildShoppingAgentSystemPrompt`.
 
-- [ ] **Step 5: Принять язык в chat-роуте**
+- [x] **Step 5: Принять язык в chat-роуте**
 
 В `backend-langgraph/src/routes/chat.ts`:
 
@@ -330,19 +366,19 @@ interface ChatBody {
         )) {
 ```
 
-- [ ] **Step 6: Убедиться, что тест проходит**
+- [x] **Step 6: Убедиться, что тест проходит**
 
 ```bash
 npx jest tests/unit/graph/languageState.test.ts --rootDir backend-langgraph
 ```
 Ожидается: PASS, 2 теста.
 
-- [ ] **Step 7: Отправить язык с фронта**
+- [x] **Step 7: Отправить язык с фронта**
 
 В `frontend/src/hooks/useStreamChat.ts` добавить `language` в тело POST-запроса
 к `/api/chat`, взяв его из `useLocale()`.
 
-- [ ] **Step 8: Полная проверка**
+- [x] **Step 8: Полная проверка**
 
 ```bash
 npx tsc -p backend-langgraph/tsconfig.json --noEmit
@@ -351,7 +387,7 @@ TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" 
 npm run test --workspace=frontend
 ```
 
-- [ ] **Step 9: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 9: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add backend-langgraph/src/graph backend-langgraph/src/routes/chat.ts \
@@ -377,7 +413,7 @@ git commit -m "feat(i18n): thread the user language from the chat request into t
                  agentType?: 'travel' | 'shopping', language?: Locale): Promise<string[]>;
   ```
 
-- [ ] **Step 1: Дописать падающий тест**
+- [x] **Step 1: Дописать падающий тест**
 
 Добавить в `backend-langgraph/tests/unit/services/SuggestionService.test.ts`:
 
@@ -407,14 +443,14 @@ git commit -m "feat(i18n): thread the user language from the chat request into t
   });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npx jest tests/unit/services/SuggestionService.test.ts --rootDir backend-langgraph
 ```
 Ожидается: FAIL — в промпте нет упоминания языка.
 
-- [ ] **Step 3: Добавить язык в промпт сервиса**
+- [x] **Step 3: Добавить язык в промпт сервиса**
 
 В `backend-langgraph/src/services/SuggestionService.ts` добавить импорт и параметр:
 
@@ -442,20 +478,32 @@ Rules:
 - No explanation, no markdown, no extra text
 ```
 
-- [ ] **Step 4: Передать язык из chat-роута**
+- [x] **Step 4: Передать язык из chat-роута**
 
 ```ts
-        const suggestions = await suggestionService.getSuggestions(message, assistantText, agentType, language);
+        // Suggestions sit directly under the reply, so they follow the reply's own
+        // language: the prompt lets the agent answer in the language of the user's
+        // latest message, which is not always the language in the settings.
+        const replyLanguage = detectReplyLocale(assistantText, language);
+        const suggestions = await suggestionService.getSuggestions(message, assistantText, agentType, replyLanguage);
 ```
 
-- [ ] **Step 5: Убедиться, что тесты проходят**
+`detectReplyLocale` живёт в
+[src/i18n/detectReplyLocale.ts](../../../backend-langgraph/src/i18n/detectReplyLocale.ts)
+и определяет язык по письменности: три поддерживаемых языка используют три разных
+алфавита, поэтому этого достаточно. Латиница считается последней и проигрывает
+ничьи — в ивритском и русском ответах регулярно встречаются IATA-коды, названия
+авиакомпаний и URL, обратного не бывает. Тесты:
+`tests/unit/i18n/detectReplyLocale.test.ts`.
+
+- [x] **Step 5: Убедиться, что тесты проходят**
 
 ```bash
 npx jest tests/unit/services/SuggestionService.test.ts --rootDir backend-langgraph
 ```
 Ожидается: PASS.
 
-- [ ] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add backend-langgraph/src/services/SuggestionService.ts \
@@ -490,7 +538,7 @@ git commit -m "feat(i18n): generate follow-up suggestions in the user's language
    вызова LLM. Он знает английский и русский, но не иврит, поэтому у
    ивритоязычного пользователя память не наполняется вовсе.
 
-- [ ] **Step 1: Дописать падающий тест**
+- [x] **Step 1: Дописать падающий тест**
 
 Добавить в `backend-langgraph/tests/unit/services/MemoryService.test.ts`:
 
@@ -523,14 +571,14 @@ git commit -m "feat(i18n): generate follow-up suggestions in the user's language
 
 Для первого теста нужно экспортировать `FIRST_PERSON_RE` из модуля.
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npx jest tests/unit/services/MemoryService.test.ts --rootDir backend-langgraph
 ```
 Ожидается: FAIL — `FIRST_PERSON_RE` не экспортирован и не знает иврита.
 
-- [ ] **Step 3: Расширить гейт на иврит**
+- [x] **Step 3: Расширить гейт на иврит**
 
 В `backend-langgraph/src/services/MemoryService.ts` заменить константу:
 
@@ -543,7 +591,7 @@ export const FIRST_PERSON_RE =
   /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )|(меня зовут|я живу|я люблю|я предпочитаю|мне нравится|у меня есть|мой |моя |моё |зовут меня)|(אני |שלי|יש לי|קוראים לי|אנחנו |אוהב |מעדיף )/i;
 ```
 
-- [ ] **Step 4: Добавить язык в промпты извлечения**
+- [x] **Step 4: Добавить язык в промпты извлечения**
 
 Превратить обе константы в функции, принимающие язык:
 
@@ -583,20 +631,20 @@ ${languageRule(language)}`;
 
 и использовать соответствующую функцию вместо константы при сборке `SystemMessage`.
 
-- [ ] **Step 5: Передать язык из chat-роута**
+- [x] **Step 5: Передать язык из chat-роута**
 
 ```ts
         memoryService.extractAndSaveMemories(internalUserId, message, agentType, language),
 ```
 
-- [ ] **Step 6: Убедиться, что тесты проходят**
+- [x] **Step 6: Убедиться, что тесты проходят**
 
 ```bash
 npx jest tests/unit/services/MemoryService.test.ts --rootDir backend-langgraph
 ```
 Ожидается: PASS.
 
-- [ ] **Step 7: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 7: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add backend-langgraph/src/services/MemoryService.ts \
@@ -622,7 +670,7 @@ git commit -m "feat(i18n): extract memories in the user language and recognise H
 репликах регулярно ошибается — отдаёт транслитерацию латиницей или соседний
 язык. Подсказка стоит одну строку.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend-langgraph/tests/unit/routes/transcribe.test.ts`:
 
@@ -681,14 +729,14 @@ describe('POST /api/transcribe — language hint', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npx jest tests/unit/routes/transcribe.test.ts --rootDir backend-langgraph
 ```
 Ожидается: FAIL — поле `language` в форму не попадает.
 
-- [ ] **Step 3: Добавить подсказку**
+- [x] **Step 3: Добавить подсказку**
 
 В `backend-langgraph/src/routes/transcribe.ts`:
 
@@ -714,19 +762,19 @@ interface TranscribeBody {
     if (isLocale(language)) form.append('language', language);
 ```
 
-- [ ] **Step 4: Передать язык с фронта**
+- [x] **Step 4: Передать язык с фронта**
 
 В `frontend/src/hooks/useVoiceRecording.ts` добавить `language` в тело запроса
 к `/api/transcribe`, взяв из `useLocale()`.
 
-- [ ] **Step 5: Убедиться, что тест проходит**
+- [x] **Step 5: Убедиться, что тест проходит**
 
 ```bash
 npx jest tests/unit/routes/transcribe.test.ts --rootDir backend-langgraph
 ```
 Ожидается: PASS, 3 теста.
 
-- [ ] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add backend-langgraph/src/routes/transcribe.ts \
@@ -758,7 +806,7 @@ git commit -m "feat(i18n): pass a language hint to Whisper"
 текстом. Существующие тесты и потребители не ломаются, а фронт использует `code`
 как ключ перевода и падает обратно на `error`, если ключа нет.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `backend-langgraph/tests/unit/routes/errorCodes.test.ts`:
 
@@ -797,14 +845,14 @@ describe('error responses carry a machine-readable code', () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npx jest tests/unit/routes/errorCodes.test.ts --rootDir backend-langgraph
 ```
 Ожидается: FAIL — в ответе нет поля `code`.
 
-- [ ] **Step 3: Добавить коды в роуты**
+- [x] **Step 3: Добавить коды в роуты**
 
 Пройти по всем `reply.status(...).send({ error: ... })` и `reply.code(...).send({ error: ... })`
 в четырёх файлах, добавив `code`. Соответствие «текст → код»:
@@ -823,6 +871,11 @@ npx jest tests/unit/routes/errorCodes.test.ts --rootDir backend-langgraph
 | `OPENAI_API_KEY is not configured on the server` | `transcribe_not_configured` |
 | `Whisper API error: <status>` | `transcribe_upstream_error` |
 | `appleId and appPassword required` | `apple_credentials_required` |
+| `Invalid Apple ID or app-specific password. …` | `apple_invalid_credentials` |
+| `Apple iCloud not connected` | `apple_not_connected` |
+| CalDAV-исключение, текст из `(err as Error).message` | `apple_request_failed` |
+| `url required` | `url_required` |
+| текст из `result.error` при загрузке в Drive | `drive_upload_failed` |
 
 Найти все места:
 
@@ -834,32 +887,53 @@ grep -rn "send({ error" backend-langgraph/src/routes
 таблице нет, — добавить строку в таблицу и завести ключ по тому же принципу
 (snake_case, по смыслу, без упоминания HTTP-статуса).
 
-- [ ] **Step 4: Добавить ключи в словари**
+- [x] **Step 4: Добавить ключи в словари**
 
 В `frontend/src/i18n/locales/en.ts` (и, соответственно, `he.ts`, `ru.ts`) завести
-по ключу `errors.<code>` на каждый код из таблицы. Английские значения — те же
-тексты, что в поле `error`.
+ключ на каждый код, который **может дойти до экрана**. Имя ключа — по правилу
+`add-ui-string` из SKILL.md: `<namespace>.<camelCase>`, то есть
+`errors.driveNotConfigured`, а не `errors.drive_not_configured`; snake_case кода
+переводится в имя ключа на месте поиска.
 
-- [ ] **Step 5: Переводить по коду на фронте**
+Значения пишутся как текст для человека, а не копируются из поля `error`
+(`"text is required"` — это прозаическая строка для логов). Поле `error` остаётся
+прежним ради обратной совместимости.
 
-В `frontend/src/lib/api.ts` и `settingsApi.ts` при разборе ответа с ошибкой
-сохранять `code`, а в местах показа переводить:
+Коды, до экрана не доходящие, ключей не получают: `apple_not_connected` и
+`apple_request_failed` приходят только из `/auth/apple/reminder-lists`, где фронт
+глотает ошибку и возвращает `[]`; `invalid_language` и `invalid_calendar_provider`
+недостижимы, пока значения приходят из собственных `select` фронта.
+
+- [x] **Step 5: Переводить по коду на фронте**
+
+Поиск ключа по коду вынесен в
+[frontend/src/lib/errorCode.ts](../../../frontend/src/lib/errorCode.ts):
 
 ```ts
-const message = data.code ? t(`errors.${data.code}` as TKey) : data.error;
+export function errorKeyFor(code: string | undefined, fallback: TKey): TKey {
+  if (!code) return fallback;
+  const camel = code.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+  const key = `errors.${camel}`;
+  return key in en ? (key as TKey) : fallback;
+}
 ```
 
-`translate` возвращает сам ключ, если его нет в словаре, — заметно при отладке
-и не роняет UI.
+Ключ, которого нет в словаре, откатывается на общий ключ вызывающего, а не
+показывается пользователю сырым, — поэтому заводить запись под каждый код не
+требуется. `errorKeyOf(response, fallback)` — та же функция поверх тела ответа.
 
-- [ ] **Step 6: Убедиться, что тест проходит**
+Через него проходят все места `api.ts` и `settingsApi.ts`, которые показывают
+ошибку пользователю. Один общий помощник означает, что роут, начавший отдавать
+более точный код, подхватывается без правки места вызова.
+
+- [x] **Step 6: Убедиться, что тест проходит**
 
 ```bash
 npx jest tests/unit/routes/errorCodes.test.ts --rootDir backend-langgraph
 ```
 Ожидается: PASS, 2 теста.
 
-- [ ] **Step 7: Полная проверка**
+- [x] **Step 7: Полная проверка**
 
 ```bash
 npx tsc -p backend-langgraph/tsconfig.json --noEmit
@@ -868,7 +942,7 @@ TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" 
 npm run test --workspace=frontend
 ```
 
-- [ ] **Step 8: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 8: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add backend-langgraph/src/routes frontend/src/lib frontend/src/i18n \
@@ -882,7 +956,7 @@ git commit -m "feat(i18n): give HTTP error responses machine-readable codes"
 
 **Files:** нет изменений кода — задача проверочная.
 
-- [ ] **Step 1: Поднять окружение**
+- [x] **Step 1: Поднять окружение**
 
 ```bash
 docker compose up -d
@@ -890,18 +964,18 @@ npm run dev:backend-lg &
 npm run dev:frontend
 ```
 
-- [ ] **Step 2: Пройти сценарии**
+- [x] **Step 2: Пройти сценарии**
 
-- [ ] Иврит в настройках, вопрос на иврите → ответ целиком на иврите, заголовки и таблицы тоже
-- [ ] Иврит в настройках, вопрос на английском → ответ на английском (правило «следуй за сообщением»)
-- [ ] Русский в настройках, вопрос на русском → ответ на русском
-- [ ] Ответ содержит поиск рейсов → IATA-коды и названия авиакомпаний остались латиницей
-- [ ] Ошибка инструмента (отключить Google в `/settings`, попросить добавить событие в календарь) → пользователь видит объяснение на своём языке, а не английский текст ошибки
-- [ ] Follow-up подсказки под ответом — на языке ответа
-- [ ] Голосовой ввод на иврите → распознан ивритом, не транслитерацией
-- [ ] Сказать «אני גר בתל אביב ואני צמחוני» → в панели памяти появилась запись с английским ключом и ивритским значением
+- [x] Иврит в настройках, вопрос на иврите → ответ целиком на иврите, заголовки и таблицы тоже
+- [x] Иврит в настройках, вопрос на английском → ответ на английском (правило «следуй за сообщением»)
+- [x] Русский в настройках, вопрос на русском → ответ на русском
+- [x] Ответ содержит поиск рейсов → IATA-коды и названия авиакомпаний остались латиницей
+- [x] Ошибка инструмента (отключить Google в `/settings`, попросить добавить событие в календарь) → пользователь видит объяснение на своём языке, а не английский текст ошибки
+- [x] Follow-up подсказки под ответом — на языке ответа
+- [x] Голосовой ввод на иврите → распознан ивритом, не транслитерацией
+- [x] Сказать «אני גר בתל אביב ואני צמחוני» → в панели памяти появилась запись с английским ключом и ивритским значением
 
-- [ ] **Step 3: Обновить AGENTS.md**
+- [x] **Step 3: Обновить AGENTS.md**
 
 Отметить, что `language` прокидывается через `AgentState` и влияет на промпты,
 подсказки, память и распознавание речи.
@@ -910,8 +984,8 @@ npm run dev:frontend
 
 ## Определение готовности S4
 
-- [ ] `npx tsc -p backend-langgraph/tsconfig.json --noEmit` — чисто
-- [ ] `npm run test:all --workspace=backend-langgraph` — зелёный, включая ~25 новых тестов
-- [ ] Ни один существующий тест на английские строки ошибок инструментов не изменён
-- [ ] Все сценарии Task 7 пройдены
-- [ ] `/code-review` пройден, находки закрыты, отчёт по осям Standards / Spec
+- [x] `npx tsc -p backend-langgraph/tsconfig.json --noEmit` — чисто
+- [x] `npm run test:all --workspace=backend-langgraph` — зелёный, включая ~25 новых тестов
+- [x] Ни один существующий тест на английские строки ошибок инструментов не изменён
+- [x] Все сценарии Task 7 пройдены
+- [x] `/code-review` пройден, находки закрыты, отчёт по осям Standards / Spec

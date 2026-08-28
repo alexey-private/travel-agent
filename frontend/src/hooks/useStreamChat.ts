@@ -6,6 +6,7 @@ import { type MessagesAction, type Attachment } from "@/types/agent";
 import { type AgentType } from "@/components/shared/AgentSelector";
 import type { TKey } from "@/i18n/dictionaries";
 import type { TVars } from "@/i18n/types";
+import type { Locale } from "@/i18n/config";
 
 interface UseStreamChatOptions {
   userId: string;
@@ -16,6 +17,11 @@ interface UseStreamChatOptions {
   dispatch: React.Dispatch<MessagesAction>;
   /** Passed in by the owning component — hooks cannot call useT() for it. */
   t: (key: TKey, vars?: TVars) => string;
+  /**
+   * Travels with `t` for the same reason, and goes to the backend so the agent
+   * answers in the language the user is reading the page in.
+   */
+  locale: Locale;
 }
 
 interface UseStreamChatResult {
@@ -33,6 +39,7 @@ export function useStreamChat({
   onReplyComplete,
   dispatch,
   t,
+  locale,
 }: UseStreamChatOptions): UseStreamChatResult {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId ?? null);
@@ -93,6 +100,7 @@ export function useStreamChat({
         controller.signal,
         agentType,
         attachments?.length ? attachments : undefined,
+        locale,
       );
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -104,7 +112,7 @@ export function useStreamChat({
       setLoading(false);
       onReplyComplete?.();
     }
-  }, [userId, agentType, onConversationCreated, onReplyComplete, dispatch, t]);
+  }, [userId, agentType, onConversationCreated, onReplyComplete, dispatch, t, locale]);
 
   return { loading, conversationId, send, abortRef };
 }

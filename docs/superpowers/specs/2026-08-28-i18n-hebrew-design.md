@@ -264,9 +264,10 @@ Direction-зависимые Tailwind-классы заменяются на л�
 
 ```
 ## Language — ALWAYS apply
-The user's language is {Hebrew|Russian|English}.
-- Write your ENTIRE response in that language by default.
-- If the user's latest message is clearly written in a different language, reply in THAT language instead.
+The user's interface language is {Hebrew|Russian|English}, but the language of their LATEST message overrides it.
+- Work out which language the latest user message is written in. Do this silently.
+- If it is not that language, reply in THAT language, and ignore the setting for this turn.
+- Otherwise write your ENTIRE response in the interface language.
 - Tool results come back in English. Translate their content into the response language —
   never surface raw English tool output or tool error text to the user.
 - Keep unchanged: airport/IATA codes, airline and hotel names, product model names,
@@ -278,6 +279,21 @@ The user's language is {Hebrew|Russian|English}.
 Правило про перевод tool-результатов — то, чем закрывается пункт «ошибки tools»
 из объёма: строки в коде остаются английскими (контракт с LLM, ~50 ассертов в
 тестах), но пользователь их на английском не увидит.
+
+Формулировка правила «следуй за языком сообщения» получена проверкой на живом
+агенте, а не выведена из текста: при мягком «by default … instead» модель
+устойчиво отвечала на языке настройки, игнорируя английский вопрос. Сработала
+только явная инверсия приоритета с примером. Указание «do this silently» тоже
+добавлено по факту: без него агент открывал ответ строкой вида «השפה: עברית».
+
+Следствие, которого в первоначальной спеке не было: раз язык ответа может
+отличаться от языка настройки, follow-up подсказки должны строиться по языку
+**ответа**. Его определяет
+[detectReplyLocale](../../../backend-langgraph/src/i18n/detectReplyLocale.ts) — по
+письменности текста, чего достаточно, поскольку три поддерживаемых языка
+используют три разных алфавита. Латиница считается последней и проигрывает
+ничьи: в ивритском и русском ответах регулярно встречаются IATA-коды и названия
+авиакомпаний, обратного не бывает.
 
 ### 5.3 Остальные LLM-промпты
 

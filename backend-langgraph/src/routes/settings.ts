@@ -22,7 +22,7 @@ export async function settingsRoutes(
   // GET /api/settings?userId=xxx
   fastify.get<{ Querystring: { userId?: string } }>('/api/settings', async (req, reply) => {
     const { userId } = req.query;
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
     await userService.findOrCreateUser(userId);
 
     const prefs = await prefRepo.get(userId);
@@ -44,18 +44,18 @@ export async function settingsRoutes(
     Body: Partial<UserPreferences>;
   }>('/api/settings', async (req, reply) => {
     const { userId } = req.query;
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
     await userService.findOrCreateUser(userId);
 
     const { calendarProvider, calendarName, shoppingCalendarName, taskListName, shoppingTaskListName, language } =
       req.body ?? {};
 
     if (calendarProvider && calendarProvider !== 'google' && calendarProvider !== 'apple') {
-      return reply.code(400).send({ error: 'calendarProvider must be "google" or "apple"' });
+      return reply.code(400).send({ error: 'calendarProvider must be "google" or "apple"', code: 'invalid_calendar_provider' });
     }
 
     if (language !== undefined && !isLocale(language)) {
-      return reply.code(400).send({ error: 'language must be one of "en", "he", "ru"' });
+      return reply.code(400).send({ error: 'language must be one of "en", "he", "ru"', code: 'invalid_language' });
     }
 
     await prefRepo.save(userId, {
@@ -78,8 +78,8 @@ export async function settingsRoutes(
     const { userId } = req.query;
     const { appleId, appPassword } = req.body ?? {};
 
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
-    if (!appleId || !appPassword) return reply.code(400).send({ error: 'appleId and appPassword required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
+    if (!appleId || !appPassword) return reply.code(400).send({ error: 'appleId and appPassword required', code: 'apple_credentials_required' });
     await userService.findOrCreateUser(userId);
 
     // Verify credentials via CalDAV login
@@ -92,7 +92,7 @@ export async function settingsRoutes(
       });
       await client.login();
     } catch {
-      return reply.code(401).send({ error: 'Invalid Apple ID or app-specific password. Make sure you are using an app-specific password from appleid.apple.com.' });
+      return reply.code(401).send({ error: 'Invalid Apple ID or app-specific password. Make sure you are using an app-specific password from appleid.apple.com.', code: 'apple_invalid_credentials' });
     }
 
     await icloudTokenRepo.save(userId, { appleId, appPassword });
@@ -102,7 +102,7 @@ export async function settingsRoutes(
   // DELETE /auth/apple/disconnect?userId=xxx
   fastify.delete<{ Querystring: { userId?: string } }>('/auth/apple/disconnect', async (req, reply) => {
     const { userId } = req.query;
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
     await userService.findOrCreateUser(userId);
     await icloudTokenRepo.delete(userId);
     // If user was on apple provider, switch back to google
@@ -116,7 +116,7 @@ export async function settingsRoutes(
   // GET /auth/apple/status?userId=xxx
   fastify.get<{ Querystring: { userId?: string } }>('/auth/apple/status', async (req, reply) => {
     const { userId } = req.query;
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
     await userService.findOrCreateUser(userId);
     const creds = await icloudTokenRepo.get(userId);
     return { connected: !!creds, appleId: creds?.appleId ?? null };
@@ -125,10 +125,10 @@ export async function settingsRoutes(
   // GET /auth/apple/reminder-lists?userId=xxx — returns VTODO collections visible in Reminders.app
   fastify.get<{ Querystring: { userId?: string } }>('/auth/apple/reminder-lists', async (req, reply) => {
     const { userId } = req.query;
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
     await userService.findOrCreateUser(userId);
     const creds = await icloudTokenRepo.get(userId);
-    if (!creds) return reply.code(400).send({ error: 'Apple iCloud not connected' });
+    if (!creds) return reply.code(400).send({ error: 'Apple iCloud not connected', code: 'apple_not_connected' });
 
     try {
       const client = new DAVClient({
@@ -147,7 +147,7 @@ export async function settingsRoutes(
         .map((c) => ({ name: String(c.displayName ?? ''), url: c.url }));
       return { lists };
     } catch (err) {
-      return reply.code(500).send({ error: (err as Error).message });
+      return reply.code(500).send({ error: (err as Error).message, code: 'apple_request_failed' });
     }
   });
 
@@ -158,8 +158,8 @@ export async function settingsRoutes(
   }>('/auth/apple/reminder-list', async (req, reply) => {
     const { userId } = req.query;
     const { url, isShoppingList = false } = req.body ?? {};
-    if (!userId) return reply.code(400).send({ error: 'userId required' });
-    if (!url) return reply.code(400).send({ error: 'url required' });
+    if (!userId) return reply.code(400).send({ error: 'userId required', code: 'user_id_required' });
+    if (!url) return reply.code(400).send({ error: 'url required', code: 'url_required' });
     await userService.findOrCreateUser(userId);
 
     if (isShoppingList) {

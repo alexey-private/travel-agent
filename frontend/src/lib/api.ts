@@ -1,6 +1,8 @@
 import { API_URL } from "./config";
 import { ApiError } from "./apiError";
 import { type Attachment, type AgentEvent, type Conversation, type UserMemory, type ChatMessage } from "@/types/agent";
+import type { Locale } from "@/i18n/config";
+import { errorKeyOf } from "./errorCode";
 
 export type { Attachment, AgentEvent, Conversation, UserMemory, ChatMessage } from "@/types/agent";
 
@@ -16,16 +18,20 @@ export async function streamChat(
   signal?: AbortSignal,
   agentType?: "travel" | "shopping",
   attachments?: Attachment[],
+  language?: Locale,
 ): Promise<void> {
   const response = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, message, conversationId, agentType, attachments }),
+    body: JSON.stringify({ userId, message, conversationId, agentType, attachments, language }),
     signal,
   });
 
   if (!response.ok || !response.body) {
-    throw new ApiError("errors.chatRequestFailed", response.status);
+    // A body-less failure (network, no stream) has no code to read; only a real
+    // error response does, and then it names the failure more precisely.
+    const key = response.body ? await errorKeyOf(response, "errors.chatRequestFailed") : "errors.chatRequestFailed";
+    throw new ApiError(key, response.status);
   }
 
   const reader = response.body.getReader();
@@ -160,7 +166,7 @@ export async function exportToPdf(text: string, filename?: string): Promise<void
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, filename }),
   });
-  if (!response.ok) throw new ApiError("errors.exportFailed", response.status);
+  if (!response.ok) throw new ApiError(await errorKeyOf(response, "errors.exportFailed"), response.status);
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -183,10 +189,9 @@ export async function exportToPdfDrive(
     body: JSON.stringify({ text, userId, agentType, filename }),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const detail = (err as { error?: string }).error;
-    if (detail) throw new Error(detail);
-    throw new ApiError("errors.exportFailed", response.status);
+    // Translate by the code, not by the English sentence the backend logs: this
+    // error reaches the user with no agent in between to retell it.
+    throw new ApiError(await errorKeyOf(response, "errors.exportFailed"), response.status);
   }
   return response.json();
 }

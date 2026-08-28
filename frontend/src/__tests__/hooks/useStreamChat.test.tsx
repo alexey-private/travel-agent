@@ -1,6 +1,7 @@
 /**
  * Tests for the useStreamChat hook.
- * Covers: the conversation id a follow-up request carries.
+ * Covers: the conversation id a follow-up request carries, and the interface
+ * language it sends to the backend.
  */
 
 import { renderHook, act } from "@testing-library/react";
@@ -39,7 +40,7 @@ describe("useStreamChat", () => {
     });
 
     const { result } = renderHook(() =>
-      useStreamChat({ userId: "user-1", agentType: "travel", dispatch: jest.fn(), t }),
+      useStreamChat({ userId: "user-1", agentType: "travel", dispatch: jest.fn(), t, locale: "en" }),
     );
 
     let first!: Promise<void>;
@@ -55,5 +56,25 @@ describe("useStreamChat", () => {
     });
 
     expect(seenIds).toEqual([null, "conv-1"]);
+  });
+
+  /**
+   * The agent decides its response language from what the request carries, so a
+   * locale that stops at the hook boundary is the same bug as no locale at all.
+   */
+  it("sends the interface language with the request", async () => {
+    mockStreamChat.mockImplementation(async (_userId, _msg, _convId, onEvent) => {
+      onEvent({ type: "done" } as AgentEvent);
+    });
+
+    const { result } = renderHook(() =>
+      useStreamChat({ userId: "user-1", agentType: "travel", dispatch: jest.fn(), t, locale: "he" }),
+    );
+
+    await act(async () => {
+      await result.current.send("שלום", "שלום");
+    });
+
+    expect(mockStreamChat.mock.calls[0][7]).toBe("he");
   });
 });

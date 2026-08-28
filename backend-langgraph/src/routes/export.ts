@@ -55,7 +55,7 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
     '/api/export/pdf',
     async (request: FastifyRequest<{ Body: ExportBody }>, reply: FastifyReply) => {
       const { text, filename = 'agent-response' } = request.body;
-      if (!text) return reply.status(400).send({ error: 'text is required' });
+      if (!text) return reply.status(400).send({ error: 'text is required', code: 'text_required' });
 
       const pdf = await buildPdfBuffer(text);
       const safeFilename = filename.replace(/[^a-z0-9_\- ]/gi, '_');
@@ -70,11 +70,11 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
     '/api/export/pdf-to-drive',
     async (request: FastifyRequest<{ Body: ExportToDriveBody }>, reply: FastifyReply) => {
       const { text, userId, agentType = 'travel', filename = 'agent-response' } = request.body;
-      if (!text)   return reply.status(400).send({ error: 'text is required' });
-      if (!userId) return reply.status(400).send({ error: 'userId is required' });
+      if (!text)   return reply.status(400).send({ error: 'text is required', code: 'text_required' });
+      if (!userId) return reply.status(400).send({ error: 'userId is required', code: 'user_id_required' });
 
       const provider = agentType === 'shopping' ? opts.shoppingDriveProvider : opts.travelDriveProvider;
-      if (!provider) return reply.status(503).send({ error: 'Google Drive is not configured on this server.' });
+      if (!provider) return reply.status(503).send({ error: 'Google Drive is not configured on this server.', code: 'drive_not_configured' });
 
       const pdf = await buildPdfBuffer(text);
       const safeFilename = `${filename.replace(/[^a-z0-9_\- ]/gi, '_')}.pdf`;
@@ -86,7 +86,7 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
         mimeType: 'application/pdf',
       });
 
-      if (!result.success) return reply.status(502).send({ error: result.error });
+      if (!result.success) return reply.status(502).send({ error: result.error, code: 'drive_upload_failed' });
       const data = result.data as { file?: { webViewLink?: string } } | undefined;
       reply.send({ webViewLink: data?.file?.webViewLink, name: safeFilename });
     },

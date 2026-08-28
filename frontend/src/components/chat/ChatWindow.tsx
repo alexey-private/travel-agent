@@ -45,6 +45,7 @@ export default function ChatWindow({
     onReplyComplete,
     dispatch,
     t,
+    locale,
   });
   const {
     attachments,
@@ -63,7 +64,7 @@ export default function ChatWindow({
 
   const { voiceState, toggleRecording } = useVoiceRecording((text) => {
     void send(text, text, []);
-  }, t);
+  }, t, locale);
 
   // Auto-scroll to bottom on new content
   useEffect(() => {

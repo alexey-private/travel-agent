@@ -227,4 +227,13 @@ export const he: Dictionary = {
   "errors.connectAppleFailed": "החיבור ל-Apple iCloud נכשל",
   "errors.disconnectAppleFailed": "הניתוק מ-Apple iCloud נכשל",
   "errors.saveReminderListFailed": "שמירת רשימת התזכורות נכשלה",
+
+  // One per backend error `code`, for the failures the UI shows with no agent in
+  // between to translate them. `errorKeyFor` converts the code to the key name.
+  "errors.textRequired": "אין מה לייצא — ההודעה ריקה.",
+  "errors.userIdRequired": "ההתחברות פגה. רעננו את הדף.",
+  "errors.driveNotConfigured": "Google Drive לא מוגדר בשרת הזה.",
+  "errors.driveUploadFailed": "העלאת הקובץ ל-Google Drive נכשלה.",
+  "errors.appleCredentialsRequired": "הזינו Apple ID וסיסמה ייעודית לאפליקציה.",
+  "errors.appleInvalidCredentials": "Apple ID או סיסמה ייעודית שגויים. השתמשו בסיסמה ייעודית מ-appleid.apple.com.",
 };

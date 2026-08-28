@@ -229,4 +229,13 @@ export const ru: Dictionary = {
   "errors.connectAppleFailed": "Не удалось подключить Apple iCloud",
   "errors.disconnectAppleFailed": "Не удалось отключить Apple iCloud",
   "errors.saveReminderListFailed": "Не удалось сохранить список напоминаний",
+
+  // One per backend error `code`, for the failures the UI shows with no agent in
+  // between to translate them. `errorKeyFor` converts the code to the key name.
+  "errors.textRequired": "Нечего экспортировать — сообщение пустое.",
+  "errors.userIdRequired": "Сессия истекла. Перезагрузите страницу.",
+  "errors.driveNotConfigured": "Google Drive не настроен на этом сервере.",
+  "errors.driveUploadFailed": "Не удалось загрузить файл в Google Drive.",
+  "errors.appleCredentialsRequired": "Введите Apple ID и пароль приложения.",
+  "errors.appleInvalidCredentials": "Неверный Apple ID или пароль приложения. Используйте пароль приложения с appleid.apple.com.",
 };

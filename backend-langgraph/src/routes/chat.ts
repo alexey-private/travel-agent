@@ -10,6 +10,8 @@ import { historyToMessages } from '../graph/history';
 import { AgentEvent } from '../types/agent';
 import { LMRound, LMToolCall, LMToolResult } from '../types/lm';
 import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
+import { Locale, DEFAULT_LOCALE, isLocale } from '../i18n/locale';
+import { detectReplyLocale } from '../i18n/detectReplyLocale';
 import { env } from '../config/env';
 
 interface ChatRouteOptions {
@@ -34,6 +36,7 @@ interface ChatBody {
   conversationId?: string;
   agentType?: 'travel' | 'shopping';
   platform?: 'web' | 'telegram';
+  language?: Locale;
   attachments?: Attachment[];
 }
 
@@ -73,10 +76,10 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       },
     },
     async (request: FastifyRequest<{ Body: ChatBody }>, reply: FastifyReply) => {
-      const { userId, message, conversationId: existingConvId, agentType = 'travel', platform, attachments } = request.body;
+      const { userId, message, conversationId: existingConvId, agentType = 'travel', platform, language: bodyLanguage, attachments } = request.body;
 
       if (!userId || (!message && !(attachments && attachments.length > 0))) {
-        return reply.status(400).send({ error: 'userId and message (or attachment) are required' });
+        return reply.status(400).send({ error: 'userId and message (or attachment) are required', code: 'chat_input_required' });
       }
 
       const internalUserId = await userService.findOrCreateUser(userId);
@@ -92,6 +95,18 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         ragService.buildRagContext(message),
         prefRepo.get(userId),
       ]);
+
+      // The body wins over the stored value: the user may have switched language in
+      // this very tab a moment ago, and that write to the database is async.
+      const language: Locale = isLocale(bodyLanguage)
+        ? bodyLanguage
+        : (userPrefs.language ?? DEFAULT_LOCALE);
+
+      if (isLocale(bodyLanguage) && bodyLanguage !== userPrefs.language) {
+        void prefRepo.save(userId, { language: bodyLanguage }).catch((err) => {
+          request.log.warn({ requestId: request.id, err }, 'failed to persist language');
+        });
+      }
 
       const requestId = request.id;
       request.log.info({ requestId, conversationId, agentType, ragHit: ragContext !== null }, 'chat request started');
@@ -168,7 +183,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
       };
 
       try {
-        for await (const event of graph.streamEvents({ messages: initialMessages, userId, conversationId, agentType, platform, memories, taskListName, ragContext }, { version: 'v2', signal: ac.signal })) {
+        for await (const event of graph.streamEvents({ messages: initialMessages, userId, conversationId, agentType, platform, memories, taskListName, ragContext, language }, { version: 'v2', signal: ac.signal })) {
           if (event.event === 'on_chat_model_stream') {
             const chunkContent = event.data?.chunk?.content;
             // Anthropic returns content as array [{type:'text', text:'...'}], OpenAI as string
@@ -247,7 +262,11 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         flushLMRound(); // safety flush if stream ended without a final on_chat_model_end
         sse({ type: 'done' }); // client can render response immediately; suggestions follow async
 
-        const suggestions = await suggestionService.getSuggestions(message, assistantText, agentType);
+        // Suggestions sit directly under the reply, so they follow the reply's own
+        // language: the prompt lets the agent answer in the language of the user's
+        // latest message, which is not always the language in the settings.
+        const replyLanguage = detectReplyLocale(assistantText, language);
+        const suggestions = await suggestionService.getSuggestions(message, assistantText, agentType, replyLanguage);
         if (suggestions.length > 0) {
           const ev: AgentEvent = { type: 'suggestions', suggestions };
           sse(ev);
@@ -276,7 +295,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         (assistantText || lmRounds.length > 0)
           ? conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds, internalUserId, agentType)
           : Promise.resolve(),
-        memoryService.extractAndSaveMemories(internalUserId, message, agentType),
+        memoryService.extractAndSaveMemories(internalUserId, message, agentType, language),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');
     },

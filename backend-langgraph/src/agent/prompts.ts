@@ -1,4 +1,32 @@
 import { UserMemory } from '../types/memory';
+import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '../i18n/locale';
+
+/**
+ * The block that makes the agent speak the user's language.
+ *
+ * It sits in the prompt rather than in a per-locale prompt file because only the
+ * language name varies — writing three prompts would mean maintaining three
+ * copies of everything else. Tool results and tool errors arrive in English by
+ * design (they are a contract with the model, not user-facing text), so the
+ * agent is told explicitly to retell them rather than pass them through.
+ */
+function languageSection(language: Locale): string {
+  const name = LANGUAGE_NAMES[language];
+  return `
+## Language — ALWAYS apply
+The user's interface language is ${name}, but the language of their LATEST message overrides it.
+- Work out which language the latest user message is written in. Do this silently: never announce
+  the language you picked, and never open a response by naming it.
+- If it is not ${name} — for example the message is in English while the setting says ${name} —
+  reply in THAT language, and ignore the setting for this turn.
+- If the latest message is in ${name}, or its language is unclear, write your ENTIRE response in ${name}.
+- Tool results come back in English, including error messages. Translate their content into the
+  response language — never surface raw English tool output or tool error text to the user.
+- Keep unchanged: airport/IATA codes, airline and hotel names, product model names, currency codes, URLs.
+- Hebrew: numbers, dates, prices and Latin identifiers stay as-is — they render correctly inside
+  right-to-left text. Do not reverse them and do not transliterate them.
+`.trim();
+}
 
 const TELEGRAM_FORMATTING = `
 ## Output Format — Telegram (STRICT)
@@ -16,7 +44,7 @@ You are replying inside a Telegram chat. Telegram does NOT render Markdown table
 - Keep responses concise — mobile users read on small screens
 `.trim();
 
-export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans', ragContext?: string | null, platform?: 'web' | 'telegram'): string {
+export function buildTravelAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Travel Plans', ragContext?: string | null, platform?: 'web' | 'telegram', language: Locale = DEFAULT_LOCALE): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -90,6 +118,8 @@ If a tool returns an error or unexpected results:
 - If a tool is unavailable, note this and provide the best answer you can from your knowledge
 - Always inform the user if information could not be retrieved
 
+${languageSection(language)}
+
 ## Response Formatting — ALWAYS apply
 ${platform === 'telegram' ? TELEGRAM_FORMATTING : `Structure every response richly using Markdown:
 - Use **emoji icons** to make sections scannable: ✈️ flights, 🌤️ weather, 💰 currency, 🗺️ destination, 🏨 accommodation, 🚗 car rental, 🎭 tours, 🧖 spa, 📋 visa, 🗓️ calendar, 🍽️ food, ⚠️ tips
@@ -124,7 +154,7 @@ ${memories.length > 0
 ${userIdSection}${memoriesSection}${ragSection}`.trim();
 }
 
-export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping', ragContext?: string | null, platform?: 'web' | 'telegram'): string {
+export function buildShoppingAgentSystemPrompt(memories: UserMemory[], userId?: string, taskListName = 'Shopping', ragContext?: string | null, platform?: 'web' | 'telegram', language: Locale = DEFAULT_LOCALE): string {
   const memoriesSection =
     memories.length > 0
       ? `## Known User Preferences\n${memories.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
@@ -192,6 +222,8 @@ If search_products returns no results:
 - **manage_calendar**: Add, list, or delete fixed-date calendar events (sale dates, delivery deadlines, Black Friday, scheduled pickups); NOT for to-do tasks; when an event is added successfully: if result contains viewUrl show "[View in Calendar](url)" link
 - **search_conversations**: Search the user's past conversation history by keyword. Use when the user says "remember when we talked about X", "what products did we look at", "check our previous conversations", or any similar recall. Always call this before saying you don't have access to past conversations.
 - **drive_files**: Access the user's Google Drive folder ("AI Travel Agent"). Actions: **list** (show saved files), **search** (find by name), **read** (get text content by fileId), **create** (save a new file — shopping list, price comparison, notes). Always pass the current userId. Use **create** when the user says "save", "create a file", "write to Drive". Use **list** to show existing files. Only files in the app folder are accessible. Relay tool error messages to the user as-is.
+
+${languageSection(language)}
 
 ## Response Formatting — ALWAYS apply
 ${platform === 'telegram' ? TELEGRAM_FORMATTING : `Structure every response richly using Markdown:

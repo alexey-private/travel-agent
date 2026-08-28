@@ -4,12 +4,18 @@ import { useState, useRef, useCallback } from "react";
 import { API_URL } from "@/lib/config";
 import type { TKey } from "@/i18n/dictionaries";
 import type { TVars } from "@/i18n/types";
+import type { Locale } from "@/i18n/config";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
 
+/**
+ * `locale` is passed to the transcription endpoint as a hint: left to guess,
+ * Whisper mis-detects short Hebrew clips and returns them transliterated.
+ */
 export function useVoiceRecording(
   onTranscribed: (text: string) => void,
   t: (key: TKey, vars?: TVars) => string,
+  locale: Locale,
 ) {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -45,7 +51,7 @@ export function useVoiceRecording(
         const res = await fetch(`${API_URL}/api/transcribe`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio: base64, mimeType }),
+          body: JSON.stringify({ audio: base64, mimeType, language: locale }),
         });
         if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
         const { text } = (await res.json()) as { text: string };
@@ -60,7 +66,7 @@ export function useVoiceRecording(
     recorder.start();
     recorderRef.current = recorder;
     setVoiceState("recording");
-  }, [voiceState, onTranscribed, t]);
+  }, [voiceState, onTranscribed, t, locale]);
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop();

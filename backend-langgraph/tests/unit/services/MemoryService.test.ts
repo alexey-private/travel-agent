@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { MemoryService } from '@/services/MemoryService';
+import { MemoryService, FIRST_PERSON_RE } from '@/services/MemoryService';
 import { MemoryRepository } from '@/repositories/MemoryRepository';
 
 jest.mock('@/config/env', () => ({
@@ -170,6 +170,40 @@ describe('MemoryService', () => {
       expect(mockInvoke).toHaveBeenCalledTimes(1);
       const msgContent = mockInvoke.mock.calls[0][0][0].content as string;
       expect(msgContent).toContain('shopping preferences');
+    });
+
+    it('asks the model to write memory values in the user language', async () => {
+      mockRepo.getMemories.mockResolvedValue([]);
+      mockInvoke.mockResolvedValue({ content: '{}' });
+
+      await service.extractAndSaveMemories(
+        'user-1',
+        'אני גר בתל אביב ואני צמחוני, אוהב לטוס עם אל על',
+        'travel',
+        'he',
+      );
+
+      const system = mockInvoke.mock.calls[0][0][0].content as string;
+      expect(system).toContain('Hebrew');
+      expect(system).toMatch(/keys .*English/i);
+    });
+  });
+
+  /**
+   * The gate runs before the LLM is ever called, so a language it cannot read is
+   * a language whose users never get any memory at all.
+   */
+  describe('FIRST_PERSON_RE', () => {
+    it('recognises a first-person statement in Hebrew', () => {
+      expect(FIRST_PERSON_RE.test('אני גר בתל אביב ואני צמחוני')).toBe(true);
+      expect(FIRST_PERSON_RE.test('הטיסה שלי מחר')).toBe(true);
+      expect(FIRST_PERSON_RE.test('מה מזג האוויר ברומא')).toBe(false);
+    });
+
+    it('still recognises English and Russian', () => {
+      expect(FIRST_PERSON_RE.test('I live in Tel Aviv')).toBe(true);
+      expect(FIRST_PERSON_RE.test('я живу в Тель-Авиве')).toBe(true);
+      expect(FIRST_PERSON_RE.test('what is the weather in Rome')).toBe(false);
     });
   });
 });

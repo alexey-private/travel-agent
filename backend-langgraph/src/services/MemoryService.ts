@@ -4,8 +4,9 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
 import { createModel } from '../llm/createModel';
+import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '../i18n/locale';
 
-const TRAVEL_EXTRACT_PROMPT = `You are a memory extraction assistant.
+const TRAVEL_EXTRACT_PROMPT_BODY = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent preferences as a JSON object.
 Focus on: name, home city, preferred airlines, seat preference, dietary restrictions, budget level,
 travel style, passport/visa country, preferred hotel type, and any other persistent preferences.
@@ -20,7 +21,7 @@ Rules:
 Example output:
 {"name": "Alex", "home_city": "San Francisco", "diet": "vegetarian", "budget": "mid-range", "airline": "United"}`;
 
-const SHOPPING_EXTRACT_PROMPT = `You are a memory extraction assistant.
+const SHOPPING_EXTRACT_PROMPT_BODY = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent shopping preferences as a JSON object.
 Focus on: name, preferred brands, budget range, favorite stores, size preferences, product categories of interest,
 payment method, current devices the user owns or uses (laptop, phone, tablet, TV, smartwatch, etc.),
@@ -37,10 +38,43 @@ Rules:
 Example output:
 {"name": "Alex", "preferred_brands": "Nike, Apple", "budget_range": "mid-range", "favorite_stores": "Amazon, Best Buy", "size_preferences": "M shirt, 10 shoes", "current_laptop": "Lenovo IdeaPad Slim 5", "current_phone": "iPhone 15"}`;
 
-// English patterns use \b (works fine — they're ASCII); Russian patterns skip \b since
-// JS's default \b is ASCII-\w-based and never matches at a Cyrillic word boundary.
-const FIRST_PERSON_RE =
-  /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )|(меня зовут|я живу|я люблю|я предпочитаю|мне нравится|у меня есть|мой |моя |моё |зовут меня)/i;
+/**
+ * Cheap gate in front of the extraction LLM: does this message look like the user
+ * saying something about themselves?
+ *
+ * English patterns use \b (works fine — they're ASCII); Russian and Hebrew patterns
+ * skip \b since JS's default \b is ASCII-\w-based and never matches at a non-Latin
+ * word boundary. Hebrew has no capitals and no articles, so the pronouns and the
+ * possessive are the whole signal: אני (I), שלי (my/mine), יש לי (I have),
+ * קוראים לי (my name is), אנחנו (we).
+ *
+ * Exported for the tests: a gate that silently stops matching a language is
+ * invisible from the outside — its users simply never accumulate any memory.
+ */
+export const FIRST_PERSON_RE =
+  /\b(i |i'm |i've |i am |my |i like |i prefer |i have |i own |i use )|(меня зовут|я живу|я люблю|я предпочитаю|мне нравится|у меня есть|мой |моя |моё |зовут меня)|(אני |שלי|יש לי|קוראים לי|אנחנו )/i;
+/**
+ * Keys are machine identifiers — deduplication matches on them, so a translated
+ * key would silently create a second memory for a fact already stored. Values are
+ * what the user reads back in the memory panel, so those follow their language.
+ */
+function languageRule(language: Locale): string {
+  const name = LANGUAGE_NAMES[language];
+  return `- The user writes in ${name}. Write memory VALUES in ${name},
+  but keep the JSON keys in English exactly as shown in the example — keys are machine identifiers
+  used for deduplication and must never be translated.`;
+}
+
+function travelExtractPrompt(language: Locale): string {
+  return `${TRAVEL_EXTRACT_PROMPT_BODY}
+${languageRule(language)}`;
+}
+
+function shoppingExtractPrompt(language: Locale): string {
+  return `${SHOPPING_EXTRACT_PROMPT_BODY}
+${languageRule(language)}`;
+}
+
 const MIN_EXTRACTABLE_LENGTH = 30;
 const EXTRACTION_EVERY_N = 3;
 
@@ -96,6 +130,7 @@ export class MemoryService {
     userId: string,
     userMessage: string,
     agentType: 'travel' | 'shopping' = 'travel',
+    language: Locale = DEFAULT_LOCALE,
   ): Promise<void> {
     if (!userMessage.trim()) return;
     if (!this.shouldExtract(userId, userMessage)) return;
@@ -106,7 +141,7 @@ export class MemoryService {
         ? `\nExisting memories:\n${existing.map(m => `- ${m.key}: ${m.value}`).join('\n')}\n`
         : '';
 
-    const systemPrompt = agentType === 'shopping' ? SHOPPING_EXTRACT_PROMPT : TRAVEL_EXTRACT_PROMPT;
+    const systemPrompt = agentType === 'shopping' ? shoppingExtractPrompt(language) : travelExtractPrompt(language);
 
     try {
       const response = await this.model.invoke([

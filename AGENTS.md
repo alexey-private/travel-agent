@@ -41,6 +41,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/graph/history.ts](backend-langgraph/src/graph/history.ts) | Converts DB history to LangChain messages |
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
 | [backend-langgraph/src/i18n/locale.ts](backend-langgraph/src/i18n/locale.ts) | `Locale` type (`en`/`he`/`ru`), `isLocale`, `dirOf`, `LANGUAGE_NAMES` |
+| [backend-langgraph/src/i18n/detectReplyLocale.ts](backend-langgraph/src/i18n/detectReplyLocale.ts) | Which language a finished reply is written in — follow-up suggestions follow the reply, not the setting |
 | [backend-langgraph/src/tools/BaseTool.ts](backend-langgraph/src/tools/BaseTool.ts) | Base class all tools extend |
 | [backend-langgraph/src/tools/wrapTool.ts](backend-langgraph/src/tools/wrapTool.ts) | Wraps tools for LangGraph ToolNode (errors → strings) |
 | [backend-langgraph/src/tools/providers/](backend-langgraph/src/tools/providers/) | CalendarProvider, TasksProvider — user-aware delegation |
@@ -68,6 +69,36 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 |-------|------------|-------|
 | `travel` | `agentType: 'travel'` | web_search, weather, flights, hotels, currency, country_info, visa_requirements, car_rental, tours, spa, manage_calendar, manage_tasks, search_conversations |
 | `shopping` | `agentType: 'shopping'` | web_search, currency, manage_calendar, manage_tasks, search_conversations, + shopping-specific tools |
+
+---
+
+## Agent Language
+
+`language` reaches the agent from `POST /api/chat` and lands in `AgentState`, which
+feeds the `## Language` block of both system prompts. Precedence is
+`body.language` → `prefs.language` → `DEFAULT_LOCALE`; a body value that differs
+from the stored one is written back without blocking the stream.
+
+The same value goes to `SuggestionService`, to `MemoryService` (extraction), and —
+from the frontend — to `POST /api/transcribe` as a Whisper hint.
+
+Three rules that are easy to break:
+
+- **The message outranks the setting.** The prompt tells the agent to answer in the
+  language of the user's latest message, so a Hebrew-configured user who writes in
+  English gets an English answer. Follow-up suggestions must therefore be generated
+  for the language of the *reply* (`detectReplyLocale`), not the stored preference.
+- **Tool strings stay English.** Errors and results in `src/tools/**` are a contract
+  with the model, and ~50 tests assert their exact English text. The prompt makes the
+  agent retell them in the user's language instead of surfacing them raw.
+- **Memory keys stay English.** Deduplication matches on the key (`home_city`,
+  `diet`), so only memory *values* follow the user's language. `FIRST_PERSON_RE`
+  gates extraction and must recognise every supported language — one it cannot read
+  is one whose users never accumulate any memory.
+
+HTTP error responses carry a snake_case `code` next to the English `error`. The
+frontend translates by `code` (`errors.<code>` in the dictionaries) on the two paths
+that have no agent to translate for them: Apple iCloud connect and Drive export.
 
 ---
 

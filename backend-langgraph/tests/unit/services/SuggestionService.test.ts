@@ -120,5 +120,23 @@ describe('SuggestionService', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('asks the model for Hebrew follow-ups', async () => {
+      mockInvoke.mockResolvedValue({ content: '["א","ב","ג"]' });
+
+      await service.getSuggestions('שלום', 'מצאתי 3 טיסות', 'travel', 'he');
+
+      const promptContent = mockInvoke.mock.calls[0][0][0].content as string;
+      expect(promptContent).toContain('Hebrew');
+    });
+
+    it('defaults to English follow-ups', async () => {
+      mockInvoke.mockResolvedValue({ content: '["a","b","c"]' });
+
+      await service.getSuggestions('hi', 'found 3 flights', 'travel');
+
+      const promptContent = mockInvoke.mock.calls[0][0][0].content as string;
+      expect(promptContent).toContain('English');
+    });
   });
 });

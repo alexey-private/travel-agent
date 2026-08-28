@@ -223,4 +223,13 @@ export const en = {
   "errors.connectAppleFailed": "Failed to connect Apple iCloud",
   "errors.disconnectAppleFailed": "Failed to disconnect Apple iCloud",
   "errors.saveReminderListFailed": "Failed to save reminder list",
+
+  // One per backend error `code`, for the failures the UI shows with no agent in
+  // between to translate them. `errorKeyFor` converts the code to the key name.
+  "errors.textRequired": "There is nothing to export — the message is empty.",
+  "errors.userIdRequired": "Your session has expired. Please reload the page.",
+  "errors.driveNotConfigured": "Google Drive is not set up on this server.",
+  "errors.driveUploadFailed": "Could not upload the file to Google Drive.",
+  "errors.appleCredentialsRequired": "Enter your Apple ID and an app-specific password.",
+  "errors.appleInvalidCredentials": "Invalid Apple ID or app-specific password. Use an app-specific password from appleid.apple.com.",
 };
