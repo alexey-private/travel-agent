@@ -273,10 +273,11 @@ describe("LanguageProvider", () => {
 
   it("keeps the rendered locale when neither reading names a supported language", async () => {
     setNavigatorLanguages(["fr-FR"]);
-    global.fetch = jest.fn().mockResolvedValue({
+    const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({}),
     }) as unknown as typeof fetch;
+    global.fetch = fetchMock;
 
     await act(async () => {
       render(
@@ -287,6 +288,14 @@ describe("LanguageProvider", () => {
     });
 
     expect(screen.getByTestId("locale")).toHaveTextContent("en");
+    // English here is a placeholder, not an answer. Recording it would make a
+    // visitor who chose nothing indistinguishable from one who chose English —
+    // and the next visit, from a Hebrew browser, would inherit the wrong one.
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(document.cookie).not.toContain("lang=");
   });
 
   it("does not persist a guess while the backend is unreachable", async () => {

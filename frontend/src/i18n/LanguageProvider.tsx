@@ -126,7 +126,8 @@ export function LanguageProvider({
       // the language the browser's own interface happens to be in. navigator
       // covers the case where no header reached us — stripped by a proxy, or
       // simply absent. A stored choice outranks both.
-      const next = saved ?? headerLocale ?? browserLocale() ?? initialLocale;
+      const detected = headerLocale ?? browserLocale();
+      const next = saved ?? detected ?? initialLocale;
 
       // setLocale, not writeCookie: a detected language is stored exactly like a
       // chosen one — cookie, localStorage and the backend — so /settings, the
@@ -134,7 +135,12 @@ export function LanguageProvider({
       // session reads it back instead of guessing again. Only once the backend
       // has answered, though: persisting against an unreachable backend would
       // pin a guess here that a language stored elsewhere could never override.
-      if (answered) setLocale(next);
+      // Only a language something actually asked for is worth recording. When
+      // neither reading names one we support, `next` is the hard default
+      // standing in for an answer — storing that would make it indistinguishable
+      // from a deliberate English, which is the very collision migration 016
+      // exists to remove.
+      if (answered && (saved ?? detected)) setLocale(next);
       else if (next !== initialLocale) setLocaleState(next);
     })();
 

@@ -1421,14 +1421,18 @@ block inside the cookieless effect:
       }
       if (cancelled) return;
 
-      const next = saved ?? headerLocale ?? browserLocale() ?? initialLocale;
+      const detected = headerLocale ?? browserLocale();
+      const next = saved ?? detected ?? initialLocale;
 
-      if (answered) setLocale(next);
+      if (answered && (saved ?? detected)) setLocale(next);
       else if (next !== initialLocale) setLocaleState(next);
 ```
 
 `setLocale` even when `next` equals the rendered locale: that call is what
 writes it to the backend, and skipping it is exactly the bug review caught.
+But only when something actually named a language — falling through to the hard
+default is a placeholder, and recording it would put back, one layer up, the
+"chose English" / "chose nothing" collision that migration 016 removes.
 
 - [ ] **Step 8: Give `renderWithI18n` the cookie its locale implies**
 
@@ -1446,8 +1450,8 @@ server read from the header is stored too** (the review regression: with the
 server already resolving Hebrew, nothing on the client fired and the database
 never learned it); a stored choice outranks both readings; the header outranks
 `navigator`; `navigator` covers a missing header; neither naming a supported
-language leaves the rendered locale alone; an unreachable backend applies the
-language but writes no cookie.
+language leaves the rendered locale alone **and writes nothing** — no cookie,
+no POST; an unreachable backend applies the language but writes no cookie.
 
 - [ ] **Step 10: Full check**
 

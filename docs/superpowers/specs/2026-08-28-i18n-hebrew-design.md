@@ -149,10 +149,14 @@ once steps 1-3 have all come back empty, so there is no stored preference to
 lose. Persisting it is what lets the Telegram bot and push notifications speak
 the right language to a user who has only ever opened the web app.
 
-The one case that is *not* persisted is a backend that never answered. The
-language still applies to the page, but writing the cookie then would pin the
-guess: the server reads the cookie on every later visit, so the effect would
-never run again and a language stored elsewhere would never get its turn.
+Two cases are *not* persisted. A backend that never answered: the language
+still applies to the page, but writing the cookie then would pin the guess —
+the server reads the cookie on every later visit, so the effect would never run
+again and a language stored elsewhere would never get its turn. And a browser
+that named no supported language at all: step 6 is a placeholder standing in
+for an answer, not an answer, and storing it would make that visitor
+indistinguishable from one who deliberately chose English — reintroducing above
+the database the exact collision migration 016 removes inside it.
 
 From then on the stored value is the source of truth. `/settings` carries a
 language section where the user can override it; that write goes to the same
