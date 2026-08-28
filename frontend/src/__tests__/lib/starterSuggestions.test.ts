@@ -1,60 +1,80 @@
 /**
  * Tests for src/data/starterSuggestions.ts
- * Covers: getRandomSuggestions filters by agentType, correct count, no duplicates, default agentType.
+ *
+ * A starter suggestion is both a button label and the message that goes to the
+ * LLM, so it has to read as something a speaker of that language would actually
+ * type. These tests guard the shape of the sets and the one property a
+ * translation would break: that each set is written in its own language.
  */
 
-import { getRandomSuggestions, ALL_SUGGESTIONS } from "@/data/starterSuggestions";
+import { ALL_SUGGESTIONS, getRandomSuggestions } from "@/data/starterSuggestions";
+import { LOCALES } from "@/i18n/config";
 
-describe("getRandomSuggestions — count", () => {
-  it("returns the requested number of suggestions", () => {
-    expect(getRandomSuggestions(3, "travel")).toHaveLength(3);
-    expect(getRandomSuggestions(5, "shopping")).toHaveLength(5);
-  });
+const HEBREW = /[֐-׿]/;
+const CYRILLIC = /[Ѐ-ӿ]/;
 
-  it("returns all items when count >= pool size", () => {
-    const travelAll = getRandomSuggestions(100, "travel");
-    expect(travelAll).toHaveLength(ALL_SUGGESTIONS.travel.length);
-  });
-});
-
-describe("getRandomSuggestions — agentType filtering", () => {
-  it("returns only travel suggestions for agentType='travel'", () => {
-    const result = getRandomSuggestions(ALL_SUGGESTIONS.travel.length, "travel");
-    for (const s of result) {
-      expect(ALL_SUGGESTIONS.travel).toContain(s);
+describe("starter suggestions", () => {
+  it("covers every locale and both agents", () => {
+    for (const locale of LOCALES) {
+      expect(ALL_SUGGESTIONS[locale].travel.length).toBeGreaterThanOrEqual(20);
+      expect(ALL_SUGGESTIONS[locale].shopping.length).toBeGreaterThanOrEqual(16);
     }
   });
 
-  it("returns only shopping suggestions for agentType='shopping'", () => {
-    const result = getRandomSuggestions(ALL_SUGGESTIONS.shopping.length, "shopping");
-    for (const s of result) {
-      expect(ALL_SUGGESTIONS.shopping).toContain(s);
+  it("gives every locale the same coverage of tools", () => {
+    for (const locale of LOCALES) {
+      expect(ALL_SUGGESTIONS[locale].travel).toHaveLength(ALL_SUGGESTIONS.en.travel.length);
+      expect(ALL_SUGGESTIONS[locale].shopping).toHaveLength(ALL_SUGGESTIONS.en.shopping.length);
     }
   });
 
-  it("never mixes travel and shopping suggestions", () => {
-    const travelResult = getRandomSuggestions(ALL_SUGGESTIONS.travel.length, "travel");
-    for (const s of travelResult) {
-      expect(ALL_SUGGESTIONS.shopping).not.toContain(s);
-    }
-
-    const shoppingResult = getRandomSuggestions(ALL_SUGGESTIONS.shopping.length, "shopping");
-    for (const s of shoppingResult) {
-      expect(ALL_SUGGESTIONS.travel).not.toContain(s);
+  it("writes Hebrew suggestions in Hebrew", () => {
+    for (const s of [...ALL_SUGGESTIONS.he.travel, ...ALL_SUGGESTIONS.he.shopping]) {
+      expect(s).toMatch(HEBREW);
     }
   });
 
-  it("defaults to travel suggestions when agentType is omitted", () => {
-    const result = getRandomSuggestions(5);
-    for (const s of result) {
-      expect(ALL_SUGGESTIONS.travel).toContain(s);
+  it("writes Russian suggestions in Cyrillic", () => {
+    for (const s of [...ALL_SUGGESTIONS.ru.travel, ...ALL_SUGGESTIONS.ru.shopping]) {
+      expect(s).toMatch(CYRILLIC);
     }
   });
-});
 
-describe("getRandomSuggestions — no duplicates", () => {
-  it("returns no duplicate suggestions", () => {
-    const result = getRandomSuggestions(ALL_SUGGESTIONS.travel.length, "travel");
-    expect(new Set(result).size).toBe(result.length);
+  it("keeps the sets distinct rather than sharing one English pool", () => {
+    for (const agent of ["travel", "shopping"] as const) {
+      const en = new Set(ALL_SUGGESTIONS.en[agent]);
+      for (const s of ALL_SUGGESTIONS.he[agent]) expect(en.has(s)).toBe(false);
+      for (const s of ALL_SUGGESTIONS.ru[agent]) expect(en.has(s)).toBe(false);
+    }
+  });
+
+  it("names the current month in the locale's own language", () => {
+    const months = /January|February|March|April|May|June|July|August|September|October|November|December/;
+    expect(ALL_SUGGESTIONS.he.travel.join(" ")).not.toMatch(months);
+    expect(ALL_SUGGESTIONS.ru.travel.join(" ")).not.toMatch(months);
+  });
+
+  it("returns the requested number of distinct suggestions", () => {
+    const picked = getRandomSuggestions(4, "travel", "he");
+    expect(picked).toHaveLength(4);
+    expect(new Set(picked).size).toBe(4);
+  });
+
+  it("never returns more than the pool holds", () => {
+    const picked = getRandomSuggestions(1000, "shopping", "ru");
+    expect(picked.length).toBe(ALL_SUGGESTIONS.ru.shopping.length);
+  });
+
+  it("draws only from the requested locale and agent", () => {
+    const pool = ALL_SUGGESTIONS.he.shopping;
+    for (const s of getRandomSuggestions(pool.length, "shopping", "he")) {
+      expect(pool).toContain(s);
+    }
+  });
+
+  it("defaults to English travel suggestions", () => {
+    for (const s of getRandomSuggestions(3)) {
+      expect(ALL_SUGGESTIONS.en.travel).toContain(s);
+    }
   });
 });

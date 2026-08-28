@@ -9,7 +9,7 @@ import { useChatHistory } from "@/hooks/useChatHistory";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { useFileAttachments } from "@/hooks/useFileAttachments";
 import { useVoiceRecording } from "@/hooks/useVoiceRecording";
-import { useT } from "@/i18n/useT";
+import { useLocale, useT } from "@/i18n/useT";
 
 interface ChatWindowProps {
   userId: string;
@@ -35,6 +35,7 @@ export default function ChatWindow({
   onReplyComplete,
 }: ChatWindowProps) {
   const t = useT();
+  const { locale } = useLocale();
   const { messages, dispatch } = useChatHistory(userId, initialConversationId);
   const { loading, send } = useStreamChat({
     userId,
@@ -54,7 +55,7 @@ export default function ChatWindow({
     clearAll,
     buildMessageText,
     buildDisplayLabel,
-  } = useFileAttachments(t);
+  } = useFileAttachments(t, locale);
 
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -88,7 +89,7 @@ export default function ChatWindow({
     setInput(text);
   }, []);
 
-  const suggestions = useMemo(() => getRandomSuggestions(6, agentType), [agentType]);
+  const suggestions = useMemo(() => getRandomSuggestions(6, agentType, locale), [agentType, locale]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

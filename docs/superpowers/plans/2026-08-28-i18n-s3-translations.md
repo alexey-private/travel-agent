@@ -40,7 +40,7 @@
 приложения. Пользователь с ивритским интерфейсом в браузере на английском видит
 английские дни недели. Плюс строка `"Yesterday"` захардкожена.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `frontend/src/__tests__/lib/dateUtils.test.ts`:
 
@@ -82,14 +82,14 @@ describe("formatDate", () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npm run test --workspace=frontend -- dateUtils
 ```
 Ожидается: FAIL — `formatDate` принимает один аргумент.
 
-- [ ] **Step 3: Переписать модуль**
+- [x] **Step 3: Переписать модуль**
 
 Заменить содержимое `frontend/src/lib/dateUtils.ts`:
 
@@ -126,7 +126,7 @@ export function formatDate(iso: string, locale: Locale, now: Date = new Date()):
 }
 ```
 
-- [ ] **Step 4: Обновить вызывающий компонент**
+- [x] **Step 4: Обновить вызывающий компонент**
 
 В `frontend/src/components/conversations/ConversationList.tsx` получить локаль
 и передать её:
@@ -136,10 +136,10 @@ import { useLocale } from "@/i18n/useT";
 // ...
   const { locale } = useLocale();
 // ...
-  {formatDate(conversation.updated_at, locale)}
+  {formatDate(c.created_at, locale)}
 ```
 
-- [ ] **Step 5: Убедиться, что тест проходит**
+- [x] **Step 5: Убедиться, что тест проходит**
 
 ```bash
 npm run test --workspace=frontend -- dateUtils
@@ -151,7 +151,7 @@ npm run test --workspace=frontend -- dateUtils
 ICU (`node -e "console.log(process.versions.icu)"`). Node 22 из `.nvmrc` проекта
 идёт с full-icu; если ICU урезан, тест поправить нельзя — надо чинить окружение.
 
-- [ ] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add frontend/src/lib/dateUtils.ts \
@@ -176,7 +176,7 @@ git commit -m "feat(i18n): format dates with the app locale instead of the brows
   export function formatBytes(bytes: number, locale: Locale): string;
   ```
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `frontend/src/__tests__/lib/fileUtils.test.ts`:
 
@@ -197,24 +197,30 @@ describe("formatBytes", () => {
     expect(formatBytes(3_500_000, "en")).toMatch(/3\.3/);
   });
 
-  it("uses the locale's decimal separator", () => {
-    expect(formatBytes(3_500_000, "ru")).toMatch(/3,3/);
+  it("uses the locale's decimal separator and unit label", () => {
+    expect(formatBytes(3_500_000, "ru")).toMatch(/3,3\s*МБ/);
   });
 
-  it("produces a Hebrew unit label", () => {
-    expect(formatBytes(3_500_000, "he")).toMatch(/[֐-׿]/);
+  it("uses the Hebrew unit label where CLDR has one", () => {
+    expect(formatBytes(512, "he")).toMatch(/[֐-׿]/);
+  });
+
+  // CLDR gives Hebrew no abbreviation of its own for kB/MB — Hebrew writes them
+  // in Latin, the way it writes Google and Telegram.
+  it("keeps the Latin abbreviation Hebrew itself uses for larger units", () => {
+    expect(formatBytes(3_500_000, "he")).toMatch(/3\.3\s*MB/);
   });
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npm run test --workspace=frontend -- fileUtils
 ```
 Ожидается: FAIL — `formatBytes` принимает один аргумент.
 
-- [ ] **Step 3: Переписать функцию**
+- [x] **Step 3: Переписать функцию**
 
 В `frontend/src/lib/fileUtils.ts` заменить `formatBytes`, добавив импорт типа:
 
@@ -225,8 +231,9 @@ import type { Locale } from "@/i18n/config";
  * Human-readable attachment size.
  *
  * Intl.NumberFormat with a unit style carries both the separator and the unit
- * label, so Russian gets "3,3 МБ" and Hebrew its own abbreviation without a
- * hand-written table per language.
+ * label, so Russian gets "3,3 МБ" without a hand-written table per language.
+ * Where a language has no abbreviation of its own — Hebrew writes kB and MB in
+ * Latin — CLDR leaves the Latin one, which is the right answer for that reader.
  */
 export function formatBytes(bytes: number, locale: Locale): string {
   if (bytes < 1024) {
@@ -249,7 +256,7 @@ export function formatBytes(bytes: number, locale: Locale): string {
 }
 ```
 
-- [ ] **Step 4: Обновить вызывающие места**
+- [x] **Step 4: Обновить вызывающие места**
 
 Найти вызовы и передать локаль:
 
@@ -260,14 +267,14 @@ grep -rn "formatBytes" frontend/src
 В компонентах локаль берётся через `useLocale()`; в `useFileAttachments.ts` она
 приходит параметром хука — там же, где уже передаётся `t` (S1 Task 6 Step 4).
 
-- [ ] **Step 5: Убедиться, что тест проходит**
+- [x] **Step 5: Убедиться, что тест проходит**
 
 ```bash
 npm run test --workspace=frontend -- fileUtils
 ```
-Ожидается: PASS, 5 тестов.
+Ожидается: PASS, 6 тестов.
 
-- [ ] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 6: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add frontend/src/lib/fileUtils.ts frontend/src/components frontend/src/hooks \
@@ -299,7 +306,7 @@ from New York to Rome» для ивритоязычного пользовате
 пишется собственный набор — тот же список инструментов, но свои маршруты,
 города и валюты.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Заменить содержимое `frontend/src/__tests__/lib/starterSuggestions.test.ts`:
 
@@ -345,14 +352,14 @@ describe("starter suggestions", () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npm run test --workspace=frontend -- starterSuggestions
 ```
 Ожидается: FAIL — `ALL_SUGGESTIONS` не разбит по локалям.
 
-- [ ] **Step 3: Переписать модуль**
+- [x] **Step 3: Переписать модуль**
 
 Заменить содержимое `frontend/src/data/starterSuggestions.ts`:
 
@@ -364,6 +371,9 @@ export type SuggestionAgent = "travel" | "shopping";
 /** Month name in the given locale, offset from today. Used inside suggestion text. */
 function monthName(locale: Locale, offsetMonths = 0): string {
   const d = new Date();
+  // Day 1 first: setMonth on the 31st overflows into the month after the one
+  // asked for, so "in two months" would skip a month for three days each year.
+  d.setDate(1);
   d.setMonth(d.getMonth() + offsetMonths);
   return new Intl.DateTimeFormat(locale, { month: "long" }).format(d);
 }
@@ -420,13 +430,19 @@ export function getRandomSuggestions(
   agentType: SuggestionAgent = "travel",
   locale: Locale = "en",
 ): string[] {
-  const pool = ALL_SUGGESTIONS[locale][agentType];
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+  // Fisher-Yates rather than sort(() => Math.random() - 0.5): that comparator is
+  // inconsistent, which the spec leaves undefined, and it skews heavily towards
+  // leaving items near where they started.
+  const pool = [...ALL_SUGGESTIONS[locale][agentType]];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
 }
 ```
 
-- [ ] **Step 4: Написать наборы полностью**
+- [x] **Step 4: Написать наборы полностью**
 
 Английский набор — перенести все 22 travel и 18 shopping фраз из текущего файла
 дословно, заменив `monthName(2)` на `monthName("en", 2)`.
@@ -440,10 +456,12 @@ export function getRandomSuggestions(
 - 22 travel и 18 shopping в каждом языке
 - маршруты и валюты, естественные для языка: для иврита — вылеты из Тель-Авива,
   цены в шекелях; для русского — вылеты из Тель-Авива, цены в долларах
+- месяц в русской фразе ставится после «на», а не «в»: `Intl` возвращает
+  именительный падеж, который совпадает с винительным, но не с предложным
 - никаких английских слов, кроме названий брендов и моделей товаров
   (`Sony WH-1000XM5`, `AirPods Pro`, `Kindle Paperwhite`)
 
-- [ ] **Step 5: Обновить вызывающее место**
+- [x] **Step 5: Обновить вызывающее место**
 
 В `frontend/src/components/chat/ChatWindow.tsx` передать локаль:
 
@@ -453,14 +471,14 @@ export function getRandomSuggestions(
   getRandomSuggestions(4, agentType, locale)
 ```
 
-- [ ] **Step 6: Убедиться, что тест проходит**
+- [x] **Step 6: Убедиться, что тест проходит**
 
 ```bash
 npm run test --workspace=frontend -- starterSuggestions
 ```
 Ожидается: PASS, 6 тестов.
 
-- [ ] **Step 7: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 7: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add frontend/src/data/starterSuggestions.ts \
@@ -477,12 +495,16 @@ git commit -m "feat(i18n): write per-locale starter suggestions"
 - Modify: `frontend/src/i18n/locales/he.ts` (все значения)
 - Modify: `frontend/src/i18n/locales/ru.ts` (все значения)
 - Test: `frontend/src/__tests__/i18n/dictionaries.test.ts`
+- Test: `frontend/src/__tests__/components/LanguageSwitcher.test.tsx` — ищет
+  переключатель по английскому `/language/i`; как только `common.language`
+  переведён, поиск ломается на he и ru. Ярлык берётся из словаря той локали,
+  в которой идёт рендер
 
 **Interfaces:**
 - Consumes: `Dictionary`, `DICTIONARIES` из S1 Task 2.
 - Produces: ничего.
 
-- [ ] **Step 1: Написать падающий тест**
+- [x] **Step 1: Написать падающий тест**
 
 Создать `frontend/src/__tests__/i18n/dictionaries.test.ts`:
 
@@ -555,14 +577,14 @@ describe("dictionaries", () => {
 });
 ```
 
-- [ ] **Step 2: Убедиться, что тест падает**
+- [x] **Step 2: Убедиться, что тест падает**
 
 ```bash
 npm run test --workspace=frontend -- i18n/dictionaries
 ```
 Ожидается: FAIL — значения в `he.ts` и `ru.ts` пока английские.
 
-- [ ] **Step 3: Перевести иврит**
+- [x] **Step 3: Перевести иврит**
 
 Заполнить `frontend/src/i18n/locales/he.ts`. Правила:
 
@@ -572,21 +594,21 @@ npm run test --workspace=frontend -- i18n/dictionaries
 - множественное число: иврит обходится формами `one` и `other`
 - ключи, чьё значение целиком английское по замыслу, вносятся в `ALLOWED_LATIN_ONLY` в тесте с комментарием почему
 
-- [ ] **Step 4: Перевести русский**
+- [x] **Step 4: Перевести русский**
 
 Заполнить `frontend/src/i18n/locales/ru.ts` по тем же правилам, плюс:
 
 - у каждой записи с `{count}` заполнить все четыре формы: `one`, `few`, `many`, `other`
   (`1 запись`, `2 записи`, `5 записей`, `1,5 записи`)
 
-- [ ] **Step 5: Убедиться, что тест проходит**
+- [x] **Step 5: Убедиться, что тест проходит**
 
 ```bash
 npm run test --workspace=frontend -- i18n/dictionaries
 ```
 Ожидается: PASS, 5 тестов.
 
-- [ ] **Step 6: Проверить руками длину строк**
+- [x] **Step 6: Проверить руками длину строк**
 
 ```bash
 npm run dev --workspace=frontend
@@ -596,7 +618,7 @@ npm run dev --workspace=frontend
 кнопки, переносы в две строки там, где было в одну, наезжающие подписи. Слишком
 длинные переводы сокращать, а не расширять вёрстку.
 
-- [ ] **Step 7: Полная проверка**
+- [x] **Step 7: Полная проверка**
 
 ```bash
 npm run test --workspace=frontend
@@ -604,7 +626,7 @@ npx tsc -p frontend/tsconfig.json --noEmit
 npm run build --workspace=frontend
 ```
 
-- [ ] **Step 8: Commit** *(выполнять только с разрешения пользователя)*
+- [x] **Step 8: Commit** *(выполнять только с разрешения пользователя)*
 
 ```bash
 git add frontend/src/i18n/locales frontend/src/__tests__/i18n/dictionaries.test.ts
@@ -615,11 +637,11 @@ git commit -m "feat(i18n): translate the UI into Hebrew and Russian"
 
 ## Определение готовности S3
 
-- [ ] `npm run test --workspace=frontend` — зелёный, включая 22 новых теста
-- [ ] Ни одно значение в `he.ts` не осталось английским (кроме внесённых в `ALLOWED_LATIN_ONLY`)
-- [ ] Ни одно значение в `ru.ts` не осталось английским (те же исключения)
-- [ ] Все русские записи с `{count}` имеют формы `few` и `many`
-- [ ] Даты в списке диалогов и размеры вложений меняются при смене языка
-- [ ] Стартовые подсказки на иврите и русском написаны заново, а не переведены
-- [ ] Ни одна кнопка не обрезана и не разъехалась на трёх языках
-- [ ] `/code-review` пройден, находки закрыты, отчёт по осям Standards / Spec
+- [x] `npm run test --workspace=frontend` — зелёный, включая 22 новых теста
+- [x] Ни одно значение в `he.ts` не осталось английским (кроме внесённых в `ALLOWED_LATIN_ONLY`)
+- [x] Ни одно значение в `ru.ts` не осталось английским (те же исключения)
+- [x] Все русские записи с `{count}` имеют формы `few` и `many`
+- [x] Даты в списке диалогов и размеры вложений меняются при смене языка
+- [x] Стартовые подсказки на иврите и русском написаны заново, а не переведены
+- [x] Ни одна кнопка не обрезана и не разъехалась на трёх языках
+- [x] `/code-review` пройден, находки закрыты, отчёт по осям Standards / Spec

@@ -10,6 +10,7 @@ import {
   MAX_FILE_BYTES,
   formatBytes,
 } from "@/lib/fileUtils";
+import type { Locale } from "@/i18n/config";
 import type { TKey } from "@/i18n/dictionaries";
 import type { TVars } from "@/i18n/types";
 
@@ -32,9 +33,14 @@ export interface UseFileAttachmentsResult {
 /**
  * Hooks cannot call useT() on their own behalf here — the translator is passed
  * in by the component that owns the surface, so the alert speaks the same
- * language as the rest of the chat window.
+ * language as the rest of the chat window. The locale travels with it for the
+ * same reason: the size inside that alert is formatted for the reader looking
+ * at it, not for whatever language the browser happens to be in.
  */
-export function useFileAttachments(t: (key: TKey, vars?: TVars) => string): UseFileAttachmentsResult {
+export function useFileAttachments(
+  t: (key: TKey, vars?: TVars) => string,
+  locale: Locale,
+): UseFileAttachmentsResult {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [textFiles, setTextFiles] = useState<PendingTextFile[]>([]);
 
@@ -45,7 +51,7 @@ export function useFileAttachments(t: (key: TKey, vars?: TVars) => string): UseF
 
     for (const file of files) {
       if (file.size > MAX_FILE_BYTES) {
-        alert(t("errors.fileLarge", { name: file.name, size: formatBytes(file.size) }));
+        alert(t("errors.fileLarge", { name: file.name, size: formatBytes(file.size, locale) }));
       }
       if (isBinaryAttachment(file)) {
         const base64 = await readAsBase64(file);
@@ -55,7 +61,7 @@ export function useFileAttachments(t: (key: TKey, vars?: TVars) => string): UseF
         setTextFiles((prev) => [...prev, { name: file.name, content }]);
       }
     }
-  }, [t]);
+  }, [t, locale]);
 
   const removeAttachment = useCallback((name: string) => {
     setAttachments((prev) => prev.filter((a) => a.name !== name));

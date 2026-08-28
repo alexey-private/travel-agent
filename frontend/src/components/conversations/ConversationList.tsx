@@ -5,7 +5,7 @@ import { MessageSquare, Plus, Trash2 } from "lucide-react";
 import { fetchConversations, deleteConversation, type Conversation } from "@/lib/api";
 import { formatDate } from "@/lib/dateUtils";
 import { useAsync } from "@/hooks/useAsync";
-import { useT } from "@/i18n/useT";
+import { useLocale, useT } from "@/i18n/useT";
 
 export interface ConversationListHandle {
   reload: () => void;
@@ -23,6 +23,7 @@ interface ConversationListProps {
 const ConversationList = forwardRef<ConversationListHandle, ConversationListProps>(
   function ConversationList({ userId, agentType, selectedId, onSelect, onNewChat, onDelete }, ref) {
     const t = useT();
+    const { locale } = useLocale();
     const { data, reload, setData } = useAsync<Conversation[]>(
       () => fetchConversations(userId, agentType),
       [userId, agentType],
@@ -80,7 +81,7 @@ const ConversationList = forwardRef<ConversationListHandle, ConversationListProp
                   <MessageSquare size={13} className="mt-0.5 shrink-0 text-gray-400" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs truncate leading-snug">{title}</p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(c.created_at)}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{formatDate(c.created_at, locale)}</p>
                   </div>
                 </button>
                 <button
