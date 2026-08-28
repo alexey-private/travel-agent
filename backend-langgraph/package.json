@@ -27,6 +27,7 @@
     "@langchain/openai": "^1.5.10",
     "@types/pdf-parse": "^1.1.5",
     "@types/pdfkit": "^0.17.6",
+    "bidi-js": "1.0.3",
     "dotenv": "^17.4.2",
     "fastify": "^5.12.1",
     "googleapis": "^176.0.0",

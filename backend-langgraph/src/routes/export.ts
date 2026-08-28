@@ -2,6 +2,8 @@ import path from 'path';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import PDFDocument from 'pdfkit';
 import { DriveProvider } from '../tools/providers/DriveProvider';
+import { toVisual, wrapToWidth, baseDirFor, type BaseDir } from '../utils/bidi';
+import { isLocale, type Locale } from '../i18n/locale';
 
 // Fonts bundled with the backend — DejaVuSans covers Latin + Cyrillic + Greek etc.
 const FONTS_DIR = path.resolve(__dirname, '../assets/fonts');
@@ -16,6 +18,7 @@ const FONT = {
 interface ExportBody {
   text: string;
   filename?: string;
+  language?: string;
 }
 
 interface ExportToDriveBody {
@@ -23,6 +26,7 @@ interface ExportToDriveBody {
   userId: string;
   agentType?: 'travel' | 'shopping';
   filename?: string;
+  language?: string;
 }
 
 interface ExportRoutesOptions {
@@ -30,7 +34,18 @@ interface ExportRoutesOptions {
   shoppingDriveProvider?: DriveProvider;
 }
 
-async function buildPdfBuffer(text: string): Promise<Buffer> {
+/**
+ * The document's language, or nothing.
+ *
+ * Nothing is a real answer, not a failure: `baseDirFor` then reads the direction
+ * off the text. A value we do not support is dropped for the same reason — better
+ * to sniff than to trust it.
+ */
+function requestedLocale(language: string | undefined): Locale | undefined {
+  return isLocale(language) ? language : undefined;
+}
+
+async function buildPdfBuffer(text: string, language?: Locale): Promise<Buffer> {
   const doc = new PDFDocument({ margin: 50, size: 'A4' });
   doc.registerFont('Regular',     FONT.regular);
   doc.registerFont('Bold',        FONT.bold);
@@ -38,12 +53,17 @@ async function buildPdfBuffer(text: string): Promise<Buffer> {
   doc.registerFont('Oblique',     FONT.oblique);
   doc.registerFont('Mono',        FONT.mono);
 
+  // The document has one direction, taken from the language the user is reading
+  // the app in. Without one, the text itself decides — an export triggered before
+  // any language was stored still has to come out readable.
+  const baseDir = baseDirFor(language, text);
+
   const chunks: Buffer[] = [];
   doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
   await new Promise<void>(resolve => {
     doc.on('end', resolve);
-    renderMarkdown(doc, text);
+    renderMarkdown(doc, text, baseDir);
     doc.end();
   });
 
@@ -54,10 +74,10 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
   fastify.post<{ Body: ExportBody }>(
     '/api/export/pdf',
     async (request: FastifyRequest<{ Body: ExportBody }>, reply: FastifyReply) => {
-      const { text, filename = 'agent-response' } = request.body;
+      const { text, filename = 'agent-response', language } = request.body;
       if (!text) return reply.status(400).send({ error: 'text is required', code: 'text_required' });
 
-      const pdf = await buildPdfBuffer(text);
+      const pdf = await buildPdfBuffer(text, requestedLocale(language));
       const safeFilename = filename.replace(/[^a-z0-9_\- ]/gi, '_');
       reply
         .header('Content-Type', 'application/pdf')
@@ -69,14 +89,14 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
   fastify.post<{ Body: ExportToDriveBody }>(
     '/api/export/pdf-to-drive',
     async (request: FastifyRequest<{ Body: ExportToDriveBody }>, reply: FastifyReply) => {
-      const { text, userId, agentType = 'travel', filename = 'agent-response' } = request.body;
+      const { text, userId, agentType = 'travel', filename = 'agent-response', language } = request.body;
       if (!text)   return reply.status(400).send({ error: 'text is required', code: 'text_required' });
       if (!userId) return reply.status(400).send({ error: 'userId is required', code: 'user_id_required' });
 
       const provider = agentType === 'shopping' ? opts.shoppingDriveProvider : opts.travelDriveProvider;
       if (!provider) return reply.status(503).send({ error: 'Google Drive is not configured on this server.', code: 'drive_not_configured' });
 
-      const pdf = await buildPdfBuffer(text);
+      const pdf = await buildPdfBuffer(text, requestedLocale(language));
       const safeFilename = `${filename.replace(/[^a-z0-9_\- ]/gi, '_')}.pdf`;
 
       const result = await provider.create({
@@ -93,9 +113,66 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
   );
 }
 
+// ── Directional text ─────────────────────────────────────────────────────────
+
+/**
+ * The single place where text reaches the page.
+ *
+ * For left-to-right output it is a pass-through, so English and Russian PDFs
+ * render exactly as they did before this existed. For right-to-left output it
+ * wraps the text itself, reorders each resulting line, and aligns right — in
+ * that order, because the bidirectional algorithm is defined per visual line and
+ * letting pdfkit wrap already-reordered text would scramble it.
+ *
+ * `x`/`y` are for table cells, which position each cell explicitly.
+ */
+function write(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  baseDir: BaseDir,
+  opts: PDFKit.Mixins.TextOptions = {},
+  x?: number,
+  y?: number,
+): void {
+  const emit = (content: string, options: PDFKit.Mixins.TextOptions): void => {
+    if (x === undefined || y === undefined) doc.text(content, options);
+    else doc.text(content, x, y, options);
+  };
+
+  if (baseDir === 'ltr') {
+    emit(text, opts);
+    return;
+  }
+
+  // pdfkit's `indent` only ever pushes from the left, which under rtl is the far
+  // end of the line. The inset is folded into a narrower column instead, so it
+  // lands where a Hebrew reader starts reading.
+  const { indent = 0, width: explicitWidth, ...rest } = opts;
+  const margins = doc.page.margins as { left: number; right: number };
+  const width = explicitWidth ?? doc.page.width - margins.left - margins.right - indent;
+
+  const lines = wrapToWidth(text, width, (s) => doc.widthOfString(s));
+  const visual = lines.map(line => toVisual(line, 'rtl')).join('\n');
+
+  emit(visual, { ...rest, width, align: 'right', lineBreak: false });
+}
+
+/**
+ * How tall `write` will actually draw this text.
+ *
+ * Under rtl the line breaks are ours, not pdfkit's, so the height has to be
+ * counted the same way — asking pdfkit to measure text it will not be wrapping
+ * gives a row too short for its own contents.
+ */
+function heightOf(doc: PDFKit.PDFDocument, text: string, baseDir: BaseDir, width: number): number {
+  if (baseDir === 'ltr') return doc.heightOfString(text, { width });
+  const lines = wrapToWidth(text, width, (s) => doc.widthOfString(s));
+  return lines.length * doc.currentLineHeight();
+}
+
 // ── Markdown renderer ────────────────────────────────────────────────────────
 
-function renderMarkdown(doc: PDFKit.PDFDocument, text: string): void {
+function renderMarkdown(doc: PDFKit.PDFDocument, text: string, baseDir: BaseDir): void {
   const lines = text.split('\n');
   let i = 0;
 
@@ -109,37 +186,42 @@ function renderMarkdown(doc: PDFKit.PDFDocument, text: string): void {
         tableLines.push(lines[i]);
         i++;
       }
-      renderTable(doc, tableLines);
+      renderTable(doc, tableLines, baseDir);
       continue;
     }
 
     // Heading 1
     if (line.startsWith('# ')) {
-      doc.fontSize(20).font('Bold').text(clean(line.slice(2)));
+      doc.fontSize(20).font('Bold');
+      write(doc, clean(line.slice(2)), baseDir);
       doc.moveDown(0.4).fontSize(11).font('Regular');
 
     // Heading 2
     } else if (line.startsWith('## ')) {
-      doc.fontSize(16).font('Bold').text(clean(line.slice(3)));
+      doc.fontSize(16).font('Bold');
+      write(doc, clean(line.slice(3)), baseDir);
       doc.moveDown(0.3).fontSize(11).font('Regular');
 
     // Heading 3
     } else if (line.startsWith('### ')) {
-      doc.fontSize(13).font('Bold').text(clean(line.slice(4)));
+      doc.fontSize(13).font('Bold');
+      write(doc, clean(line.slice(4)), baseDir);
       doc.moveDown(0.2).fontSize(11).font('Regular');
 
-    // Unordered list
+    // Unordered list. The marker is written logically, at the head of the string —
+    // the bidirectional algorithm is what moves it to the right edge under rtl.
     } else if (/^[-*] /.test(line)) {
-      renderInline(doc, `• ${line.slice(2)}`, 11, { indent: 15 });
+      renderInline(doc, `• ${line.slice(2)}`, 11, baseDir, { indent: 15 });
 
     // Ordered list
     } else if (/^\d+\. /.test(line)) {
       const num = line.match(/^(\d+)\./)?.[1] ?? '1';
-      renderInline(doc, `${num}. ${line.replace(/^\d+\. /, '')}`, 11, { indent: 15 });
+      renderInline(doc, `${num}. ${line.replace(/^\d+\. /, '')}`, 11, baseDir, { indent: 15 });
 
     // Blockquote
     } else if (line.startsWith('> ')) {
-      doc.fontSize(11).font('Oblique').text(clean(line.slice(2)), { indent: 20 });
+      doc.fontSize(11).font('Oblique');
+      write(doc, clean(line.slice(2)), baseDir, { indent: 20 });
       doc.font('Regular');
 
     // Fenced code block
@@ -151,6 +233,7 @@ function renderMarkdown(doc: PDFKit.PDFDocument, text: string): void {
         i++;
       }
       if (codeLines.length > 0) {
+        // Code stays left-to-right whatever the document direction: it has none.
         doc.fontSize(9).font('Mono').text(codeLines.join('\n'), { indent: 10 });
         doc.moveDown(0.3).fontSize(11).font('Regular');
       }
@@ -162,7 +245,7 @@ function renderMarkdown(doc: PDFKit.PDFDocument, text: string): void {
     // Normal paragraph text
     } else {
       const content = clean(line);
-      if (content.trim()) renderInline(doc, line, 11);
+      if (content.trim()) renderInline(doc, line, 11, baseDir);
     }
 
     i++;
@@ -186,7 +269,7 @@ function parseTableRows(tableLines: string[]): string[][] {
     );
 }
 
-function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
+function renderTable(doc: PDFKit.PDFDocument, tableLines: string[], baseDir: BaseDir): void {
   const rows = parseTableRows(tableLines);
   if (rows.length === 0) return;
 
@@ -208,10 +291,13 @@ function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
   let colWidths   = colMaxLen.map(len => Math.max(minColW, (len / totalLen) * pageWidth));
   const widthSum  = colWidths.reduce((a, b) => a + b, 0);
   if (widthSum > pageWidth) colWidths = colWidths.map(w => (w / widthSum) * pageWidth);
-  const colX = colWidths.reduce<number[]>((acc, w, i) => {
-    acc.push(i === 0 ? margins.left : acc[i - 1] + colWidths[i - 1]);
-    return acc;
-  }, []);
+  // Column order mirrors under rtl: the first column of the markdown table is the
+  // rightmost one on the page, so a column is offset by the widths of the columns
+  // that follow it rather than those that precede it.
+  const colX = colWidths.map((_, i) => {
+    const preceding = baseDir === 'rtl' ? colWidths.slice(i + 1) : colWidths.slice(0, i);
+    return margins.left + preceding.reduce((a, b) => a + b, 0);
+  });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let y = (doc as any).y as number;
@@ -222,7 +308,7 @@ function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
 
     const rowH = Math.max(
       minRowH,
-      ...cellTexts.map((text, i) => doc.heightOfString(text, { width: colWidths[i] - cellPad * 2 }) + cellPad * 2),
+      ...cellTexts.map((text, i) => heightOf(doc, text, baseDir, colWidths[i] - cellPad * 2) + cellPad * 2),
     );
 
     // Page break if needed
@@ -249,14 +335,16 @@ function renderTable(doc: PDFKit.PDFDocument, tableLines: string[]): void {
     cellTexts.forEach((text, colIdx) => {
       const x = colX[colIdx];
 
-      // Column separator
-      if (colIdx > 0) {
+      // Column separator. Which index is the leftmost column depends on the
+      // direction, so key off the position: only the table's own left border sits
+      // exactly on the margin, and that one is already drawn by the row outline.
+      if (x > margins.left) {
         doc.moveTo(x, y).lineTo(x, y + rowH)
           .strokeColor('#cccccc').lineWidth(0.5).stroke();
       }
 
-      doc.fillColor('#000000')
-        .text(text, x + cellPad, y + cellPad, { width: colWidths[colIdx] - cellPad * 2 });
+      doc.fillColor('#000000');
+      write(doc, text, baseDir, { width: colWidths[colIdx] - cellPad * 2 }, x + cellPad, y + cellPad);
     });
 
     y += rowH;
@@ -278,9 +366,22 @@ function renderInline(
   doc: PDFKit.PDFDocument,
   text: string,
   fontSize: number,
-  opts: Record<string, unknown> = {},
+  baseDir: BaseDir,
+  opts: PDFKit.Mixins.TextOptions = {},
 ): void {
   const cleaned = stripEmoji(text);
+
+  if (baseDir === 'rtl') {
+    // Bold segments are stitched back into one run and written in the regular
+    // font. Emphasis is drawn with `continued`, which appends each segment where
+    // the last one ended — incompatible with breaking the lines ourselves, which
+    // right-to-left text requires. A Hebrew paragraph that loses its bold is a
+    // smaller loss than one whose words come out in the wrong order.
+    doc.fontSize(fontSize).font('Regular');
+    write(doc, stripInline(cleaned), baseDir, opts);
+    return;
+  }
+
   // Split at **bold** boundaries
   const parts = cleaned.split(/(\*\*[^*]+\*\*)/);
   const lastIdx = parts.length - 1;

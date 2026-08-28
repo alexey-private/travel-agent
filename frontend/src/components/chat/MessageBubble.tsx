@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight, Download, HardDrive } from "lucide-react";
 import AgentThoughts from "./AgentThoughts";
 import { exportToPdf, exportToPdfDrive, derivePdfFilename } from "@/lib/api";
 import { type Message } from "@/types/agent";
-import { useT } from "@/i18n/useT";
+import { useT, useLocale } from "@/i18n/useT";
 import { MIRROR_UNDER_RTL } from "@/i18n/direction";
 import type { TKey } from "@/i18n/dictionaries";
 
@@ -24,6 +24,7 @@ const SOURCES_PREVIEW = 5;
 
 const MessageBubble = memo(function MessageBubble({ message, userId, agentType = "travel", onSuggestionClick }: MessageBubbleProps) {
   const t = useT();
+  const { locale } = useLocale();
   const isUser = message.role === "user";
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -49,7 +50,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
     setExporting(true);
     try {
       const filename = derivePdfFilename(message.content, message.createdAt);
-      await exportToPdf(message.content, filename);
+      await exportToPdf(message.content, filename, locale);
     } finally {
       setExporting(false);
     }
@@ -62,7 +63,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
     setDriveError(null);
     try {
       const filename = derivePdfFilename(message.content, message.createdAt);
-      const result = await exportToPdfDrive(message.content, userId, agentType, filename);
+      const result = await exportToPdfDrive(message.content, userId, agentType, filename, locale);
       setDriveLink(result.webViewLink);
       setDriveStatus("done");
     } catch (err) {

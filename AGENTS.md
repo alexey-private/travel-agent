@@ -25,6 +25,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | Telegram bridge | grammY + SSE bridge to backend-langgraph |
 | Database | PostgreSQL 16 + pgvector extension |
 | Embeddings | Voyage AI `voyage-3-lite` (512 dims) |
+| PDF export | pdfkit + `bidi-js` (Unicode Bidirectional Algorithm), DejaVuSans |
 | LLM | Anthropic Claude (default) or OpenAI (env-switchable) |
 | Auth | Google OAuth2 (Calendar + Tasks), iCloud CalDAV |
 | Deployment | Docker Compose (DB), npm workspaces |
@@ -42,6 +43,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
 | [backend-langgraph/src/i18n/locale.ts](backend-langgraph/src/i18n/locale.ts) | `Locale` type (`en`/`he`/`ru`), `isLocale`, `dirOf`, `LANGUAGE_NAMES` |
 | [backend-langgraph/src/i18n/detectReplyLocale.ts](backend-langgraph/src/i18n/detectReplyLocale.ts) | Which language a finished reply is written in — follow-up suggestions follow the reply, not the setting |
+| [backend-langgraph/src/utils/bidi.ts](backend-langgraph/src/utils/bidi.ts) | `toVisual`, `wrapToWidth`, `baseDirFor` — logical→visual reordering for the PDF export; see [PDF Direction](#pdf-direction) |
 | [backend-langgraph/src/tools/BaseTool.ts](backend-langgraph/src/tools/BaseTool.ts) | Base class all tools extend |
 | [backend-langgraph/src/tools/wrapTool.ts](backend-langgraph/src/tools/wrapTool.ts) | Wraps tools for LangGraph ToolNode (errors → strings) |
 | [backend-langgraph/src/tools/providers/](backend-langgraph/src/tools/providers/) | CalendarProvider, TasksProvider — user-aware delegation |
@@ -99,6 +101,33 @@ Three rules that are easy to break:
 HTTP error responses carry a snake_case `code` next to the English `error`. The
 frontend translates by `code` (`errors.<code>` in the dictionaries) on the two paths
 that have no agent to translate for them: Apple iCloud connect and Drive export.
+
+---
+
+## PDF Direction
+
+pdfkit paints glyphs in string order and implements no part of the Unicode
+Bidirectional Algorithm, so Hebrew handed to it verbatim comes out backwards.
+`POST /api/export/pdf` and `/api/export/pdf-to-drive` take an optional `language`;
+`baseDirFor` turns it into one direction for the whole document, falling back to
+sniffing the text when no language is sent.
+
+Three rules that are easy to break:
+
+- **Wrap first, reorder second.** The algorithm is defined per *visual* line.
+  Reordering a paragraph and letting pdfkit wrap the result slices reversed text
+  at an arbitrary point and scrambles every line, so `wrapToWidth` decides the
+  breaks and `toVisual` runs on each line separately.
+- **Left-to-right must stay byte-identical.** `write()` is a bare pass-through for
+  `ltr`. English and Russian exports are verified to rasterise pixel-for-pixel the
+  same as before the feature existed — treat any diff there as a bug.
+- **Markers are written logically.** `• text`, `1. text` — the algorithm moves
+  them to the right edge on its own. Repositioning them by hand double-flips them.
+
+Indentation under `rtl` comes off a narrower column, not from pdfkit's `indent`,
+which only ever pushes from the left. Bold is dropped inside right-to-left text:
+emphasis needs `continued`, which cannot coexist with breaking the lines
+ourselves. Code blocks stay left-to-right always.
 
 ---
 

@@ -251,3 +251,36 @@ Expected: no output. (Write the pattern with the trailing hyphen — a looser
    document.documentElement.clientWidth`. To confirm an icon actually flipped,
    read `getComputedStyle(el).scale` — Tailwind 4 writes the `scale` property,
    so `transform` stays `none` and looks like a failure when it is not.
+
+## SKILL: pdf-rtl-check
+
+**When:** Anything in `backend-langgraph/src/routes/export.ts` or
+`src/utils/bidi.ts` changes. The PDF export writes text in *visual* order, so a
+mistake there is invisible to tsc, to the tests that assert the response is a
+PDF, and to reading the code.
+
+1. **Do not judge direction with `pdftotext`.** It applies the bidirectional
+   algorithm a second time, to text already in visual order, and reports `ב-793`
+   where the page correctly shows `397`. Word *coordinates* from
+   `pdftotext -bbox` are trustworthy; the characters are not.
+2. **Check the order at the point of writing.** Wrap `PDFDocument.prototype.text`,
+   collect what it receives, and run each string back through `toVisual(s, 'rtl')`.
+   The result must equal the source character for character — the transform is its
+   own inverse.
+3. **Check the layout by coordinates.** From `pdftotext -bbox`, on an A4 page with
+   50pt margins the right margin is at 545.28. Flow text ends there; a list
+   (`indent: 15`) ends at 530.28; a blockquote (`indent: 20`) at 525.28. List
+   markers and `1.` sit at the line's right end. In a mirrored table, x decreases
+   as the markdown column index increases.
+4. **Prove left-to-right did not move.** Copy the pre-change renderer out of git
+   (`git show HEAD:backend-langgraph/src/routes/export.ts`), rename its exported
+   function, render the same English and Russian markdown through both, then:
+
+```bash
+pdftoppm -png -r 100 -gray old.pdf old && pdftoppm -png -r 100 -gray new.pdf new
+cmp old-1.png new-1.png && echo identical
+```
+
+   Use a document with a table, bold text, a list, a blockquote and a code block.
+   Anything short of `identical` is a regression, not a rounding difference.
+5. Delete the scratch copy of the old renderer before staging.

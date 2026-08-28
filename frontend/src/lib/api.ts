@@ -159,12 +159,18 @@ export function derivePdfFilename(text: string, createdAt?: string): string {
   return `agent-response-${date}`;
 }
 
-/** Download an assistant message as a PDF file. */
-export async function exportToPdf(text: string, filename?: string): Promise<void> {
+/**
+ * Download an assistant message as a PDF file.
+ *
+ * `locale` decides the page direction. It is the reader's language rather than
+ * anything read off the text, because a mostly-Latin itinerary written for a
+ * Hebrew reader still belongs on a right-to-left page.
+ */
+export async function exportToPdf(text: string, filename?: string, locale?: Locale): Promise<void> {
   const response = await fetch(`${API_URL}/api/export/pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, filename }),
+    body: JSON.stringify({ text, filename, language: locale }),
   });
   if (!response.ok) throw new ApiError(await errorKeyOf(response, "errors.exportFailed"), response.status);
   const blob = await response.blob();
@@ -182,11 +188,12 @@ export async function exportToPdfDrive(
   userId: string,
   agentType: 'travel' | 'shopping',
   filename?: string,
+  locale?: Locale,
 ): Promise<{ webViewLink: string; name: string }> {
   const response = await fetch(`${API_URL}/api/export/pdf-to-drive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, userId, agentType, filename }),
+    body: JSON.stringify({ text, userId, agentType, filename, language: locale }),
   });
   if (!response.ok) {
     // Translate by the code, not by the English sentence the backend logs: this
