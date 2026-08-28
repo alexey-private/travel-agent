@@ -211,3 +211,43 @@ Values with a number that changes the shape of the word are declared `as PluralF
 **Hooks and `lib/*`** cannot call `useT()`. A hook takes `t` as a parameter from the component that owns the surface (`useFileAttachments(t)`); a module in `lib/` throws `new ApiError("errors.<key>", status)` and the surface showing the error translates `err.message`.
 
 Component tests render through `renderWithI18n` from `src/__tests__/helpers/renderWithI18n.tsx` — `useT()` throws outside the provider.
+
+---
+
+## SKILL: rtl-check
+
+**When:** Any markup is added or changed in the frontend. Hebrew renders the
+whole interface right-to-left, so a physical class written today is a mirrored
+layout bug tomorrow.
+
+1. Reach for the logical class, never the physical one: `ms-`/`me-` over
+   `ml-`/`mr-`, `ps-`/`pe-` over `pl-`/`pr-`, `start-`/`end-` over
+   `left-`/`right-`, `text-start`/`text-end`, `border-s-`/`border-e-`,
+   `rounded-ss-`/`rounded-se-` over the `-tl-`/`-tr-` corners. Inside a
+   `flex`/`grid` container prefer `gap-` over `space-x-`, which does not follow
+   `dir`.
+2. Sweep for what slipped through:
+
+```bash
+grep -rnoE '\b(ml|mr|pl|pr)-(auto|[0-9.]+)\b|\b(left|right)-(auto|full|[0-9.]+)\b|\btext-(left|right)\b|\bspace-x-[0-9.]+\b|\brounded-t[lr]-[a-z0-9]+\b|\bborder-(l|r)-[a-z0-9]+\b' \
+  frontend/src --include='*.tsx'
+```
+
+Expected: no output. (Write the pattern with the trailing hyphen — a looser
+`rounded-(l|r)` also matches `rounded-lg` and buries the real hits.)
+
+3. Two things logical properties do **not** cover:
+   - **`translate-x-*`** has no logical form. A panel that slides off-screen
+     picks its direction from `useLocale().dir`, as `app/page.tsx` does — get
+     it wrong and the "hidden" panel parks on top of the content.
+   - **Glyphs.** A back arrow or a sideways chevron carries a direction of its
+     own; give it `MIRROR_UNDER_RTL` from `frontend/src/i18n/direction.ts`.
+     An icon that means the same thing both ways — a downward chevron, a
+     spinner — must not be flipped.
+4. Text whose language is not the interface language (a chat message, the
+   composer) gets `dir="auto"` and lets the browser decide.
+5. Verify in the browser, not only in jsdom. With the app running, switch to
+   `עברית` and on each page check `document.documentElement.scrollWidth <=
+   document.documentElement.clientWidth`. To confirm an icon actually flipped,
+   read `getComputedStyle(el).scale` — Tailwind 4 writes the `scale` property,
+   so `transform` stays `none` and looks like a failure when it is not.
