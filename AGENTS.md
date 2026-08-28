@@ -40,6 +40,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/graph/buildGraph.ts](backend-langgraph/src/graph/buildGraph.ts) | Shared graph builder (model → tools → loop) |
 | [backend-langgraph/src/graph/history.ts](backend-langgraph/src/graph/history.ts) | Converts DB history to LangChain messages |
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
+| [backend-langgraph/src/i18n/locale.ts](backend-langgraph/src/i18n/locale.ts) | `Locale` type (`en`/`he`/`ru`), `isLocale`, `dirOf`, `LANGUAGE_NAMES` |
 | [backend-langgraph/src/tools/BaseTool.ts](backend-langgraph/src/tools/BaseTool.ts) | Base class all tools extend |
 | [backend-langgraph/src/tools/wrapTool.ts](backend-langgraph/src/tools/wrapTool.ts) | Wraps tools for LangGraph ToolNode (errors → strings) |
 | [backend-langgraph/src/tools/providers/](backend-langgraph/src/tools/providers/) | CalendarProvider, TasksProvider — user-aware delegation |
@@ -77,7 +78,9 @@ conversation_embeddings — message_id, user_id (UUID FK), agent_type, embedding
 user_memories        — user_id (UUID FK), key, value, agent_type
 google_tokens        — user_id TEXT = session_id, access_token, refresh_token, expiry
 icloud_tokens        — user_id TEXT = session_id, encrypted credentials
-user_preferences     — user_id TEXT = session_id, task_list_name, shopping_task_list_name
+user_service_preferences — user_id TEXT = session_id, calendar_provider, calendar_name,
+                           shopping_calendar_name, task_list_name, shopping_task_list_name,
+                           language ('en' | 'he' | 'ru', CHECK, default 'en')
 push_subscriptions   — user_id UUID FK → users.id, endpoint, p256dh, auth
 ```
 

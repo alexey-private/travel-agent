@@ -4,6 +4,7 @@ import { ICloudTokenRepository } from '../repositories/ICloudTokenRepository';
 import { UserPreferencesRepository, UserPreferences } from '../repositories/UserPreferencesRepository';
 import { GoogleTokenRepository } from '../repositories/GoogleTokenRepository';
 import { UserService } from '../services/UserService';
+import { isLocale } from '../i18n/locale';
 
 interface SettingsRouteOptions {
   icloudTokenRepo: ICloudTokenRepository;
@@ -46,10 +47,15 @@ export async function settingsRoutes(
     if (!userId) return reply.code(400).send({ error: 'userId required' });
     await userService.findOrCreateUser(userId);
 
-    const { calendarProvider, calendarName, shoppingCalendarName, taskListName, shoppingTaskListName } = req.body ?? {};
+    const { calendarProvider, calendarName, shoppingCalendarName, taskListName, shoppingTaskListName, language } =
+      req.body ?? {};
 
     if (calendarProvider && calendarProvider !== 'google' && calendarProvider !== 'apple') {
       return reply.code(400).send({ error: 'calendarProvider must be "google" or "apple"' });
+    }
+
+    if (language !== undefined && !isLocale(language)) {
+      return reply.code(400).send({ error: 'language must be one of "en", "he", "ru"' });
     }
 
     await prefRepo.save(userId, {
@@ -58,6 +64,7 @@ export async function settingsRoutes(
       shoppingCalendarName,
       taskListName,
       shoppingTaskListName,
+      language,
     });
 
     return { saved: true };
