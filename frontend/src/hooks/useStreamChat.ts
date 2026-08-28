@@ -37,8 +37,11 @@ export function useStreamChat({
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId ?? null);
   const abortRef = useRef<AbortController | null>(null);
-  const conversationIdRef = useRef(conversationId);
-  conversationIdRef.current = conversationId;
+  // Mirrors `conversationId` for the async send(), which must not close over a
+  // stale render. Written where the value arrives rather than during render or
+  // in an effect: a second send() — voice input starts one without waiting for
+  // `loading` — can land before an effect would have flushed.
+  const conversationIdRef = useRef<string | null>(initialConversationId ?? null);
 
   // Abort stream when component unmounts
   useEffect(() => () => { abortRef.current?.abort(); }, []);
@@ -63,6 +66,7 @@ export function useStreamChat({
         (event) => {
           switch (event.type) {
             case "conversation_id":
+              conversationIdRef.current = event.conversationId;
               setConversationId(event.conversationId);
               onConversationCreated?.(event.conversationId);
               break;

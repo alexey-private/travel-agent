@@ -19,8 +19,15 @@ export function useAsync<T>(
   deps: DependencyList = [],
 ): UseAsyncResult<T> {
   const [state, setState] = useState<AsyncState<T>>({ data: null, loading: false, error: null });
+
+  // `fn` is a fresh closure on every render, so it cannot go in `run`'s
+  // dependency list without re-running the request forever. The ref is written
+  // in an effect rather than during render, and effects run top-down, so it is
+  // already current by the time the effect below calls `run`.
   const fnRef = useRef(fn);
-  fnRef.current = fn;
+  useEffect(() => {
+    fnRef.current = fn;
+  });
 
   const run = useCallback(() => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -28,10 +35,12 @@ export function useAsync<T>(
       (data) => setState({ data, loading: false, error: null }),
       (err: unknown) => setState({ data: null, loading: false, error: err instanceof Error ? err.message : "errors.unknown" }),
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetching is exactly the external-system synchronisation effects are for.
+  // `deps` is the caller's array, so it cannot be verified statically.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     run();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

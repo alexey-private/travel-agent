@@ -48,6 +48,9 @@ const MemoryPanel = forwardRef<MemoryPanelHandle, MemoryPanelProps>(
     }, [loadProviderSettings]);
 
     const handleGoogleConnect = () => {
+      // A full navigation to the backend OAuth endpoint, which is a different
+      // origin — the Next.js router cannot route to it.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = `${API_URL}/auth/google/start?userId=${encodeURIComponent(userId)}`;
     };
 

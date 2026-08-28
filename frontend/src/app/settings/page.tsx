@@ -12,7 +12,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { getOrCreateUserId } from "@/lib/api";
 import {
   getSettings,
   saveSettings,
@@ -21,6 +20,7 @@ import {
   SettingsData,
 } from "@/lib/settingsApi";
 import { API_URL } from "@/lib/config";
+import { useUserId } from "@/hooks/useUserId";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { useT } from "@/i18n/useT";
 import type { TKey } from "@/i18n/dictionaries";
@@ -28,7 +28,7 @@ import type { TKey } from "@/i18n/dictionaries";
 function SettingsContent() {
   const t = useT();
   const searchParams = useSearchParams();
-  const [userId, setUserId] = useState<string | null>(null);
+  const userId = useUserId();
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [saving, setSaving] = useState(false);
   // The banner colour used to be inferred from the English copy ("Failed…"),
@@ -50,9 +50,8 @@ function SettingsContent() {
   }, []);
 
   useEffect(() => {
-    const uid = getOrCreateUserId();
-    setUserId(uid);
-    getSettings(uid)
+    if (!userId) return;
+    getSettings(userId)
       .then((s) => {
         setSettings(s);
         if (s.appleId) setAppleId(s.appleId);
@@ -61,6 +60,8 @@ function SettingsContent() {
 
     const googleAuth = searchParams.get("google_auth");
     if (googleAuth === "success") {
+      // Reacts to the OAuth redirect in the URL — an external system.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSaveMsg({ text: t("settings.googleConnectSuccess"), error: false });
       window.history.replaceState({}, "", "/settings");
     } else if (googleAuth === "error") {
@@ -73,7 +74,7 @@ function SettingsContent() {
       });
       window.history.replaceState({}, "", "/settings");
     }
-  }, [searchParams, t]);
+  }, [userId, searchParams, t]);
 
   const handleSelectProvider = useCallback((provider: "google" | "apple") => {
     if (!settings) return;

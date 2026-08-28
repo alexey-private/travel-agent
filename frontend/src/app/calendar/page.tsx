@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Trash2, CheckSquare, X, Loader2 } from "lucide-react";
-import { getOrCreateUserId } from "@/lib/api";
+import { useUserId } from "@/hooks/useUserId";
 import {
   fetchEvents,
   fetchTasks,
@@ -53,7 +53,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
 
 export default function CalendarPage() {
   const t = useT();
-  const [userId, setUserId] = useState<string | null>(null);
+  const userId = useUserId();
   const [tab, setTab] = useState<Tab>("events");
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -84,10 +84,10 @@ export default function CalendarPage() {
   }, []);
 
   useEffect(() => {
-    const uid = getOrCreateUserId();
-    setUserId(uid);
-    load(uid);
-  }, [load]);
+    // Loads events and tasks from the backend — an external system.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (userId) load(userId);
+  }, [userId, load]);
 
   // ── Event actions ──────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Plane, Settings, CalendarDays, Sparkles, Menu, Brain } from "lucide-react";
 import ChatWindow from "@/components/chat/ChatWindow";
@@ -9,12 +9,12 @@ import ConversationList, { type ConversationListHandle } from "@/components/conv
 import AgentSelector, { type AgentType } from "@/components/shared/AgentSelector";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
-import { getOrCreateUserId } from "@/lib/api";
+import { useUserId } from "@/hooks/useUserId";
 import { useT } from "@/i18n/useT";
 
 export default function Home() {
   const t = useT();
-  const [userId, setUserId] = useState<string | null>(null);
+  const userId = useUserId();
   const [agentType, setAgentType] = useState<AgentType>("travel");
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [chatKey, setChatKey] = useState(0);
@@ -23,10 +23,6 @@ export default function Home() {
 
   const conversationListRef = useRef<ConversationListHandle>(null);
   const memoryPanelRef = useRef<MemoryPanelHandle>(null);
-
-  useEffect(() => {
-    setUserId(getOrCreateUserId());
-  }, []);
 
   const handleNewChat = useCallback(() => {
     setSelectedConversationId(null);

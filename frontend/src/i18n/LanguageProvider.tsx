@@ -88,6 +88,8 @@ export function LanguageProvider({
     }
 
     if (isLocale(stored)) {
+      // localStorage is an external store the server could not read.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (stored !== initialLocale) setLocale(stored);
       else writeCookie(initialLocale);
       return;

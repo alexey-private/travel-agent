@@ -28,6 +28,9 @@ export function usePushNotifications(userId: string | null) {
   // Register SW and check existing subscription on mount
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      // navigator and Notification.permission are unreachable during SSR, so
+      // browser capability can only be read after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus("unsupported");
       return;
     }
