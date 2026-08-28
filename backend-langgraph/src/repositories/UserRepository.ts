@@ -15,6 +15,15 @@ export class UserRepository extends BaseRepository {
 
   /**
    * Finds an existing user by sessionId or creates a new one.
+   *
+   * The INSERT upserts on purpose: the frontend fires several requests in
+   * parallel on first load, and a plain SELECT-then-INSERT lets two of them
+   * race into a duplicate key violation on users_session_id_key.
+   *
+   * The preceding SELECT is kept as a fast path: it is not what closes the
+   * race, but it keeps the common case (an existing user) off the upsert,
+   * which would otherwise rewrite the row on every call.
+   *
    * @returns The user's UUID
    */
   async findOrCreateUser(sessionId: string): Promise<string> {
@@ -25,7 +34,9 @@ export class UserRepository extends BaseRepository {
     if (existing) return existing.id;
 
     const created = await this.queryOne<UserRow>(
-      'INSERT INTO users (session_id) VALUES ($1) RETURNING id',
+      `INSERT INTO users (session_id) VALUES ($1)
+       ON CONFLICT (session_id) DO UPDATE SET session_id = EXCLUDED.session_id
+       RETURNING id`,
       [sessionId],
     );
     return created!.id;
