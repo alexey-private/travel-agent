@@ -186,7 +186,7 @@ describe("LanguageProvider", () => {
     );
   });
 
-  it("lets a stored choice outrank the browser language", async () => {
+  it("lets a stored choice outrank both readings of the browser", async () => {
     setNavigatorLanguages(["he-IL"]);
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -204,9 +204,37 @@ describe("LanguageProvider", () => {
     expect(screen.getByTestId("locale")).toHaveTextContent("ru");
   });
 
-  it("does not second-guess a server that already read the header", async () => {
-    // initialLocale is not the hard default, so the server had a header and
-    // acted on it. navigator is a second reading of the same preference.
+  it("stores the language the server read from the header", async () => {
+    // The regression this guards: with the server already resolving Hebrew from
+    // Accept-Language, nothing on the client had a reason to fire, so the
+    // detected language never reached the database and the Telegram bot and
+    // push notifications went on speaking English to a Hebrew-speaking user.
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="he" headerLocale="he">
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("he");
+    expect(document.cookie).toContain("lang=he");
+    expect(window.localStorage.getItem("lang")).toBe("he");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/settings?userId=session-test"),
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ language: "he" }) }),
+    );
+  });
+
+  it("prefers the header over navigator when the two disagree", async () => {
+    // Accept-Language is the visitor asking for content in a language;
+    // navigator.language only reports what the browser's own interface is in.
     setNavigatorLanguages(["he-IL"]);
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -215,7 +243,7 @@ describe("LanguageProvider", () => {
 
     await act(async () => {
       render(
-        <LanguageProvider initialLocale="ru">
+        <LanguageProvider initialLocale="ru" headerLocale="ru">
           <Probe />
         </LanguageProvider>,
       );
@@ -224,7 +252,46 @@ describe("LanguageProvider", () => {
     expect(screen.getByTestId("locale")).toHaveTextContent("ru");
   });
 
-  it("still applies the browser language when the backend is unreachable", async () => {
+  it("falls back to navigator when no header reached the server", async () => {
+    // A proxy stripped Accept-Language, so the server rendered the hard default.
+    setNavigatorLanguages(["he-IL"]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="en" headerLocale={null}>
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("he");
+  });
+
+  it("keeps the rendered locale when neither reading names a supported language", async () => {
+    setNavigatorLanguages(["fr-FR"]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="en" headerLocale={null}>
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("en");
+  });
+
+  it("does not persist a guess while the backend is unreachable", async () => {
+    // A cookie written now would be read by the server on every later visit,
+    // and the language stored elsewhere would never get its turn.
     setNavigatorLanguages(["he-IL"]);
     global.fetch = jest.fn().mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
 
@@ -237,6 +304,7 @@ describe("LanguageProvider", () => {
     });
 
     expect(screen.getByTestId("locale")).toHaveTextContent("he");
+    expect(document.cookie).not.toContain("lang=");
   });
 
   it("throws a useful error when useT is called outside the provider", () => {

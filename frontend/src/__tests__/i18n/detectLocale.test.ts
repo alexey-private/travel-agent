@@ -1,4 +1,9 @@
-import { parseAcceptLanguage, pickLocale, browserLocale, headerLocale } from "@/i18n/detectLocale";
+import {
+  parseAcceptLanguage,
+  pickLocale,
+  browserLocale,
+  acceptLanguageLocale,
+} from "@/i18n/detectLocale";
 
 describe("parseAcceptLanguage", () => {
   it("returns an empty list for a missing header", () => {
@@ -51,14 +56,17 @@ describe("pickLocale", () => {
   });
 });
 
-describe("headerLocale", () => {
+describe("acceptLanguageLocale", () => {
   it("reads the preferred supported language out of a real header", () => {
-    expect(headerLocale("he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7")).toBe("he");
+    expect(acceptLanguageLocale("he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7")).toBe("he");
   });
 
-  it("falls back to the default when the header names nothing we support", () => {
-    expect(headerLocale("fr-FR,de;q=0.8")).toBe("en");
-    expect(headerLocale(null)).toBe("en");
+  it("returns null when the header names nothing we support", () => {
+    expect(acceptLanguageLocale("fr-FR,de;q=0.8")).toBeNull();
+  });
+
+  it("returns null for an absent header rather than claiming English", () => {
+    expect(acceptLanguageLocale(null)).toBeNull();
   });
 });
 

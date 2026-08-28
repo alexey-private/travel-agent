@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, isLocale, type Locale } from "./config";
+import { isLocale, type Locale } from "./config";
 
 /**
  * Deriving a first-time visitor's language from the browser.
@@ -64,7 +64,13 @@ export function browserLocale(): Locale | null {
   return pickLocale(tags.filter(Boolean));
 }
 
-/** Server-side counterpart: the same preference, read off the request. */
-export function headerLocale(header: string | null | undefined): Locale {
-  return pickLocale(parseAcceptLanguage(header)) ?? DEFAULT_LOCALE;
+/**
+ * Server-side counterpart: the preference the request itself carries, or null.
+ *
+ * Null for the same reason `browserLocale` returns it — "asked for English" and
+ * "asked for nothing" are different facts, and only the caller knows what to do
+ * with the second.
+ */
+export function acceptLanguageLocale(header: string | null | undefined): Locale | null {
+  return pickLocale(parseAcceptLanguage(header));
 }

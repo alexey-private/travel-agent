@@ -39,16 +39,27 @@ describe('UserPreferencesRepository — language (integration)', () => {
     await teardownTestDb();
   });
 
-  itDb('defaults to English for a user with no saved preferences', async () => {
+  // null, not 'en': a user who has never chosen a language must stay
+  // distinguishable from one who deliberately chose English, or the web client
+  // cannot tell when it is free to adopt the language the browser asked for.
+  itDb('reports no language for a user with no saved preferences', async () => {
     const prefs = await repo.get('session-no-prefs');
-    expect(prefs.language).toBe('en');
+    expect(prefs.language).toBeNull();
   });
 
-  itDb('defaults to English for a row saved without a language', async () => {
+  itDb('leaves the language unset on a row saved without one', async () => {
     await repo.save('session-partial', { calendarProvider: 'apple' });
     const prefs = await repo.get('session-partial');
-    expect(prefs.language).toBe('en');
+    expect(prefs.language).toBeNull();
     expect(prefs.calendarProvider).toBe('apple');
+  });
+
+  itDb('keeps an explicit English apart from an absent language', async () => {
+    await repo.save('session-explicit-en', { language: 'en' });
+    await repo.save('session-implicit', { calendarProvider: 'apple' });
+
+    expect((await repo.get('session-explicit-en')).language).toBe('en');
+    expect((await repo.get('session-implicit')).language).toBeNull();
   });
 
   itDb('persists Hebrew and reads it back', async () => {

@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/i18n/LanguageProvider";
-import { LANG_COOKIE, dirOf, isLocale } from "@/i18n/config";
-import { headerLocale } from "@/i18n/detectLocale";
+import { DEFAULT_LOCALE, LANG_COOKIE, dirOf, isLocale } from "@/i18n/config";
+import { acceptLanguageLocale } from "@/i18n/detectLocale";
 
 export const metadata: Metadata = {
   title: "Travel Planning Agent",
@@ -24,15 +24,22 @@ export default async function RootLayout({
   // Hebrew from rendering left-to-right for one frame before hydration.
   const store = await cookies();
   const raw = store.get(LANG_COOKIE)?.value;
+  const chosen = isLocale(raw) ? raw : null;
+
   // Nobody has chosen a language yet: Accept-Language is the only reading of
   // the visitor's own preference that arrives in time for the first paint.
   // headers() adds no cost — cookies() above already made this render dynamic.
-  const locale = isLocale(raw) ? raw : headerLocale((await headers()).get("accept-language"));
+  const fromHeader = chosen ? null : acceptLanguageLocale((await headers()).get("accept-language"));
+  const locale = chosen ?? fromHeader ?? DEFAULT_LOCALE;
 
   return (
     <html lang={locale} dir={dirOf(locale)}>
       <body className="antialiased">
-        <LanguageProvider initialLocale={locale}>{children}</LanguageProvider>
+        {/* fromHeader is passed on its own: the provider must be able to tell a
+            request that asked for English from one that asked for nothing. */}
+        <LanguageProvider initialLocale={locale} headerLocale={fromHeader}>
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );

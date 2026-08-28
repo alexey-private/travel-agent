@@ -25,7 +25,7 @@ bidi-переупорядочивания текста в PDF и влияет н
 | Default language for a new visitor | The browser's own language, read from the `Accept-Language` header server-side and from `navigator.language` client-side; `en` only when neither names a supported locale | A first-time Hebrew or Russian speaker should not have to find a switcher in a language they do not read. The header is the same preference `navigator.language` exposes, and only the header arrives in time to render `<html dir>` on the first paint |
 | Механизм i18n на фронте | Свой провайдер + localStorage/cookie, **без** `/[locale]/` в URL | 4 страницы, SPA-чат без SEO-требований; next-intl потребовал бы переноса всего `app/` в `[locale]`, правок Dockerfile и тестов ради выгоды, которой здесь нет |
 | Язык ответов агента | Язык из настроек + правило «если пользователь пишет на другом языке — отвечай на нём» | Предсказуемо для push/бота, но не раздражает при смешанном вводе |
-| Хранение языка | `user_service_preferences.language` (ключ — `session_id`) | Таблица уже читается в hot-path `/api/chat` (`prefRepo.get`) и уже отдаётся через `/api/settings`; отдельная колонка в `users` создала бы второй дом для настроек и лишний запрос |
+| Хранение языка | `user_service_preferences.language` (ключ — `session_id`), nullable: `NULL` = язык ни разу не выбран | Таблица уже читается в hot-path `/api/chat` (`prefRepo.get`) и уже отдаётся через `/api/settings`; отдельная колонка в `users` создала бы второй дом для настроек и лишний запрос |
 | Названия календарей/списков задач | Остаются английскими (`Travel Agent`, `Travel Plans`, `Shopping`) | Это идентификаторы внешних сущностей в Google/Apple; смена языка UI не должна отвязывать пользователя от уже созданного списка. Переименование доступно вручную в `/settings` |
 | Англоязычные строки ошибок tools | Остаются в коде на английском; агент обязан пересказывать их на языке пользователя (правило в промпте). Отдельно локализуются HTTP-ошибки, которые фронт показывает **мимо** LLM | Строки ошибок — часть контракта с LLM и покрыты ~50 ассертами в тестах; их перевод ухудшил бы reasoning и сломал тесты без выигрыша для пользователя |
 | RAG seed-база (60 документов) | Остаётся английской, переводится агентом на лету | Перевод базы — отдельная задача с отдельной ценой; `voyage-3-lite` мультиязычный, кросс-языковой retrieval работает (см. риски) |
@@ -105,22 +105,36 @@ Language is resolved from the first source that names a supported locale:
 | 1 | `lang` cookie | server component (`app/layout.tsx`) |
 | 2 | `localStorage.lang` | `LanguageProvider` effect |
 | 3 | `user_service_preferences.language` via `GET /api/settings` | `LanguageProvider` effect |
-| 4 | **browser language** | server: `Accept-Language`; client: `navigator.language` |
-| 5 | `DEFAULT_LOCALE` (`en`) | both |
+| 4 | `Accept-Language` header | server component, passed to the provider |
+| 5 | `navigator.language(s)` | `LanguageProvider` effect |
+| 6 | `DEFAULT_LOCALE` (`en`) | both |
 
 The first three are explicit choices and outrank the browser, which is only a
 guess: a user who picked Hebrew in the Telegram bot gets Hebrew on the web even
 from an English-configured browser.
 
-**Why the header and not only `navigator.language`.** `navigator` exists only
-after hydration. Deriving the default there would render one frame of
-left-to-right English to every Hebrew-speaking first-time visitor — the exact
-flash §4.3 exists to prevent. `Accept-Language` carries the same preference and
-arrives with the request, so `<html lang dir>` is right in the first byte.
-`navigator.language` stays as the client-side fallback for the case where the
-header is absent or stripped by a proxy; it is consulted only when the server
-fell back to `DEFAULT_LOCALE`, since otherwise both readings describe the same
-setting and disagreeing with the server would only cost a re-render.
+**Step 3 needs `language` to be nullable.** As shipped in migration 015 the
+column was `NOT NULL DEFAULT 'en'`, so "never chose a language" and "chose
+English" read identically, and a Hebrew visitor would be handed the default and
+switched to English. Migration 016 drops the default and the NOT NULL: `NULL`
+means "not chosen", and every reader applies its own default at the point of
+use. Rows written before 016 keep their `'en'` and read as an explicit choice —
+the honest reading of the data that exists.
+
+**Why the header outranks `navigator.language`.** Two reasons. It is the more
+appropriate signal — `Accept-Language` is the visitor stating which language
+they want content in, while `navigator.language` reports the language the
+browser's own interface happens to be in; the two can differ. And it is the only
+one that arrives in time: `navigator` exists only after hydration, so deriving
+the default from it alone would render one frame of left-to-right English to
+every Hebrew-speaking first-time visitor — the exact flash §4.3 exists to
+prevent. `navigator` is therefore the fallback, used when no header reached us:
+stripped by a proxy, or naming no language we support.
+
+The layout passes the header result to the provider as its own prop rather than
+letting the provider infer it from the rendered locale. `en` from a header and
+`en` from having no header are different facts, and only the second leaves
+`navigator` anything to decide.
 
 **Matching is on the primary subtag.** `he-IL`, `he`, and the legacy `iw` all
 select Hebrew; a region we do not distinguish must never cost a match.
@@ -130,10 +144,15 @@ select Hebrew; a region we do not distinguish must never cost a match.
 **The detected language is persisted, not re-derived per session.** On the first
 visit it is written straight to the cookie, to `localStorage`, and to
 `user_service_preferences.language` via `POST /api/settings` — exactly as an
-explicit choice is. Nothing is overwritten by this: step 4 is only reached once
-steps 1-3 have all come back empty, so there is no stored preference to lose.
-Persisting it is what lets the Telegram bot and push notifications speak the
-right language to a user who has only ever opened the web app.
+explicit choice is. Nothing is overwritten by this: steps 4-5 are only reached
+once steps 1-3 have all come back empty, so there is no stored preference to
+lose. Persisting it is what lets the Telegram bot and push notifications speak
+the right language to a user who has only ever opened the web app.
+
+The one case that is *not* persisted is a backend that never answered. The
+language still applies to the page, but writing the cookie then would pin the
+guess: the server reads the cookie on every later visit, so the effect would
+never run again and a language stored elsewhere would never get its turn.
 
 From then on the stored value is the source of truth. `/settings` carries a
 language section where the user can override it; that write goes to the same

@@ -50,9 +50,16 @@ function pushToBackend(locale: Locale): void {
 
 export function LanguageProvider({
   initialLocale,
+  headerLocale = null,
   children,
 }: {
   initialLocale: Locale;
+  /**
+   * What the request's Accept-Language asked for, or null if it asked for
+   * nothing we support. Only meaningful on a cookieless first visit, where
+   * `initialLocale` is this value and carries no other information.
+   */
+  headerLocale?: Locale | null;
   children: ReactNode;
 }) {
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
@@ -113,19 +120,22 @@ export function LanguageProvider({
       }
       if (cancelled) return;
 
-      // Last resort, and only for a visitor nobody has a language for yet. The
-      // server already read Accept-Language; navigator carries the same
-      // preference, so it gets a say only where the server had no header to go
-      // on and fell back to the hard default. Otherwise the two readings agree
-      // and re-deciding here would just cost a re-render.
-      const detected = initialLocale === DEFAULT_LOCALE ? browserLocale() : null;
-      const next = saved ?? detected;
+      // No cookie means nothing on this device has decided yet, so what is left
+      // is detection. Accept-Language comes first: it is the visitor saying
+      // which language they want content in, whereas navigator.language reports
+      // the language the browser's own interface happens to be in. navigator
+      // covers the case where no header reached us — stripped by a proxy, or
+      // simply absent. A stored choice outranks both.
+      const next = saved ?? headerLocale ?? browserLocale() ?? initialLocale;
 
-      // setLocale, not writeCookie: a detected language is stored like a chosen
-      // one, so /settings, the Telegram bot and push all speak it from the
-      // first visit, and later sessions read it back instead of guessing again.
-      if (next && next !== initialLocale) setLocale(next);
-      else if (answered) writeCookie(initialLocale);
+      // setLocale, not writeCookie: a detected language is stored exactly like a
+      // chosen one — cookie, localStorage and the backend — so /settings, the
+      // Telegram bot and push all speak it from the first visit, and every later
+      // session reads it back instead of guessing again. Only once the backend
+      // has answered, though: persisting against an unreachable backend would
+      // pin a guess here that a language stored elsewhere could never override.
+      if (answered) setLocale(next);
+      else if (next !== initialLocale) setLocaleState(next);
     })();
 
     return () => {

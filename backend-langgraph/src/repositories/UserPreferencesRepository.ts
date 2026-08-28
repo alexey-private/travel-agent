@@ -1,5 +1,5 @@
 import { BaseRepository } from './BaseRepository';
-import { Locale, DEFAULT_LOCALE } from '../i18n/locale';
+import { Locale, isLocale } from '../i18n/locale';
 
 interface UserPreferencesRow {
   calendar_provider: string;
@@ -7,7 +7,7 @@ interface UserPreferencesRow {
   shopping_calendar_name: string;
   task_list_name: string;
   shopping_task_list_name: string;
-  language: string;
+  language: string | null;
 }
 
 export interface UserPreferences {
@@ -16,7 +16,8 @@ export interface UserPreferences {
   shoppingCalendarName: string;
   taskListName: string;
   shoppingTaskListName: string;
-  language: Locale;
+  /** null when the user has never chosen one — readers apply their own default. */
+  language: Locale | null;
 }
 
 const DEFAULTS: UserPreferences = {
@@ -25,7 +26,7 @@ const DEFAULTS: UserPreferences = {
   shoppingCalendarName: 'Shopping',
   taskListName: 'Travel Plans',
   shoppingTaskListName: 'Shopping',
-  language: DEFAULT_LOCALE,
+  language: null,
 };
 
 export class UserPreferencesRepository extends BaseRepository {
@@ -43,7 +44,7 @@ export class UserPreferencesRepository extends BaseRepository {
       shoppingCalendarName: row.shopping_calendar_name,
       taskListName: row.task_list_name,
       shoppingTaskListName: row.shopping_task_list_name,
-      language: row.language as Locale,
+      language: isLocale(row.language) ? row.language : null,
     };
   }
 
@@ -59,7 +60,7 @@ export class UserPreferencesRepository extends BaseRepository {
          COALESCE($4, 'Shopping'),
          COALESCE($5, 'Travel Plans'),
          COALESCE($6, 'Shopping'),
-         COALESCE($7, 'en'),
+         $7,
          NOW()
        )
        ON CONFLICT (user_id) DO UPDATE
