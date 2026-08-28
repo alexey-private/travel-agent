@@ -10,6 +10,7 @@ import {
   isLocale,
   type Locale,
 } from "./config";
+import { browserLocale } from "./detectLocale";
 import { DICTIONARIES, type TKey } from "./dictionaries";
 import { translate } from "./translate";
 import type { TVars } from "./types";
@@ -97,17 +98,34 @@ export function LanguageProvider({
 
     let cancelled = false;
     (async () => {
+      let answered = false;
+      let saved: Locale | null = null;
       try {
         const userId = getOrCreateUserId();
         const res = await fetch(`${API_URL}/api/settings?userId=${encodeURIComponent(userId)}`);
-        if (!res.ok) return;
-        const data: { language?: unknown } = await res.json();
-        if (cancelled) return;
-        if (isLocale(data.language) && data.language !== initialLocale) setLocale(data.language);
-        else writeCookie(initialLocale);
+        if (res.ok) {
+          answered = true;
+          const data: { language?: unknown } = await res.json();
+          if (isLocale(data.language)) saved = data.language;
+        }
       } catch {
-        // offline or no backend — the default locale is already rendered
+        // offline or no backend — the browser's own language still applies
       }
+      if (cancelled) return;
+
+      // Last resort, and only for a visitor nobody has a language for yet. The
+      // server already read Accept-Language; navigator carries the same
+      // preference, so it gets a say only where the server had no header to go
+      // on and fell back to the hard default. Otherwise the two readings agree
+      // and re-deciding here would just cost a re-render.
+      const detected = initialLocale === DEFAULT_LOCALE ? browserLocale() : null;
+      const next = saved ?? detected;
+
+      // setLocale, not writeCookie: a detected language is stored like a chosen
+      // one, so /settings, the Telegram bot and push all speak it from the
+      // first visit, and later sessions read it back instead of guessing again.
+      if (next && next !== initialLocale) setLocale(next);
+      else if (answered) writeCookie(initialLocale);
     })();
 
     return () => {

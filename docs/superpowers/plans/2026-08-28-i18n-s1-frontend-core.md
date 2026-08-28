@@ -1258,6 +1258,352 @@ git commit -m "feat(i18n): adopt the server-side language on a cookieless first 
 
 ---
 
+### Task 8: Browser language as the default for a new visitor
+
+*(Added 2026-08-28, after S1 shipped. Written in English per the project rule
+that specs, plans and technical docs are English.)*
+
+**Files:**
+- Create: `frontend/src/i18n/detectLocale.ts`
+- Modify: `frontend/src/app/layout.tsx`
+- Modify: `frontend/src/i18n/LanguageProvider.tsx`
+- Test: `frontend/src/__tests__/i18n/detectLocale.test.ts` (new)
+- Test: `frontend/src/__tests__/i18n/LanguageProvider.test.tsx` (extend)
+
+**Interfaces:**
+- Consumes: `Locale`, `isLocale`, `DEFAULT_LOCALE` (Task 1); `setLocale` (Task 3).
+- Produces: `parseAcceptLanguage(header: string | null | undefined): string[]`,
+  `pickLocale(tags: readonly string[]): Locale | null`,
+  `browserLocale(): Locale | null`, `headerLocale(header): Locale`.
+
+**Why:** `DEFAULT_LOCALE` is `en`, so a first-time Hebrew or Russian speaker
+lands on an English page and has to find a switcher labelled in a language they
+may not read. The browser already knows which language they want.
+
+**Resolution order** (first source naming a supported locale wins):
+`lang` cookie -> `localStorage.lang` -> `GET /api/settings` -> browser language
+-> `en`. The first three are explicit choices and outrank the browser, which is
+a guess; a user who chose Hebrew in the Telegram bot keeps Hebrew even on an
+English-configured browser.
+
+**Two readings of one preference.** `navigator` exists only after hydration, so
+deriving the default there alone shows one frame of LTR English to every Hebrew
+first-time visitor - the flash Task 4 exists to prevent. `Accept-Language`
+carries the same preference and arrives with the request. `navigator.language`
+remains the client-side fallback for a stripped header, consulted only when the
+server fell back to `DEFAULT_LOCALE`.
+
+**Persistence.** Once detected, the language is written to the cookie, to
+`localStorage` and to `POST /api/settings` exactly like an explicit choice -
+step 4 is only reached after 1-3 came back empty, so nothing is overwritten, and
+persisting it is what lets Telegram and push speak the right language. Every
+later session then reads the stored value; the browser is not consulted again.
+The user can override it in `/settings`, which writes to the same three places.
+
+- [ ] **Step 1: Write the failing tests for the parser**
+
+Create `frontend/src/__tests__/i18n/detectLocale.test.ts`:
+
+```ts
+import { parseAcceptLanguage, pickLocale } from "@/i18n/detectLocale";
+
+describe("parseAcceptLanguage", () => {
+  it("returns an empty list for a missing header", () => {
+    expect(parseAcceptLanguage(null)).toEqual([]);
+    expect(parseAcceptLanguage("")).toEqual([]);
+  });
+
+  it("orders tags by descending q-weight", () => {
+    expect(parseAcceptLanguage("en;q=0.9, he, ru;q=0.5")).toEqual(["he", "en", "ru"]);
+  });
+
+  it("drops entries the client explicitly refused", () => {
+    expect(parseAcceptLanguage("he;q=0, en")).toEqual(["en"]);
+  });
+});
+
+describe("pickLocale", () => {
+  it("matches on the primary subtag", () => {
+    expect(pickLocale(["he-IL"])).toBe("he");
+    expect(pickLocale(["ru-RU"])).toBe("ru");
+  });
+
+  it("accepts the legacy Hebrew code", () => {
+    expect(pickLocale(["iw-IL"])).toBe("he");
+  });
+
+  it("skips unsupported tags and takes the first supported one", () => {
+    expect(pickLocale(["fr-FR", "de", "ru"])).toBe("ru");
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(pickLocale(["fr", "de"])).toBeNull();
+    expect(pickLocale([])).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+```bash
+npm run test --workspace=frontend -- i18n/detectLocale
+```
+Expected: FAIL - `Cannot find module '@/i18n/detectLocale'`.
+
+- [ ] **Step 3: Write the module**
+
+Create `frontend/src/i18n/detectLocale.ts`:
+
+```ts
+import { DEFAULT_LOCALE, isLocale, type Locale } from "./config";
+
+/** `iw` is the pre-1989 code for Hebrew, still emitted by some older clients. */
+const PRIMARY_SUBTAG_ALIASES: Record<string, Locale> = { iw: "he" };
+
+/**
+ * Splits an Accept-Language header into tags, best first.
+ *
+ * The header is not written in preference order - order comes from the
+ * q-weights, so `en;q=0.9, he` means Hebrew first. A weight of zero is an
+ * explicit refusal and drops the tag entirely.
+ */
+export function parseAcceptLanguage(header: string | null | undefined): string[] {
+  if (!header) return [];
+  return header
+    .split(",")
+    .map((part) => {
+      const [tag, ...params] = part.trim().split(";");
+      const q = params.map((p) => p.trim()).find((p) => p.startsWith("q="));
+      const weight = q ? Number.parseFloat(q.slice(2)) : 1;
+      return { tag: tag.trim(), weight: Number.isFinite(weight) ? weight : 0 };
+    })
+    .filter((entry) => entry.tag !== "" && entry.weight > 0)
+    .sort((a, b) => b.weight - a.weight)
+    .map((entry) => entry.tag);
+}
+
+/**
+ * The first supported locale among an ordered list of BCP-47 tags, or null.
+ *
+ * Matching is on the primary subtag alone: we do not distinguish `he-IL` from
+ * `he`, and a region must never cost a match.
+ */
+export function pickLocale(tags: readonly string[]): Locale | null {
+  for (const tag of tags) {
+    const primary = tag.split("-")[0]?.toLowerCase();
+    if (!primary) continue;
+    const candidate = PRIMARY_SUBTAG_ALIASES[primary] ?? primary;
+    if (isLocale(candidate)) return candidate;
+  }
+  return null;
+}
+
+/** The browser's own language preference, or null outside a browser. */
+export function browserLocale(): Locale | null {
+  if (typeof navigator === "undefined") return null;
+  const tags = navigator.languages?.length ? navigator.languages : [navigator.language];
+  return pickLocale(tags.filter(Boolean));
+}
+
+/** Server-side counterpart: the same preference, read from the request. */
+export function headerLocale(header: string | null | undefined): Locale {
+  return pickLocale(parseAcceptLanguage(header)) ?? DEFAULT_LOCALE;
+}
+```
+
+- [ ] **Step 4: Run them and watch them pass**
+
+```bash
+npm run test --workspace=frontend -- i18n/detectLocale
+```
+Expected: PASS, 7 tests.
+
+- [ ] **Step 5: Read the header in the root layout**
+
+In `frontend/src/app/layout.tsx`, add the imports and replace the locale line:
+
+```tsx
+import { cookies, headers } from "next/headers";
+import { headerLocale } from "@/i18n/detectLocale";
+
+  const store = await cookies();
+  const raw = store.get(LANG_COOKIE)?.value;
+  // No cookie yet: the request's own Accept-Language is the only signal that
+  // arrives in time to render <html dir> correctly on the very first paint.
+  const locale = isLocale(raw) ? raw : headerLocale((await headers()).get("accept-language"));
+```
+
+`headers()` costs nothing extra here - `cookies()` above already forces this
+layout into dynamic rendering (spec 4.3).
+
+- [ ] **Step 6: Write the failing provider tests**
+
+Append to `frontend/src/__tests__/i18n/LanguageProvider.test.tsx`:
+
+```tsx
+  function setNavigatorLanguages(tags: string[]) {
+    Object.defineProperty(window.navigator, "languages", {
+      value: tags,
+      configurable: true,
+    });
+    Object.defineProperty(window.navigator, "language", {
+      value: tags[0] ?? "en-US",
+      configurable: true,
+    });
+  }
+
+  it("falls back to the browser language when nothing is stored anywhere", async () => {
+    setNavigatorLanguages(["he-IL", "en-US"]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="en">
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("he");
+  });
+
+  it("persists the detected language so Telegram and push agree with the web", async () => {
+    setNavigatorLanguages(["ru-RU"]);
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="en">
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(document.cookie).toContain("lang=ru");
+    expect(window.localStorage.getItem("lang")).toBe("ru");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/settings?userId=session-test"),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("lets a stored choice outrank the browser language", async () => {
+    setNavigatorLanguages(["he-IL"]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ language: "ru" }),
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="en">
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("ru");
+  });
+
+  it("does not second-guess a server that already read the header", async () => {
+    setNavigatorLanguages(["he-IL"]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      render(
+        <LanguageProvider initialLocale="ru">
+          <Probe />
+        </LanguageProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("ru");
+  });
+```
+
+- [ ] **Step 7: Run them and watch them fail**
+
+```bash
+npm run test --workspace=frontend -- i18n/LanguageProvider
+```
+Expected: FAIL on the first three - the provider never consults `navigator`.
+
+- [ ] **Step 8: Extend the provider effect**
+
+In `frontend/src/i18n/LanguageProvider.tsx`, replace the async block inside the
+cookieless effect:
+
+```tsx
+    let cancelled = false;
+    (async () => {
+      let answered = false;
+      let stored: Locale | null = null;
+      try {
+        const userId = getOrCreateUserId();
+        const res = await fetch(`${API_URL}/api/settings?userId=${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const data: { language?: unknown } = await res.json();
+          answered = true;
+          if (isLocale(data.language)) stored = data.language;
+        }
+      } catch {
+        // offline or no backend - the browser's own language still applies
+      }
+      if (cancelled) return;
+
+      // The server already derived initialLocale from Accept-Language. Only when
+      // it had no usable header and fell back to the hard default does
+      // navigator.language get a say: otherwise both are readings of the same
+      // preference, and disagreeing with the server just costs a re-render.
+      const detected = initialLocale === DEFAULT_LOCALE ? browserLocale() : null;
+      const next = stored ?? detected;
+
+      if (next && next !== initialLocale) setLocale(next);
+      else if (answered) writeCookie(initialLocale);
+    })();
+```
+
+Note `setLocale` - not `writeCookie` - for the detected language: it is meant to
+reach the backend, so `/settings`, Telegram and push all agree from the first
+visit.
+
+- [ ] **Step 9: Run them and watch them pass**
+
+```bash
+npm run test --workspace=frontend -- i18n/LanguageProvider
+```
+Expected: PASS.
+
+- [ ] **Step 10: Full check**
+
+```bash
+npm run test --workspace=frontend
+npx tsc -p frontend/tsconfig.json --noEmit
+npm run lint --workspace=frontend
+npm run build --workspace=frontend
+```
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add frontend/src/i18n/detectLocale.ts frontend/src/app/layout.tsx \
+        frontend/src/i18n/LanguageProvider.tsx frontend/src/__tests__/i18n/ \
+        docs/superpowers/specs docs/superpowers/plans
+git commit -m "feat(i18n): default a new visitor to their browser's language"
+```
+
+---
+
 ## Определение готовности S1
 
 - [ ] `npm run test --workspace=frontend` — зелёный, включая ~25 новых тестов
@@ -1266,5 +1612,6 @@ git commit -m "feat(i18n): adopt the server-side language on a cookieless first 
 - [ ] В четырёх шапках виден переключатель языков
 - [ ] Выбор иврита ставит `lang="he" dir="rtl"` на `<html>` и переживает перезагрузку
 - [ ] Выбор языка виден в `GET /api/settings?userId=…`
+- [ ] A first visit from a Hebrew-configured browser renders Hebrew, and the detected language is visible in `GET /api/settings?userId=…`
 - [ ] В `frontend/src/components` и `frontend/src/app` не осталось захардкоженных пользовательских строк, кроме дефолта `ErrorBoundary`
 - [ ] `/code-review` пройден, находки закрыты, отчёт по осям Standards / Spec

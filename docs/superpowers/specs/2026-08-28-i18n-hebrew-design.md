@@ -22,6 +22,7 @@ bidi-переупорядочивания текста в PDF и влияет н
 | Вопрос | Решение | Причина |
 |---|---|---|
 | Набор языков | `en` + `he` + `ru` | Английский как fallback, иврит проверяет RTL, русский — не-латиницу без RTL |
+| Default language for a new visitor | The browser's own language, read from the `Accept-Language` header server-side and from `navigator.language` client-side; `en` only when neither names a supported locale | A first-time Hebrew or Russian speaker should not have to find a switcher in a language they do not read. The header is the same preference `navigator.language` exposes, and only the header arrives in time to render `<html dir>` on the first paint |
 | Механизм i18n на фронте | Свой провайдер + localStorage/cookie, **без** `/[locale]/` в URL | 4 страницы, SPA-чат без SEO-требований; next-intl потребовал бы переноса всего `app/` в `[locale]`, правок Dockerfile и тестов ради выгоды, которой здесь нет |
 | Язык ответов агента | Язык из настроек + правило «если пользователь пишет на другом языке — отвечай на нём» | Предсказуемо для push/бота, но не раздражает при смешанном вводе |
 | Хранение языка | `user_service_preferences.language` (ключ — `session_id`) | Таблица уже читается в hot-path `/api/chat` (`prefRepo.get`) и уже отдаётся через `/api/settings`; отдельная колонка в `users` создала бы второй дом для настроек и лишний запрос |
@@ -94,6 +95,50 @@ t('memory.itemsCount', { count: n })        // плюрализация чере
 
 `LanguageProvider` — client component, инициализируется значением из cookie,
 переданным пропом из layout, поэтому SSR и первый клиентский рендер совпадают.
+
+### 4.3.1 Default language on a first visit
+
+Language is resolved from the first source that names a supported locale:
+
+| # | Source | Read by |
+|---|---|---|
+| 1 | `lang` cookie | server component (`app/layout.tsx`) |
+| 2 | `localStorage.lang` | `LanguageProvider` effect |
+| 3 | `user_service_preferences.language` via `GET /api/settings` | `LanguageProvider` effect |
+| 4 | **browser language** | server: `Accept-Language`; client: `navigator.language` |
+| 5 | `DEFAULT_LOCALE` (`en`) | both |
+
+The first three are explicit choices and outrank the browser, which is only a
+guess: a user who picked Hebrew in the Telegram bot gets Hebrew on the web even
+from an English-configured browser.
+
+**Why the header and not only `navigator.language`.** `navigator` exists only
+after hydration. Deriving the default there would render one frame of
+left-to-right English to every Hebrew-speaking first-time visitor — the exact
+flash §4.3 exists to prevent. `Accept-Language` carries the same preference and
+arrives with the request, so `<html lang dir>` is right in the first byte.
+`navigator.language` stays as the client-side fallback for the case where the
+header is absent or stripped by a proxy; it is consulted only when the server
+fell back to `DEFAULT_LOCALE`, since otherwise both readings describe the same
+setting and disagreeing with the server would only cost a re-render.
+
+**Matching is on the primary subtag.** `he-IL`, `he`, and the legacy `iw` all
+select Hebrew; a region we do not distinguish must never cost a match.
+`Accept-Language` is parsed with its q-weights and read in descending order, so
+`en;q=0.9, he` yields Hebrew.
+
+**The detected language is persisted, not re-derived per session.** On the first
+visit it is written straight to the cookie, to `localStorage`, and to
+`user_service_preferences.language` via `POST /api/settings` — exactly as an
+explicit choice is. Nothing is overwritten by this: step 4 is only reached once
+steps 1-3 have all come back empty, so there is no stored preference to lose.
+Persisting it is what lets the Telegram bot and push notifications speak the
+right language to a user who has only ever opened the web app.
+
+From then on the stored value is the source of truth. `/settings` carries a
+language section where the user can override it; that write goes to the same
+three places, so every later session starts from the stored language and the
+browser's own setting is never consulted again.
 
 ### 4.4 Переключатель языков
 

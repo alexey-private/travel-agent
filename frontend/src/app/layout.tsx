@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/i18n/LanguageProvider";
-import { DEFAULT_LOCALE, LANG_COOKIE, dirOf, isLocale } from "@/i18n/config";
+import { LANG_COOKIE, dirOf, isLocale } from "@/i18n/config";
+import { headerLocale } from "@/i18n/detectLocale";
 
 export const metadata: Metadata = {
   title: "Travel Planning Agent",
@@ -23,7 +24,10 @@ export default async function RootLayout({
   // Hebrew from rendering left-to-right for one frame before hydration.
   const store = await cookies();
   const raw = store.get(LANG_COOKIE)?.value;
-  const locale = isLocale(raw) ? raw : DEFAULT_LOCALE;
+  // Nobody has chosen a language yet: Accept-Language is the only reading of
+  // the visitor's own preference that arrives in time for the first paint.
+  // headers() adds no cost — cookies() above already made this render dynamic.
+  const locale = isLocale(raw) ? raw : headerLocale((await headers()).get("accept-language"));
 
   return (
     <html lang={locale} dir={dirOf(locale)}>
