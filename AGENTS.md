@@ -52,6 +52,8 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/repositories/ConversationRepository.ts](backend-langgraph/src/repositories/ConversationRepository.ts) | All DB: messages, history, vector search |
 | [backend-langgraph/src/routes/chat.ts](backend-langgraph/src/routes/chat.ts) | POST /api/chat — SSE streaming endpoint |
 | [backend-langgraph/src/routes/auth.ts](backend-langgraph/src/routes/auth.ts) | Google OAuth2 status/callback/disconnect |
+| [backend-langgraph/src/security/internalAuth.ts](backend-langgraph/src/security/internalAuth.ts) | Guards the `tg-` half of the user-id namespace — a Telegram id is public, so it answers only to the bridge; see [Telegram Bridge Authentication](#telegram-bridge-authentication-critical) |
+| [backend-telegram/src/backendAuth.ts](backend-telegram/src/backendAuth.ts) | The bot's half of that guard: `internalHeaders()` on every backend call, `signStartLink()` for the `/connect` link |
 | [backend-langgraph/src/db/migrations/](backend-langgraph/src/db/migrations/) | Numbered SQL migrations |
 | [backend-langgraph/src/db/backfill-embeddings.ts](backend-langgraph/src/db/backfill-embeddings.ts) | One-time embedding backfill with retry |
 | [frontend/src/components/ChatWindow.tsx](frontend/src/components/ChatWindow.tsx) | Main chat UI — SSE consumer, message state |
@@ -188,6 +190,35 @@ Indentation under `rtl` comes off a narrower column, not from pdfkit's `indent`,
 which only ever pushes from the left. Bold is dropped inside right-to-left text:
 emphasis needs `continued`, which cannot coexist with breaking the lines
 ourselves. Code blocks stay left-to-right always.
+
+---
+
+## Telegram Bridge Authentication (CRITICAL)
+
+A web session id is `crypto.randomUUID()` — unguessable, and unguessability is
+the whole of its security: any request naming it is served. A Telegram session
+id is `tg-<telegram user id>`, derived from a public integer, so the same design
+protects one half of the namespace and exposes the other.
+
+`INTERNAL_API_SECRET`, held by `backend-langgraph` and `backend-telegram` alike,
+is what closes it. Three rules follow:
+
+- **Every bot→backend call carries `internalHeaders()`.** One that forgets is
+  not subtly wrong, it is a 403. The header is checked by a global `preHandler`
+  hook that fires whenever a request names a `tg-` id in its params, query or
+  body — so a new route needs no opt-in, and a new bot call does need the header.
+- **`/api/users/telegram` is bridge-only regardless of ids.** It returns every
+  Telegram session id in the database; unauthenticated, it handed an attacker
+  the list of victims.
+- **The `/connect` link is signed, not headered.** A browser follows it, so the
+  proof travels in the query string (`exp` + `sig` over id, platform and
+  expiry). The two OAuth routes are exempt from the hook for exactly this
+  reason, and `state` is separately signed with the Google client secret so the
+  callback cannot be retargeted at another user's id.
+
+Missing secret ⇒ the backend logs an error at boot and answers 503 for anything
+Telegram-scoped. It fails closed on purpose: the alternative is a silent
+reopening of the hole.
 
 ---
 

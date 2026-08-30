@@ -14,7 +14,10 @@ describe('bot language resolution', () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({ language: 'he' }) });
     const c = ctx();
     await expect(getLocale(c)).resolves.toBe('he');
-    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('userId=tg-42'));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('userId=tg-42'),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
   });
 
   it('caches the language in the session', async () => {

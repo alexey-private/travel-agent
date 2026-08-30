@@ -17,3 +17,11 @@ export const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3002';
  * (like /connect's OAuth link) must use a publicly reachable URL instead.
  */
 export const BACKEND_PUBLIC_URL = process.env.BACKEND_PUBLIC_URL ?? BACKEND_URL;
+
+/**
+ * Shared with backend-langgraph. The backend will not answer for a `tg-` session
+ * id without it, because such an id is derived from a public Telegram user id
+ * and cannot protect anything on its own. Unset means every backend call this
+ * bot makes comes back 403.
+ */
+export const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET ?? '';

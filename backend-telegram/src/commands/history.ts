@@ -1,6 +1,7 @@
 import type { Bot } from 'grammy';
 import type { BotContext } from '../types';
 import { BACKEND_URL } from '../config';
+import { internalHeaders } from '../backendAuth';
 import { ensureSessionId } from '../session';
 import { tFor } from '../i18n/language';
 
@@ -31,6 +32,7 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
       try {
         const listRes = await fetch(
           `${BACKEND_URL}/api/conversations/${encodeURIComponent(sessionId!)}?agentType=${ctx.session.agentType}`,
+          { headers: internalHeaders() },
         );
         if (listRes.ok) {
           const listData = await listRes.json() as { conversations: Array<{ id: string }> };
@@ -51,6 +53,7 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
       const res = await fetch(
         `${BACKEND_URL}/api/conversations/${encodeURIComponent(sessionId!)}/` +
         `${encodeURIComponent(resolvedConversationId)}/messages`,
+        { headers: internalHeaders() },
       );
       if (!res.ok) throw new Error(`Backend error: ${res.status}`);
       const data = await res.json() as { messages: Message[] };

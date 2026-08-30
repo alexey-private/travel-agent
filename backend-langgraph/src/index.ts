@@ -20,6 +20,7 @@ import { transcribeRoutes } from './routes/transcribe';
 import { userRoutes } from './routes/users';
 import { pushRoutes } from './routes/push';
 import { startWebPushCron } from './notifier/web-push.cron';
+import { registerInternalAuth } from './security/internalAuth';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -58,6 +59,8 @@ async function bootstrap(): Promise<void> {
   // global: false — only routes that set config.rateLimit are limited.
   // hook: 'preHandler' — body is parsed at this stage, so keyGenerator can read req.body.userId.
   await fastify.register(rateLimit, { global: false, hook: 'preHandler' });
+  // Before any route is registered: a hook only guards what comes after it.
+  registerInternalAuth(fastify, env.INTERNAL_API_SECRET);
 
   // Shared singletons — created once at startup, reused across all requests
   const pool = getPool();
@@ -110,6 +113,7 @@ async function bootstrap(): Promise<void> {
       clientId: googleConfig.clientId,
       clientSecret: googleConfig.clientSecret,
       redirectUri: googleConfig.redirectUri,
+      internalSecret: env.INTERNAL_API_SECRET,
     });
     fastify.log.info('Google Calendar OAuth2 routes registered');
   }

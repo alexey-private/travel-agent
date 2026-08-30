@@ -40,6 +40,12 @@ const envSchema = z.object({
   // iCloud credentials encryption
   ENCRYPTION_KEY: z.string().optional(),
 
+  // Shared with backend-telegram. A Telegram session id is derived from a public
+  // Telegram user id, so it cannot double as a bearer capability the way a web
+  // UUID does — this secret is what makes that half of the namespace addressable
+  // by the bridge alone. See src/security/internalAuth.ts.
+  INTERNAL_API_SECRET: z.string().optional(),
+
   // Web Push (VAPID)
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),

@@ -1,4 +1,5 @@
 import { BACKEND_URL } from './config';
+import { internalHeaders } from './backendAuth';
 import { DEFAULT_LOCALE, type Locale } from './i18n/config';
 import { t } from './i18n/t';
 
@@ -47,7 +48,7 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
   try {
     response = await fetch(`${BACKEND_URL}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: internalHeaders({ 'Content-Type': 'application/json' }),
       body,
     });
   } catch (err) {

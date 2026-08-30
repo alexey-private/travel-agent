@@ -93,7 +93,9 @@ export const en = {
     'To enable Google Calendar and Tasks, open this link in your browser:\n\n' +
     '<code>{url}</code>\n\n' +
     'After you approve access, come back here and try /calendar again.\n\n' +
-    '<i>This link is personal — do not share it.</i>',
+    '<i>This link is personal and expires in a few minutes — do not share it.</i>',
+  'connect.notConfigured':
+    'Connecting Google is unavailable right now: this bot is not configured to reach the backend securely. Please tell the administrator.',
 
   // ── /travel, /shopping ────────────────────────────────────────
   'agent.switchedTravel':

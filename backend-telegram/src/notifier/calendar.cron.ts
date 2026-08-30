@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import type { Api } from 'grammy';
 import { BACKEND_URL } from '../config';
+import { internalHeaders } from '../backendAuth';
 import { fetchLocale } from '../i18n/language';
 import { t } from '../i18n/t';
 import type { Locale } from '../i18n/config';
@@ -32,8 +33,8 @@ function isTomorrow(dateStr: string | undefined): boolean {
 
 async function fetchTomorrowReminders(sessionId: string): Promise<{ events: CalendarEvent[]; tasks: Task[] }> {
   const [eventsRes, tasksRes] = await Promise.all([
-    fetch(`${BACKEND_URL}/api/calendar/events?userId=${encodeURIComponent(sessionId)}`),
-    fetch(`${BACKEND_URL}/api/calendar/tasks?userId=${encodeURIComponent(sessionId)}`),
+    fetch(`${BACKEND_URL}/api/calendar/events?userId=${encodeURIComponent(sessionId)}`, { headers: internalHeaders() }),
+    fetch(`${BACKEND_URL}/api/calendar/tasks?userId=${encodeURIComponent(sessionId)}`, { headers: internalHeaders() }),
   ]);
 
   const eventsData = eventsRes.ok ? (await eventsRes.json() as { upcoming?: CalendarEvent[]; events?: CalendarEvent[] }) : {};
@@ -77,7 +78,7 @@ export function startCalendarCron(api: Api): void {
 
     let sessionIds: string[];
     try {
-      const res = await fetch(`${BACKEND_URL}/api/users/telegram`);
+      const res = await fetch(`${BACKEND_URL}/api/users/telegram`, { headers: internalHeaders() });
       if (!res.ok) throw new Error(`Backend error: ${res.status}`);
       const data = await res.json() as { sessionIds: string[] };
       sessionIds = data.sessionIds;

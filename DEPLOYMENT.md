@@ -81,6 +81,7 @@ once the container is up.
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
 | `NEXT_PUBLIC_FRONTEND_URL` | `https://<frontend-service-domain>` — required if using Google Calendar/Tasks (see below) |
 | `ENCRYPTION_KEY` | 32+ char random string, only if using iCloud |
+| `INTERNAL_API_SECRET` | **required if the Telegram bot is deployed.** A long random string, set to the *same value* on this service and on `backend-telegram`. Without it every Telegram-scoped request is refused with `503` and `/connect` stops working — see the note below |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
 | `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
 | `PORT` | `3002` — recommended; see note below |
@@ -92,6 +93,21 @@ redirect after the Google OAuth callback finishes. Without it, the fallback
 is `http://localhost:3000` — the callback will complete and tokens will
 save correctly, but the user's browser ends up redirected to localhost
 instead of the deployed frontend.
+
+**About `INTERNAL_API_SECRET`** — a web visitor's session id is a random
+UUID, unguessable, and that is the only thing standing between a request and
+the data behind it. A Telegram user's session id is `tg-<telegram user id>`,
+built from a number anyone sharing a group with them can read, so it cannot
+protect anything on its own. The backend therefore refuses to answer for a
+`tg-` id unless the caller presents this secret in an `x-internal-secret`
+header, and the `/connect` consent link — which a browser opens, and so cannot
+carry a header — is signed with it instead. Both services must hold the same
+value; there is no default, and the backend logs an error on startup when it is
+missing. Generate one with `openssl rand -hex 32`.
+
+Deploying the backend with this set while the bot still lacks it (or the
+reverse) takes the bot offline until both agree — set it on both services
+before redeploying either.
 
 **About `PORT`** — Railway does **not** inject `PORT` into this service
 (despite what you might expect), so the container falls back to the default in
@@ -131,6 +147,7 @@ long-polling mode (`bot.start()`) — **no public domain, no exposed port**.
 | `BACKEND_PUBLIC_URL` | `https://<travel-agent-public-domain>` — **required**, separate from `BACKEND_URL` above. Used only for links sent *to the user* (currently `/connect`'s Google OAuth link). `*.railway.internal` addresses only resolve inside Railway's private network — a user's own browser can't open them, so without this set explicitly the `/connect` link is broken even though every other bot feature works fine |
 | `OPENWEATHER_API_KEY` | required |
 | `OPENAI_API_KEY` | if voice transcription is enabled |
+| `INTERNAL_API_SECRET` | **required.** Must be byte-for-byte the same value as on the `travel-agent` service. Without it every backend call this bot makes comes back `403` and `/connect` refuses to issue a link |
 | `NOTIFY_HOUR` | optional, defaults to `9` |
 
 ## 4. frontend — Railway service `frontend`

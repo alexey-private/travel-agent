@@ -1,4 +1,5 @@
 import { BACKEND_URL } from '../config';
+import { internalHeaders } from '../backendAuth';
 import { DEFAULT_LOCALE, isLocale, type Locale } from './config';
 import { t } from './t';
 import type { TKey } from './dictionaries';
@@ -18,7 +19,7 @@ function settingsUrl(userId: string): string {
  */
 async function readLocale(userId: string): Promise<Locale | null> {
   try {
-    const res = await fetch(settingsUrl(userId));
+    const res = await fetch(settingsUrl(userId), { headers: internalHeaders() });
     if (!res.ok) return null;
     const data = (await res.json()) as { language?: unknown };
     // A user who never picked a language has no stored value — English then.
@@ -67,7 +68,7 @@ export async function setLocale(ctx: BotContext, locale: Locale): Promise<void> 
   try {
     await fetch(settingsUrl(userId), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: internalHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ language: locale }),
     });
   } catch {
