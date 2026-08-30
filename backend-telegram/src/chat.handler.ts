@@ -129,7 +129,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
     const isConnectError = err instanceof TypeError && err.message.includes('fetch failed');
     const msg = isConnectError
       ? t('chat.backendUnreachable')
-      : err instanceof Error ? err.message : String(err);
+      : t('chat.failed', { message: err instanceof Error ? err.message : String(err) });
     console.error('[chat.handler]', err);
     await ctx.api
       .editMessageText(chat.id, sent.message_id, `⚠️ ${msg}`)
