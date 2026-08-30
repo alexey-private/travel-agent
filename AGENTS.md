@@ -53,6 +53,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/routes/chat.ts](backend-langgraph/src/routes/chat.ts) | POST /api/chat — SSE streaming endpoint |
 | [backend-langgraph/src/routes/auth.ts](backend-langgraph/src/routes/auth.ts) | Google OAuth2 status/callback/disconnect |
 | [backend-langgraph/src/security/internalAuth.ts](backend-langgraph/src/security/internalAuth.ts) | Guards the `tg-` half of the user-id namespace — a Telegram id is public, so it answers only to the bridge; see [Telegram Bridge Authentication](#telegram-bridge-authentication-critical) |
+| [backend-langgraph/src/security/rateLimitKey.ts](backend-langgraph/src/security/rateLimitKey.ts) | Who a rate-limited request is counted against — one rule for every limited route, so the client-supplied `userId` it still trusts is fixed in one place |
 | [backend-telegram/src/backendAuth.ts](backend-telegram/src/backendAuth.ts) | The bot's half of that guard: `internalHeaders()` on every backend call, `signStartLink()` for the `/connect` link |
 | [backend-langgraph/src/db/migrations/](backend-langgraph/src/db/migrations/) | Numbered SQL migrations |
 | [backend-langgraph/src/db/backfill-embeddings.ts](backend-langgraph/src/db/backfill-embeddings.ts) | One-time embedding backfill with retry |

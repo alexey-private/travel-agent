@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 import { DriveProvider } from '../tools/providers/DriveProvider';
 import { toVisual, wrapToWidth, baseDirFor, type BaseDir } from '../utils/bidi';
 import { isLocale, type Locale } from '../i18n/locale';
+import { rateLimitKey } from '../security/rateLimitKey';
 
 // Fonts bundled with the backend — DejaVuSans covers Latin + Cyrillic + Greek etc.
 const FONTS_DIR = path.resolve(__dirname, '../assets/fonts');
@@ -14,6 +15,51 @@ const FONT = {
   oblique:     path.join(FONTS_DIR, 'DejaVuSansCondensed-Oblique.ttf'),
   mono:        path.join(FONTS_DIR, 'DejaVuSansMono.ttf'),
 };
+
+/**
+ * The longest text that will be typeset into a PDF.
+ *
+ * `buildPdfBuffer` is synchronous work on the event loop — pdfkit measures and
+ * paints every glyph — so a body the request limit still accepts (25 MB) would
+ * hold the whole server for as long as it takes. 50 000 characters is about
+ * twenty-five pages, well past the longest answer an agent has produced, and
+ * costs roughly 100 ms of ordinary prose.
+ */
+const MAX_PDF_TEXT_CHARS = 50_000;
+
+/**
+ * The longest run without a space.
+ *
+ * Length alone does not bound the work: pdfkit's line breaking is quadratic in
+ * the length of a single unbreakable token, so the cost is in the shape of the
+ * text, not its size. Measured on this machine: 50 000 characters of prose take
+ * 72 ms, 2 000 characters with no space in them take 136 ms, and 10 000 take
+ * 1.7 seconds — 100 000 exhausts the heap. A cap on the whole text would still
+ * let one such word through. 500 characters holds any real URL and keeps the
+ * worst case a text can buy under half a second.
+ */
+const MAX_PDF_TOKEN_CHARS = 500;
+
+/** Both export routes: PDF generation is CPU-bound and, on the Drive path, hits Google too. */
+const EXPORT_RATE_LIMIT = { max: 10, timeWindow: 60_000, keyGenerator: rateLimitKey };
+
+/** `null` when the text may be typeset; otherwise the reply to send instead. */
+function unprintable(text: string): { error: string; code: string } | null {
+  if (text.length > MAX_PDF_TEXT_CHARS) {
+    return { error: `text must be at most ${MAX_PDF_TEXT_CHARS} characters`, code: 'text_too_long' };
+  }
+  // Whitespace of any kind ends a run: a newline breaks a line as surely as a
+  // space does, and pdfkit measures what lies between them.
+  for (const run of text.split(/\s+/)) {
+    if (run.length > MAX_PDF_TOKEN_CHARS) {
+      return {
+        error: `text must not contain a run of more than ${MAX_PDF_TOKEN_CHARS} characters without a space`,
+        code: 'text_unbreakable_run',
+      };
+    }
+  }
+  return null;
+}
 
 interface ExportBody {
   text: string;
@@ -73,9 +119,12 @@ async function buildPdfBuffer(text: string, language?: Locale): Promise<Buffer> 
 export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesOptions = {}): Promise<void> {
   fastify.post<{ Body: ExportBody }>(
     '/api/export/pdf',
+    { config: { rateLimit: EXPORT_RATE_LIMIT } },
     async (request: FastifyRequest<{ Body: ExportBody }>, reply: FastifyReply) => {
       const { text, filename = 'agent-response', language } = request.body;
       if (!text) return reply.status(400).send({ error: 'text is required', code: 'text_required' });
+      const refused = unprintable(text);
+      if (refused) return reply.status(413).send(refused);
 
       const pdf = await buildPdfBuffer(text, requestedLocale(language));
       const safeFilename = filename.replace(/[^a-z0-9_\- ]/gi, '_');
@@ -88,10 +137,13 @@ export async function exportRoutes(fastify: FastifyInstance, opts: ExportRoutesO
 
   fastify.post<{ Body: ExportToDriveBody }>(
     '/api/export/pdf-to-drive',
+    { config: { rateLimit: EXPORT_RATE_LIMIT } },
     async (request: FastifyRequest<{ Body: ExportToDriveBody }>, reply: FastifyReply) => {
       const { text, userId, agentType = 'travel', filename = 'agent-response', language } = request.body;
       if (!text)   return reply.status(400).send({ error: 'text is required', code: 'text_required' });
       if (!userId) return reply.status(400).send({ error: 'userId is required', code: 'user_id_required' });
+      const refused = unprintable(text);
+      if (refused) return reply.status(413).send(refused);
 
       const provider = agentType === 'shopping' ? opts.shoppingDriveProvider : opts.travelDriveProvider;
       if (!provider) return reply.status(503).send({ error: 'Google Drive is not configured on this server.', code: 'drive_not_configured' });

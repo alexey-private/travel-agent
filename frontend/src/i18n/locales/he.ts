@@ -234,6 +234,11 @@ export const he: Dictionary = {
   "errors.userIdRequired": "ההתחברות פגה. רעננו את הדף.",
   "errors.driveNotConfigured": "Google Drive לא מוגדר בשרת הזה.",
   "errors.driveUploadFailed": "העלאת הקובץ ל-Google Drive נכשלה.",
+  "errors.rateLimited": "יותר מדי בקשות. המתינו רגע ונסו שוב.",
+  "errors.textTooLong": "ההודעה ארוכה מכדי לייצא אותה כ-PDF.",
+  "errors.textUnbreakableRun": "ההודעה מכילה מילה ארוכה מאוד ללא רווחים, ולא ניתן לסדר אותה ב-PDF.",
+  "errors.transcriptionFailed": "לא הצלחנו לתמלל את ההקלטה.",
+  "errors.audioTooLarge": "ההקלטה ארוכה מדי לתמלול.",
   "errors.appleCredentialsRequired": "הזינו Apple ID וסיסמה ייעודית לאפליקציה.",
   "errors.appleInvalidCredentials": "Apple ID או סיסמה ייעודית שגויים. השתמשו בסיסמה ייעודית מ-appleid.apple.com.",
 };

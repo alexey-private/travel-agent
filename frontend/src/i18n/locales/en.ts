@@ -230,6 +230,11 @@ export const en = {
   "errors.userIdRequired": "Your session has expired. Please reload the page.",
   "errors.driveNotConfigured": "Google Drive is not set up on this server.",
   "errors.driveUploadFailed": "Could not upload the file to Google Drive.",
+  "errors.rateLimited": "Too many requests. Wait a moment and try again.",
+  "errors.textTooLong": "This message is too long to export as a PDF.",
+  "errors.textUnbreakableRun": "This message contains a very long unbroken word that cannot be typeset into a PDF.",
+  "errors.transcriptionFailed": "Could not transcribe the recording.",
+  "errors.audioTooLarge": "That recording is too long to transcribe.",
   "errors.appleCredentialsRequired": "Enter your Apple ID and an app-specific password.",
   "errors.appleInvalidCredentials": "Invalid Apple ID or app-specific password. Use an app-specific password from appleid.apple.com.",
 };

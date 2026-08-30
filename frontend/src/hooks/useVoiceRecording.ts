@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { API_URL } from "@/lib/config";
+import { errorKeyOf } from "@/lib/errorCode";
 import type { TKey } from "@/i18n/dictionaries";
 import type { TVars } from "@/i18n/types";
 import type { Locale } from "@/i18n/config";
@@ -53,7 +54,14 @@ export function useVoiceRecording(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ audio: base64, mimeType, language: locale }),
         });
-        if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
+        if (!res.ok) {
+          // The backend refuses a clip for reasons the user can act on — too
+          // long, too many in a minute — and there is no agent in this path to
+          // retell them. Translating by `code` is what makes the refusal
+          // visible; before this, a rejected recording simply vanished.
+          alert(t(await errorKeyOf(res, "errors.transcriptionFailed")));
+          return;
+        }
         const { text } = (await res.json()) as { text: string };
         if (text) onTranscribed(text);
       } catch (err) {

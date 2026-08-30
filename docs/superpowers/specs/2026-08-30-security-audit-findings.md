@@ -188,7 +188,7 @@ finished, translated HTML — including the ones the backend reports, which arri
 as raw English and are wrapped at that one place — and the caller sends it
 unchanged.
 
-### [ ] S4 — Paid and CPU-bound endpoints have no rate limit
+### [x] S4 — Paid and CPU-bound endpoints have no rate limit
 
 *Severity: medium. Pre-existing.*
 
@@ -197,9 +197,43 @@ Rate limiting is registered with `global: false`
 and only `/api/chat` opts in. That leaves
 [`/api/transcribe`](../../../backend-langgraph/src/routes/transcribe.ts) — which
 spends the OpenAI key on a body of up to 25 MB — and both
-[`/api/export/pdf*`](../../../backend-langgraph/src/routes/export.ts#L74-L113)
+[`/api/export/pdf*`](../../../backend-langgraph/src/routes/export.ts)
 routes, where PDF generation runs synchronously on the event loop against an
 unbounded `text`.
+
+**Fixed.** `/api/transcribe` now allows 20 calls a minute and each export route
+10, alongside the 30 `/api/chat` already had. A 429 carries `code:
+'rate_limited'` like every other error response here, because the export path
+shows it to the user with no agent in between to translate it.
+
+A limit on how *often* a route may be called says nothing about what one call
+costs, and both endpoints named in this finding are expensive per call. Whisper
+is billed by the minute of audio, so a 25 MB body — hours of speech at the
+bitrate a browser records at — was worth twenty times a minute; `/api/transcribe`
+now refuses a clip over 10 MB once decoded (`audio_too_large`, 413). The export
+routes get the two caps below.
+
+Surfacing that refusal turned out to be missing on the frontend:
+[`useVoiceRecording`](../../../frontend/src/hooks/useVoiceRecording.ts) threw a
+generic `Error` and only logged it, so a rejected recording vanished with no
+explanation at all. It now translates by `code` the way the export path does.
+
+Which caller a request counts against moved into
+[`rateLimitKey`](../../../backend-langgraph/src/security/rateLimitKey.ts), asked
+by all four routes. The rule it encodes is unchanged and still wrong in the way
+S5 describes — it is now wrong in one place instead of four.
+
+**Rate limiting alone did not bound the work**, which is what the measurements
+turned up. pdfkit's line breaking is quadratic in the length of a single run
+with no space in it, so the cost is in the shape of the text rather than its
+size: 50 000 characters of prose take 72 ms, 2 000 characters with no space take
+136 ms, 10 000 take 1.7 seconds, and 100 000 exhaust the heap — a crash, not a
+slow request, well inside a body the 25 MB request limit accepts. Ten of those a
+minute is still an outage. Both export routes therefore refuse a `text` over
+50 000 characters (`text_too_long`, about twenty-five pages) or containing a run
+of more than 500 characters without whitespace (`text_unbreakable_run`, longer
+than any real URL), both 413. The worst case a caller can now buy is under half
+a second.
 
 ### [ ] S5 — The rate limit is keyed on a client-supplied value
 

@@ -13,6 +13,7 @@ import { UserPreferencesRepository } from '../repositories/UserPreferencesReposi
 import { Locale, DEFAULT_LOCALE, isLocale } from '../i18n/locale';
 import { detectReplyLocale } from '../i18n/detectReplyLocale';
 import { env } from '../config/env';
+import { rateLimitKey } from '../security/rateLimitKey';
 
 interface ChatRouteOptions {
   userService: UserService;
@@ -71,7 +72,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         rateLimit: {
           max: 30,
           timeWindow: 60_000,
-          keyGenerator: (req) => (req.body as ChatBody | null)?.userId ?? req.ip ?? 'unknown',
+          keyGenerator: rateLimitKey,
         },
       },
     },

@@ -58,7 +58,18 @@ async function bootstrap(): Promise<void> {
   });
   // global: false — only routes that set config.rateLimit are limited.
   // hook: 'preHandler' — body is parsed at this stage, so keyGenerator can read req.body.userId.
-  await fastify.register(rateLimit, { global: false, hook: 'preHandler' });
+  await fastify.register(rateLimit, {
+    global: false,
+    hook: 'preHandler',
+    // A 429 carries a snake_case `code` like every other error response here.
+    // The PDF export shows this one to the user directly, with no agent in
+    // between to retell it, and `code` is what the frontend translates by.
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: 429,
+      error: `Too many requests, retry in ${context.after}`,
+      code: 'rate_limited',
+    }),
+  });
   // Before any route is registered: a hook only guards what comes after it.
   registerInternalAuth(fastify, env.INTERNAL_API_SECRET);
 
