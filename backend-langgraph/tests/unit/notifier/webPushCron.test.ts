@@ -37,11 +37,37 @@ jest.mock('web-push', () => ({
 
 // ── Helper builders ───────────────────────────────────────────────────────────
 
+/**
+ * Local, like the notifier's own `tomorrowDate` — and for the same reason. A
+ * UTC rendering here would agree with it for most of the day and disagree in
+ * the hours where the two calendars differ, which is a test that fails by the
+ * clock rather than by the code.
+ */
 function tomorrow(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return localDate(1);
 }
+
+function localDate(daysFromNow: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
+function deferred(): Deferred {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/** Let every microtask settle without advancing the clock. */
+const settle = () => new Promise((r) => setImmediate(r));
 
 function buildPool(rows: object[] = []): jest.Mocked<Pool> {
   return {
@@ -162,7 +188,7 @@ describe('startWebPushCron', () => {
       { id: 'sub-3', session_id: 'tg-789', endpoint: 'https://push.example.com/3', p256dh: 'k3', auth: 'a3' },
     ]);
     // Event and task are today, not tomorrow
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate(0);
     const cal = buildCalendarProvider([{ title: 'Old event', date: today }]);
     const tasks = buildTasksProvider([{ title: 'Old task', due: today, status: 'needsAction' }]);
 
@@ -256,6 +282,113 @@ describe('startWebPushCron', () => {
 
     // Completed task should be filtered out → nothing to send
     expect(mockSendNotification).not.toHaveBeenCalled();
+  });
+
+  it('has at most five subscribers in flight, and still reaches all of them', async () => {
+    const { startWebPushCron } = await import('@/notifier/web-push.cron');
+
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      id: `sub-${i}`,
+      session_id: `sess-${i}`,
+      endpoint: `https://push.example.com/${i}`,
+      p256dh: 'k',
+      auth: 'a',
+      language: null,
+    }));
+
+    const gate = deferred();
+    let started = 0;
+    let inFlight = 0;
+    let peak = 0;
+
+    const cal = {
+      list: jest.fn(async () => {
+        started += 1;
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await gate.promise;
+        inFlight -= 1;
+        return { success: true, data: { upcoming: [{ title: 'Event', date: tomorrow() }] } };
+      }),
+    } as unknown as jest.Mocked<CalendarProvider>;
+
+    startWebPushCron(buildPool(rows), cal, buildTasksProvider());
+    const run = capturedCronCallback!();
+    await settle();
+
+    // With nobody's calendar answering yet: one walk through the list would
+    // have started one, and `Promise.all` over the whole map would have
+    // started twelve.
+    expect(started).toBe(5);
+
+    gate.resolve();
+    await run;
+
+    expect(peak).toBe(5);
+    expect(cal.list).toHaveBeenCalledTimes(12);
+    expect(mockSendNotification).toHaveBeenCalledTimes(12);
+  });
+
+  it('does not let one unreachable calendar cost anyone else their notification', async () => {
+    const { startWebPushCron } = await import('@/notifier/web-push.cron');
+
+    const rows = ['a', 'broken', 'b'].map((name) => ({
+      id: `sub-${name}`,
+      session_id: `sess-${name}`,
+      endpoint: `https://push.example.com/${name}`,
+      p256dh: 'k',
+      auth: 'a',
+      language: null,
+    }));
+
+    const cal = {
+      list: jest.fn(async ({ userId }: { userId: string }) => {
+        if (userId === 'sess-broken') throw new Error('calendar unreachable');
+        return { success: true, data: { upcoming: [{ title: 'Event', date: tomorrow() }] } };
+      }),
+    } as unknown as jest.Mocked<CalendarProvider>;
+
+    startWebPushCron(buildPool(rows), cal, buildTasksProvider());
+    await expect(capturedCronCallback!()).resolves.toBeUndefined();
+
+    expect(mockSendNotification).toHaveBeenCalledTimes(2);
+    const notified = mockSendNotification.mock.calls.map(
+      (call) => (call[0] as { endpoint: string }).endpoint,
+    );
+    expect(notified.sort()).toEqual([
+      'https://push.example.com/a',
+      'https://push.example.com/b',
+    ]);
+  });
+
+  it('finishes the run when cleaning up a stale subscription fails', async () => {
+    const { startWebPushCron } = await import('@/notifier/web-push.cron');
+
+    const rows = [0, 1].map((i) => ({
+      id: `sub-${i}`,
+      session_id: `sess-${i}`,
+      endpoint: `https://push.example.com/${i}`,
+      p256dh: 'k',
+      auth: 'a',
+      language: null,
+    }));
+
+    const pool = buildPool();
+    pool.query
+      .mockResolvedValueOnce({ rows })                        // the SELECT
+      .mockRejectedValue(new Error('database unreachable'));  // every DELETE
+
+    mockSendNotification.mockRejectedValue(
+      Object.assign(new Error('Gone'), { statusCode: 410 }),
+    );
+
+    const cal = buildCalendarProvider([{ title: 'Event', date: tomorrow() }]);
+    startWebPushCron(pool, cal, buildTasksProvider());
+
+    // The cleanup is the one thing the per-user handler does not catch. It must
+    // still not take the run down with it — the second subscriber was reached.
+    await expect(capturedCronCallback!()).resolves.toBeUndefined();
+    expect(mockSendNotification).toHaveBeenCalledTimes(2);
   });
 });
 

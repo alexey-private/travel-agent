@@ -43,6 +43,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
 | [backend-langgraph/src/i18n/locale.ts](backend-langgraph/src/i18n/locale.ts) | `Locale` type (`en`/`he`/`ru`), `isLocale`, `dirOf`, `LANGUAGE_NAMES` |
 | [backend-langgraph/src/i18n/detectReplyLocale.ts](backend-langgraph/src/i18n/detectReplyLocale.ts) | Which language a finished reply is written in — follow-up suggestions follow the reply, not the setting |
+| [backend-langgraph/src/utils/concurrency.ts](backend-langgraph/src/utils/concurrency.ts) | `forEachWithConcurrency` — a fixed pool over a shared cursor, for work that is slow because it is remote; used by the push cron |
 | [backend-langgraph/src/utils/bidi.ts](backend-langgraph/src/utils/bidi.ts) | `toVisual`, `wrapToWidth`, `baseDirFor` — logical→visual reordering for the PDF export; see [PDF Direction](#pdf-direction) |
 | [backend-langgraph/src/tools/BaseTool.ts](backend-langgraph/src/tools/BaseTool.ts) | Base class all tools extend |
 | [backend-langgraph/src/tools/wrapTool.ts](backend-langgraph/src/tools/wrapTool.ts) | Wraps tools for LangGraph ToolNode (errors → strings) |
@@ -186,6 +187,22 @@ second round trip per person.
   [frontend/src/lib/dateUtils.ts](frontend/src/lib/dateUtils.ts) pins the same
   cycle, so a conversation timestamp and a reminder about it agree. These two are
   the only places in the repo that format a clock time — any third must pin it too.
+- **The run is five people wide, not one.** Each subscriber costs two provider
+  calls, and awaiting them in a plain `for` loop made the run as long as the sum
+  of everyone's round trips. `forEachWithConcurrency` holds five in flight; the
+  number is a ceiling on requests to Google, not on local work, which is why it
+  is five and not fifty. Within one person the sends stay sequential — those are
+  their own two or three devices.
+- **"Tomorrow" is counted on the server's local calendar, start to finish.**
+  `tomorrowDate` used to add a day locally and render it with `toISOString()`,
+  which renders in UTC: at the default 09:00 run, every server more than nine
+  hours ahead of UTC reported *today* — Adelaide at UTC+9:30 included — and a
+  late run west of UTC reported the day after next. Local is the right of the two clocks available — the cron fires on local
+  time and a calendar's all-day dates are local to whoever wrote them. The
+  timezone cannot be changed from inside a jest test (the copied `process` never
+  reaches the setter that makes V8 forget the cached zone), so the boundary is
+  covered by a child process per timezone; see
+  [tests/helpers/printTomorrow.ts](backend-langgraph/tests/helpers/printTomorrow.ts).
 - The copy lives in [backend-langgraph/src/i18n/notifications.ts](backend-langgraph/src/i18n/notifications.ts) —
   three phrases, deliberately not a frontend-sized dictionary. These are the only
   strings in this package that reach a person without passing through the agent or

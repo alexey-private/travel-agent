@@ -104,6 +104,44 @@ Unit tests use shared mocks in `tests/helpers/`. Integration tests (`chat.test.t
 
 ---
 
+## SKILL: test-timezone-dependent-code
+
+**When:** A change reads the local calendar or clock — `getDate()`, `getHours()`,
+a date assembled from local components — and you want to prove it behaves on a
+server that is not in your timezone.
+
+**Setting `process.env.TZ` inside a jest test does nothing.** jest hands each
+test file a copied `process`, so the assignment never reaches the setter that
+makes V8 drop the timezone it cached at startup. The test passes, proves
+nothing, and looks exactly like one that works. On a UTC CI runner a
+UTC-vs-local bug produces identical output either way, so this is not a
+theoretical gap.
+
+Spawn a child process per timezone instead. `tsx` is a devDependency, so the
+child can import the TypeScript source directly:
+
+```ts
+// tests/helpers/printSomething.ts — prints one value, nothing else
+import { underTest } from '../../src/…';
+process.stdout.write(underTest(new Date(process.argv[2]!)));
+```
+
+```ts
+// the test
+const result = spawnSync(process.execPath, [require.resolve('tsx/cli'), SCRIPT, instant], {
+  cwd: ROOT, encoding: 'utf8', env: { ...process.env, TZ: 'Pacific/Auckland' },
+});
+expect(result.stdout.trim()).toBe('2026-08-31');
+```
+
+Cover both directions — a zone far enough east that UTC is still yesterday
+(`Pacific/Auckland`, `Australia/Brisbane`) and one far enough west that it is
+already tomorrow (`America/Los_Angeles` late in the evening) — plus a month
+boundary. Worked example:
+`backend-langgraph/tests/unit/notifier/tomorrowDateTz.test.ts`.
+
+---
+
 ## SKILL: backfill-embeddings
 
 **When:** After adding `conversation_embeddings` support or suspecting missing embeddings.

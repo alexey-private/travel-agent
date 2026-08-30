@@ -550,7 +550,7 @@ which was the first attempt, cannot tell the fix from the original code: `face()
 runs at import either way, and pdfkit opens a registered path through `fs`, not
 through the mocked fontkit.
 
-### [ ] O4 — The push cron walks users strictly sequentially
+### [x] O4 — The push cron walks users strictly sequentially
 
 [`web-push.cron.ts:105`](../../../backend-langgraph/src/notifier/web-push.cron.ts#L105)
 awaits two network calls per person inside a `for` loop; the run grows linearly
@@ -558,6 +558,63 @@ with the subscriber count. Bounded concurrency (5–10) fixes it. In the same
 file, [`tomorrowDate()`](../../../backend-langgraph/src/notifier/web-push.cron.ts#L18-L22)
 mixes a local-time `setDate` with a UTC `toISOString`, so "tomorrow" can shift
 by a day on a server that is not in UTC.
+
+**Fixed.** The per-user body moved into a `notify` function and the loop became
+`forEachWithConcurrency(byUser, 5, notify)` — a new
+[`src/utils/concurrency.ts`](../../../backend-langgraph/src/utils/concurrency.ts)
+holding a fixed pool of workers over a shared cursor. Five, at the low end of
+the range, because the number is a ceiling on concurrent requests to Google
+rather than on local work. The sends *within* one person stay sequential: those
+are their own two or three devices, and the round trip is to a push service, not
+to the provider that made the run slow.
+
+The helper does not stop at the first rejection. Every item is attempted and the
+failures are re-thrown together as an `AggregateError`, which is what preserved
+the old `continue` behaviour — one unreachable calendar costs one person their
+notification, not everyone after them their turn. It made one thing strictly
+better: a failed cleanup of a stale subscription (the one call the per-user
+handler never caught) used to throw out of the sequential loop and abandon
+everybody who had not been reached yet.
+
+The second half was the more serious bug. `toISOString()` renders in UTC, so the
+day was added on one calendar and read off another:
+
+| Server | 09:00 local | old `tomorrowDate()` | correct |
+|--------|-------------|----------------------|---------|
+| Pacific/Auckland | 2026-08-30 | `2026-08-30` — *today* | `2026-08-31` |
+| Australia/Adelaide | 2026-08-30 | `2026-08-30` — *today* | `2026-08-31` |
+| Asia/Jerusalem | 2026-08-30 | `2026-08-31` | `2026-08-31` |
+| America/Los_Angeles (22:00 run) | 2026-08-30 | `2026-09-01` | `2026-08-31` |
+
+At the default run hour the boundary is nine hours ahead of UTC, not UTC+10:
+anything past it renders back into today, which puts Adelaide's UTC+9:30 on the
+broken side along with the rest of central and eastern Australia and New
+Zealand. Those users were notified about the events they were already having,
+and tomorrow's were never mentioned. `tomorrowDate` now formats the
+local date components and takes an optional `now`, and is exported for the same
+reason `buildPayload` is.
+
+Seventeen new tests. Seven cover the pool directly: the limit is a ceiling and a
+floor (with ten gated items and a limit of three, exactly three start, and a
+fourth starts the moment one finishes), a slow item delays only its own worker,
+every item is attempted despite rejections, and a limit below one is refused
+rather than silently hanging. Three cover the cron: twelve subscribers with
+nobody's calendar answering yet start exactly five — one walk of the list would
+start one and `Promise.all` would start twelve — one unreachable calendar costs
+only its own owner, and a failing cleanup no longer ends the run.
+
+The timezone matrix is the remaining seven, and it runs in child processes. TZ
+cannot be changed from inside a jest test: jest hands each file a copied
+`process`, so assigning `process.env.TZ` never reaches the setter that tells V8
+to forget the zone it cached — verified, not assumed. Seven cases spawn
+`tests/helpers/printTomorrow.ts` under a real `TZ`, covering both directions of
+the error, the half-hour offset that makes UTC+10 the wrong threshold, and the
+month boundary.
+
+Seven mutations applied by hand, all caught: rendering in UTC again, walking one
+at a time, starting everyone at once, a limit of ten instead of five, dropping
+the guard around the run, letting one rejection strand the queue, and accepting
+a limit of zero.
 
 ### [ ] O5 — `detectTextDir` recomputes on every stream chunk
 
