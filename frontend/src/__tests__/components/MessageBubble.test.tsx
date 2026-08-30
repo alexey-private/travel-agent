@@ -112,15 +112,30 @@ describe("MessageBubble — Drive upload failure", () => {
 
 describe("MessageBubble — text direction", () => {
   // The agent follows the language of the message, not the UI setting, so a
-  // Hebrew reply can land in an English interface. Only the browser can tell
-  // which way a given body reads.
-  it("lets the browser pick the direction of an assistant message", () => {
+  // Hebrew reply can land in an English interface. The bubble has to read the
+  // body it was handed rather than the locale around it.
+  it("right-aligns a Hebrew assistant message", () => {
     renderWithI18n(<MessageBubble message={makeMessage({ content: "שלום, מצאתי 3 טיסות" })} />);
-    expect(screen.getByText(/שלום/).closest("[dir]")).toHaveAttribute("dir", "auto");
+    expect(screen.getByText(/שלום/).closest("[dir]")).toHaveAttribute("dir", "rtl");
   });
 
   it("does the same for a user message", () => {
     renderWithI18n(<MessageBubble message={makeMessage({ role: "user", content: "שלום" })} />);
-    expect(screen.getByText("שלום").closest("[dir]")).toHaveAttribute("dir", "auto");
+    expect(screen.getByText("שלום").closest("[dir]")).toHaveAttribute("dir", "rtl");
+  });
+
+  // The bug this replaced `dir="auto"` over: the two regional indicators behind
+  // a flag are strong left-to-right, so one emoji in front of a Hebrew heading
+  // left-aligned the entire reply.
+  it("is not fooled by a flag emoji in front of the Hebrew", () => {
+    renderWithI18n(
+      <MessageBubble message={makeMessage({ content: "🇯🇵 יפן — כל מה שצריך לדעת" })} />,
+    );
+    expect(screen.getByText(/יפן/).closest("[dir]")).toHaveAttribute("dir", "rtl");
+  });
+
+  it("leaves an English reply left-to-right", () => {
+    renderWithI18n(<MessageBubble message={makeMessage({ content: "I found 3 flights" })} />);
+    expect(screen.getByText(/3 flights/).closest("[dir]")).toHaveAttribute("dir", "ltr");
   });
 });

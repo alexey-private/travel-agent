@@ -274,8 +274,17 @@ Expected: no output. (Write the pattern with the trailing hyphen — a looser
      own; give it `MIRROR_UNDER_RTL` from `frontend/src/i18n/direction.ts`.
      An icon that means the same thing both ways — a downward chevron, a
      spinner — must not be flipped.
-4. Text whose language is not the interface language (a chat message, the
-   composer) gets `dir="auto"` and lets the browser decide.
+4. Text whose language is not the interface language needs its own direction,
+   read off the text rather than off the locale — the agent answers in the
+   language of the question, so a Hebrew reply lands in a Russian interface.
+   - **A finished message** gets `dir={detectTextDir(content)}` from
+     `frontend/src/i18n/detectTextDir.ts`. Not `dir="auto"`: that resolves on
+     the first *strong* character, and several emoji are strong left-to-right
+     rather than neutral — the regional indicators behind a flag and 💡 among
+     them — so one leading emoji left-aligned an entire Hebrew answer.
+   - **The composer** keeps `dir="auto"`, which is the right tool for an input:
+     it re-resolves as the user types, and there is nothing to detect before
+     the first keystroke.
 5. Verify in the browser, not only in jsdom. With the app running, switch to
    `עברית` and on each page check `document.documentElement.scrollWidth <=
    document.documentElement.clientWidth`. To confirm an icon actually flipped,

@@ -9,6 +9,7 @@ import { exportToPdf, exportToPdfDrive, derivePdfFilename } from "@/lib/api";
 import { type Message } from "@/types/agent";
 import { useT, useLocale } from "@/i18n/useT";
 import { MIRROR_UNDER_RTL } from "@/i18n/direction";
+import { detectTextDir } from "@/i18n/detectTextDir";
 import type { TKey } from "@/i18n/dictionaries";
 
 export type { Message };
@@ -104,7 +105,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
         {/* Bubble text */}
         {message.content && (
           <div
-            dir="auto"
+            dir={detectTextDir(message.content)}
             className={`px-4 py-3 rounded-2xl shadow-xs text-sm leading-relaxed ${
               isUser
                 ? "bg-blue-600 text-white rounded-se-sm whitespace-pre-wrap"
@@ -125,7 +126,10 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
                   h1: ({ children }) => <h1 className="text-base font-bold mb-1 mt-2">{children}</h1>,
                   h2: ({ children }) => <h2 className="text-sm font-bold mb-1 mt-2">{children}</h2>,
                   h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2">{children}</h3>,
-                  code: ({ children }) => <code className="bg-gray-100 rounded-sm px-1 py-0.5 text-xs font-mono">{children}</code>,
+                  // Code is left-to-right in every language — the same rule the
+                  // PDF export follows. Inside an rtl bubble it would otherwise
+                  // right-align and shuffle its punctuation.
+                  code: ({ children }) => <code dir="ltr" className="bg-gray-100 rounded-sm px-1 py-0.5 text-xs font-mono">{children}</code>,
                   blockquote: ({ children }) => <blockquote className="border-s-2 border-gray-300 ps-3 text-gray-600 my-2">{children}</blockquote>,
                   a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{children}</a>,
                   hr: () => <hr className="border-gray-200 my-2" />,

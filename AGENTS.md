@@ -59,6 +59,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [frontend/src/i18n/](frontend/src/i18n/) | `LanguageProvider`, `useT`, dictionaries (`en`/`he`/`ru`), `translate()` — see the `add-ui-string` recipe in SKILL.md |
 | [frontend/src/i18n/detectLocale.ts](frontend/src/i18n/detectLocale.ts) | Browser-language detection — `headerLocale` (server, `Accept-Language`) and `browserLocale` (client, `navigator`); default for a visitor with nothing stored |
 | [frontend/src/i18n/direction.ts](frontend/src/i18n/direction.ts) | `MIRROR_UNDER_RTL` — the one class that flips a direction-carrying icon; see the `rtl-check` recipe in SKILL.md |
+| [frontend/src/i18n/detectTextDir.ts](frontend/src/i18n/detectTextDir.ts) | Which way a finished chat message reads — a reply follows its own language, not the interface locale, and `dir="auto"` cannot do it (leading emoji are strong LTR) |
 | [backend-telegram/src/i18n/](backend-telegram/src/i18n/) | Bot dictionaries (`en`/`he`/`ru`), `t()`, and `language.ts` — reads/writes the language through `/api/settings`, caches it in the grammY session |
 | [backend-telegram/src/commands/lang.ts](backend-telegram/src/commands/lang.ts) | `/lang` — inline keyboard that switches the bot language |
 | [backend-telegram/src/data/suggestions.ts](backend-telegram/src/data/suggestions.ts) | `STARTER_POOLS` — starter buttons written per language, not translated |
