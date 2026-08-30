@@ -5,6 +5,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 import { z } from 'zod';
+import { DEFAULT_TRUST_PROXY } from '../security/trustProxy';
 
 /**
  * Zod schema for environment variable validation.
@@ -59,6 +60,14 @@ const envSchema = z.object({
   // Production CORS allowlist — set to the frontend URL (e.g. https://app.example.com).
   // Omit in development to allow any origin.
   ALLOWED_ORIGIN: z.string().optional(),
+  // Which peers may speak for the caller through `X-Forwarded-For`, as a
+  // comma-separated list of addresses, CIDR ranges, or the names proxy-addr
+  // defines. `req.ip` is what the rate limiter counts a web caller by, so a
+  // deploy whose edge proxy is missing here counts its entire user base as one
+  // caller — see `security/trustProxy.ts`, which holds the default and logs
+  // when that happens. Empty means no proxy is trusted, which is right when
+  // clients reach this server directly.
+  TRUST_PROXY: z.string().default(DEFAULT_TRUST_PROXY),
 });
 
 /**

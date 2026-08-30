@@ -235,13 +235,54 @@ of more than 500 characters without whitespace (`text_unbreakable_run`, longer
 than any real URL), both 413. The worst case a caller can now buy is under half
 a second.
 
-### [ ] S5 — The rate limit is keyed on a client-supplied value
+### [x] S5 — The rate limit is keyed on a client-supplied value
 
 *Severity: medium. Pre-existing.*
 
 [`backend-langgraph/src/routes/chat.ts:74`](../../../backend-langgraph/src/routes/chat.ts#L74):
 `keyGenerator: (req) => req.body.userId ?? req.ip`. Rotating `userId` per
 request bypasses the limit entirely. The key should combine the id with the IP.
+
+**Fixed**, though not by combining them — combining is the same bug with extra
+steps. A key of `id:address` still hands a caller who invents a new id per
+request a new bucket per request; it multiplies the budget rather than replacing
+it. A `userId` that nothing attests to cannot appear in the key at all, so
+[`rateLimitKey`](../../../backend-langgraph/src/security/rateLimitKey.ts) counts
+a web caller by address alone. The cost is that everyone behind one NAT shares
+one budget, which the ceilings (30 chats, 20 transcriptions, 10 exports a
+minute) leave room for.
+
+A `tg-` id is the one exception, and it is why this is not simply `req.ip`.
+`registerInternalAuth` is a global `preHandler`, so it runs before the
+route-level limiter and has already refused any `tg-` request that did not carry
+the bridge secret — the id is attested by the time a key is computed. Counting
+those by address would put every Telegram user into one bucket, since they all
+arrive from the single bridge process. A test claims 25 `tg-` ids without the
+secret and gets 25 × 403: the branch is unreachable to a web caller.
+
+**The address had to be made real first.** Nothing trusted a proxy, so behind
+Railway's edge `req.ip` was the edge — and keying on it would have counted the
+entire user base as one caller, turning the limit into an outage at 30 requests
+a minute. `TRUST_PROXY` now names which peers may speak for the caller through
+`X-Forwarded-For`, defaulting — from
+[`trustProxy.ts`](../../../backend-langgraph/src/security/trustProxy.ts) — to
+the private and carrier-NAT ranges an edge proxy reaches a container from. Two details are easy to get wrong:
+
+- **Trusting every peer would have reopened the hole.** With nothing left
+  untrusted, Fastify's `req.ip` returns the *first* entry of the chain — the
+  part the caller wrote. Trusting by peer address instead believes only the
+  entry the trusted proxy appended, so prepending hops buys nothing; a test
+  rotates the spoofed prefix and lands in the same bucket every time. The
+  setting is a list of addresses and ranges, and the parser rejects both `true`
+  and a literal `0.0.0.0/0`, so a catch-all has to be written deliberately and
+  cannot be reached by a typo — a value Fastify cannot parse stops the process
+  at startup.
+- **A hop count is not available.** Fastify 5 fails a numeric `trustProxy`
+  closed — `getTrustProxyFn` returns `() => false` for a number — so trust has
+  to be expressed as addresses or ranges.
+
+An untrusted proxy is otherwise silent, so the backend logs a warning naming the
+peer the first time it sees one, and `DEPLOYMENT.md` says what to do with it.
 
 ### [ ] S6 — CORS reflects any origin, with credentials allowed
 

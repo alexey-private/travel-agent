@@ -84,6 +84,7 @@ once the container is up.
 | `INTERNAL_API_SECRET` | **required if the Telegram bot is deployed.** A long random string, set to the *same value* on this service and on `backend-telegram`. Without it every Telegram-scoped request is refused with `503` and `/connect` stops working — see the note below |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
 | `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
+| `TRUST_PROXY` | optional — leave unset on Railway. Which peers may speak for the caller through `X-Forwarded-For`; the default trusts the private and carrier-NAT ranges an edge proxy reaches a container from. See the note below |
 | `PORT` | `3002` — recommended; see note below |
 
 `NEXT_PUBLIC_FRONTEND_URL` is read directly via `process.env` in
@@ -93,6 +94,37 @@ redirect after the Google OAuth callback finishes. Without it, the fallback
 is `http://localhost:3000` — the callback will complete and tokens will
 save correctly, but the user's browser ends up redirected to localhost
 instead of the deployed frontend.
+
+**About `TRUST_PROXY`** — the rate limiter counts a web caller by `req.ip`,
+because a `userId` is a value the browser chose and rotating it would otherwise
+buy an unlimited budget. Behind a proxy, `req.ip` is the proxy unless the proxy
+is trusted, and then every user in the world is counted as one caller: the limit
+becomes an outage at 30 requests a minute rather than a defence. The default
+trusts `loopback, linklocal, uniquelocal, 100.64.0.0/10` — ranges an edge proxy
+plausibly reaches a container from and a public client cannot arrive from — and
+only the entry *that* peer appended is believed, so a caller prepending hops of
+their own gains nothing.
+
+If the platform's proxy is outside those ranges, the backend says so in the log
+on the first request that shows it:
+
+```
+X-Forwarded-For arrived from a peer TRUST_PROXY does not trust — every web
+caller is being rate limited as one. Add this peer to TRUST_PROXY.
+```
+
+The line carries the peer address; add it (or its range) to `TRUST_PROXY` as a
+comma-separated list. Set it to an empty string when clients reach the server
+directly with no proxy at all.
+
+Do not widen it to ranges a client can actually arrive from just to make the
+warning go away. With every peer trusted, `req.ip` becomes the *first* entry of
+the header — the part the caller wrote — and rotating that buys a fresh budget
+per request, which is the bypass this key exists to close. The value is a list
+of addresses and ranges, and the parser rejects both `true` and a literal
+`0.0.0.0/0`, so "trust everything" cannot be reached by a typo; a value Fastify
+cannot parse stops the process at startup instead of degrading the limit
+quietly.
 
 **About `INTERNAL_API_SECRET`** — a web visitor's session id is a random
 UUID, unguessable, and that is the only thing standing between a request and

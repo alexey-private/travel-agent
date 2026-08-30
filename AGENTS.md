@@ -53,7 +53,8 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/routes/chat.ts](backend-langgraph/src/routes/chat.ts) | POST /api/chat — SSE streaming endpoint |
 | [backend-langgraph/src/routes/auth.ts](backend-langgraph/src/routes/auth.ts) | Google OAuth2 status/callback/disconnect |
 | [backend-langgraph/src/security/internalAuth.ts](backend-langgraph/src/security/internalAuth.ts) | Guards the `tg-` half of the user-id namespace — a Telegram id is public, so it answers only to the bridge; see [Telegram Bridge Authentication](#telegram-bridge-authentication-critical) |
-| [backend-langgraph/src/security/rateLimitKey.ts](backend-langgraph/src/security/rateLimitKey.ts) | Who a rate-limited request is counted against — one rule for every limited route, so the client-supplied `userId` it still trusts is fixed in one place |
+| [backend-langgraph/src/security/rateLimitKey.ts](backend-langgraph/src/security/rateLimitKey.ts) | Who a rate-limited request is counted against — a web caller by address, a bridged `tg-` id by id; see [Rate Limiting](#rate-limiting) |
+| [backend-langgraph/src/security/trustProxy.ts](backend-langgraph/src/security/trustProxy.ts) | Which peers may speak for the caller through `X-Forwarded-For` — the `TRUST_PROXY` default, and the warning that fires when the real proxy is missing from it |
 | [backend-telegram/src/backendAuth.ts](backend-telegram/src/backendAuth.ts) | The bot's half of that guard: `internalHeaders()` on every backend call, `signStartLink()` for the `/connect` link |
 | [backend-langgraph/src/db/migrations/](backend-langgraph/src/db/migrations/) | Numbered SQL migrations |
 | [backend-langgraph/src/db/backfill-embeddings.ts](backend-langgraph/src/db/backfill-embeddings.ts) | One-time embedding backfill with retry |
@@ -220,6 +221,37 @@ is what closes it. Three rules follow:
 Missing secret ⇒ the backend logs an error at boot and answers 503 for anything
 Telegram-scoped. It fails closed on purpose: the alternative is a silent
 reopening of the hole.
+
+---
+
+## Rate Limiting
+
+Four routes are limited — `/api/chat` (30/min), `/api/transcribe` (20/min) and
+each of the two PDF exports (10/min each) — and all four ask
+[rateLimitKey.ts](backend-langgraph/src/security/rateLimitKey.ts) the same
+question: who does this count against?
+
+- **A web `userId` never appears in the key.** It arrives in the request body and
+  nothing attests to it, so keying on it means a fresh budget per invented id.
+  Combining it with the address is the same bug with extra steps — it multiplies
+  the budget instead of replacing it. Web callers are counted by address.
+- **A `tg-` id is keyed by id, and only because the bridge vouched for it.**
+  `registerInternalAuth` is a global `preHandler`, so it rejects an unattested
+  `tg-` request before the route-level limiter ever computes a key. Counting
+  Telegram traffic by address would put the whole bot in one bucket — it all
+  arrives from the one bridge process.
+- **`TRUST_PROXY` is what makes the address real.** Behind an untrusted proxy
+  every web user is one caller, and the limit turns into an outage; the backend
+  logs a warning the first time it sees that. Fastify 5 refuses a numeric hop
+  count (it fails closed to trusting nothing), so trust is expressed as peer
+  addresses or ranges — only the entry the trusted peer appended is believed.
+  Widening it to ranges a client can arrive from undoes the fix: `req.ip` then
+  takes the *first* entry of `X-Forwarded-For`, which is whatever the caller
+  wrote. The default lives in
+  [trustProxy.ts](backend-langgraph/src/security/trustProxy.ts).
+
+Every 429 carries `code: 'rate_limited'`; the export and voice paths surface it
+to the user directly, with no agent in between to retell it.
 
 ---
 

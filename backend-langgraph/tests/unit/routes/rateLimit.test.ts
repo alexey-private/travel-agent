@@ -3,6 +3,8 @@ import rateLimit from '@fastify/rate-limit';
 import { transcribeRoutes } from '@/routes/transcribe';
 import { exportRoutes } from '@/routes/export';
 import { rateLimitKey } from '@/security/rateLimitKey';
+import { DEFAULT_TRUST_PROXY } from '@/security/trustProxy';
+import { registerInternalAuth, INTERNAL_SECRET_HEADER } from '@/security/internalAuth';
 
 jest.mock('@/config/env', () => ({ env: { OPENAI_API_KEY: 'test-key' } }));
 
@@ -261,24 +263,178 @@ describe('the PDF export refuses a text it would block the event loop on', () =>
   });
 });
 
+/** A request object with just the parts `rateLimitKey` reads. */
+function fakeRequest(over: Record<string, unknown> = {}): never {
+  return {
+    body: {},
+    ip: '10.0.0.1',
+    headers: {},
+    socket: { remoteAddress: '10.0.0.1' },
+    log: { warn: jest.fn() },
+    server: {},
+    ...over,
+  } as never;
+}
+
 describe('rateLimitKey', () => {
-  it('counts a request against the user it names', () => {
-    const req = { body: { userId: 'u-1' }, ip: '10.0.0.1' };
-    expect(rateLimitKey(req as never)).toBe('u-1');
+  it('counts a web caller by address, never by the id they sent', () => {
+    // The whole of S5: a `userId` in the body is a value the caller chose.
+    const first = rateLimitKey(fakeRequest({ body: { userId: 'u-1' } }));
+    const second = rateLimitKey(fakeRequest({ body: { userId: 'u-2' } }));
+
+    expect(first).toBe(second);
+    expect(first).toBe('ip:10.0.0.1');
   });
 
-  it('falls back to the address when the body names nobody', () => {
-    expect(rateLimitKey({ body: {}, ip: '10.0.0.1' } as never)).toBe('10.0.0.1');
-    expect(rateLimitKey({ body: null, ip: '10.0.0.1' } as never)).toBe('10.0.0.1');
-    expect(rateLimitKey({ ip: '10.0.0.1' } as never)).toBe('10.0.0.1');
-  });
-
-  it('ignores a userId that is not a non-empty string', () => {
-    expect(rateLimitKey({ body: { userId: '' }, ip: '10.0.0.1' } as never)).toBe('10.0.0.1');
-    expect(rateLimitKey({ body: { userId: 42 }, ip: '10.0.0.1' } as never)).toBe('10.0.0.1');
+  it('counts a Telegram user by id — the bridge has already vouched for it', () => {
+    expect(rateLimitKey(fakeRequest({ body: { userId: 'tg-77' } }))).toBe('user:tg-77');
+    expect(rateLimitKey(fakeRequest({ body: { userId: 'tg-78' } }))).toBe('user:tg-78');
   });
 
   it('never returns an empty key', () => {
-    expect(rateLimitKey({ body: {}, ip: '' } as never)).toBe('unknown');
+    expect(rateLimitKey(fakeRequest({ ip: '', socket: { remoteAddress: '' } }))).toBe('ip:unknown');
+  });
+});
+
+describe('the address a web caller is counted by', () => {
+  /** A route that reports the key it would be counted against. */
+  async function keyApp(trustProxy: string | false): Promise<FastifyInstance> {
+    const lines: string[] = [];
+    const app = Fastify({
+      trustProxy,
+      logger: { level: 'warn', stream: { write: (line: string) => { lines.push(line); } } },
+    });
+    app.post('/key', async (req) => ({ key: rateLimitKey(req) }));
+    app.decorate('logLines', lines);
+    await app.ready();
+    return app;
+  }
+
+  const TRUSTED = DEFAULT_TRUST_PROXY;
+
+  it('follows X-Forwarded-For from a peer it trusts', async () => {
+    const app = await keyApp(TRUSTED);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/key',
+      payload: {},
+      remoteAddress: '10.0.0.9',
+      headers: { 'x-forwarded-for': '203.0.113.7' },
+    });
+
+    expect(res.json().key).toBe('ip:203.0.113.7');
+    await app.close();
+  });
+
+  it('ignores the part of the chain the caller wrote themselves', async () => {
+    // A caller who prepends their own hops must not walk into a fresh bucket:
+    // only the entry the trusted proxy appended counts.
+    const app = await keyApp(TRUSTED);
+    const keys = [];
+    for (const spoof of ['1.1.1.1', '2.2.2.2', '3.3.3.3']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/key',
+        payload: {},
+        remoteAddress: '10.0.0.9',
+        headers: { 'x-forwarded-for': `${spoof}, 203.0.113.7` },
+      });
+      keys.push(res.json().key);
+    }
+
+    expect(keys).toEqual(['ip:203.0.113.7', 'ip:203.0.113.7', 'ip:203.0.113.7']);
+    await app.close();
+  });
+
+  it('says so in the log when the proxy in front of it is not trusted', async () => {
+    const app = await keyApp(TRUSTED);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/key',
+      payload: {},
+      remoteAddress: '198.51.100.4',
+      headers: { 'x-forwarded-for': '203.0.113.7' },
+    });
+
+    expect(res.json().key).toBe('ip:198.51.100.4');
+    const logged = (app as unknown as { logLines: string[] }).logLines.join('');
+    expect(logged).toContain('TRUST_PROXY');
+    await app.close();
+  });
+});
+
+describe('a request that claims a Telegram id', () => {
+  const SECRET = 'shared-with-the-bridge';
+
+  async function guardedApp(): Promise<FastifyInstance> {
+    const app = Fastify({ bodyLimit: 25 * 1024 * 1024 });
+    await app.register(rateLimit, {
+      global: false,
+      hook: 'preHandler',
+      errorResponseBuilder: (_req, context) => ({
+        statusCode: 429,
+        error: `Too many requests, retry in ${context.after}`,
+        code: 'rate_limited',
+      }),
+    });
+    // Exactly the order `index.ts` uses: a global preHandler runs before the
+    // route-level one the limiter installs, so the guard has the first word.
+    registerInternalAuth(app, SECRET);
+    await app.register(transcribeRoutes);
+    await app.ready();
+    return app;
+  }
+
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ text: 'hello' }),
+    }) as unknown as typeof fetch;
+    app = await guardedApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const clip = { audio: 'AAAA', mimeType: 'audio/webm' };
+
+  it('buys nothing without the bridge secret', async () => {
+    // Claiming a `tg-` id is how a web caller would reach the id-keyed branch.
+    // The guard answers first, so the claim costs the attacker the route.
+    for (let i = 0; i < 25; i++) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/transcribe',
+        payload: { ...clip, userId: `tg-${i}` },
+        remoteAddress: '10.0.0.20',
+      });
+      expect(res.statusCode).toBe(403);
+    }
+  });
+
+  it('gives each bridged user their own budget', async () => {
+    // Every Telegram user arrives from the one bridge process, so counting them
+    // by address would put the whole bot in a single bucket.
+    const headers = { [INTERNAL_SECRET_HEADER]: SECRET };
+    const spend = async (userId: string) => {
+      const codes: number[] = [];
+      for (let i = 0; i < 21; i++) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/transcribe',
+          payload: { ...clip, userId },
+          remoteAddress: '10.0.0.21',
+          headers,
+        });
+        codes.push(res.statusCode);
+      }
+      return codes;
+    };
+
+    expect((await spend('tg-1'))[20]).toBe(429);
+    expect((await spend('tg-2')).slice(0, 20)).toEqual(Array(20).fill(200));
   });
 });

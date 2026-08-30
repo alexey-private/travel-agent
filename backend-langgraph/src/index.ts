@@ -49,6 +49,12 @@ const fastify = Fastify({
   genReqId: () => `req-${(++_reqCounter).toString().padStart(6, '0')}`,
   requestIdHeader: 'x-request-id',
   bodyLimit: 25 * 1024 * 1024, // 25 MB — accommodate base64-encoded file attachments
+  // Behind a proxy, the socket peer is the proxy. `req.ip` is the key the rate
+  // limiter counts web callers by, so without this every user shares one bucket.
+  // `TRUST_PROXY` names which peers may speak for the caller (see
+  // security/trustProxy.ts); empty means none, and a value Fastify cannot parse
+  // stops the process here rather than degrading the limit quietly.
+  trustProxy: env.TRUST_PROXY.trim() || false,
 });
 
 async function bootstrap(): Promise<void> {

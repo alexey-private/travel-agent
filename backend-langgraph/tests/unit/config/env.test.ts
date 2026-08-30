@@ -10,6 +10,8 @@
 
 jest.mock('dotenv', () => ({ __esModule: true, default: { config: jest.fn() } }));
 
+import { DEFAULT_TRUST_PROXY } from '@/security/trustProxy';
+
 const VALID = {
   DATABASE_URL: 'postgresql://user:password@localhost:5432/travel_agent',
   TAVILY_API_KEY: 'tvly-test',
@@ -50,6 +52,36 @@ function load(overrides: Record<string, string | undefined>): LoadResult {
 
   return { exited, errors: JSON.stringify(errors) };
 }
+
+/** Loads the module and hands back the parsed config it exports. */
+function loadEnv(overrides: Record<string, string | undefined> = {}): Record<string, unknown> {
+  const saved = process.env;
+  process.env = { ...VALID, ...overrides } as NodeJS.ProcessEnv;
+  let parsed: Record<string, unknown> = {};
+  try {
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      parsed = require('@/config/env').env;
+    });
+  } finally {
+    process.env = saved;
+  }
+  return parsed;
+}
+
+describe('TRUST_PROXY', () => {
+  it('has a default, and it is the one the security module defines', () => {
+    // A deploy that never sets this must still trust its edge proxy: without a
+    // default, `req.ip` is the proxy for everyone and the rate limit counts the
+    // whole user base as one caller. Which ranges those are, and why, belongs to
+    // `security/trustProxy.ts` — this only proves the schema takes them from it.
+    expect(loadEnv().TRUST_PROXY).toBe(DEFAULT_TRUST_PROXY);
+  });
+
+  it('can be turned off for a server clients reach directly', () => {
+    expect(loadEnv({ TRUST_PROXY: '' }).TRUST_PROXY).toBe('');
+  });
+});
 
 describe('ENCRYPTION_KEY', () => {
   it('is required in production', () => {
