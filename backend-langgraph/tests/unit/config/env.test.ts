@@ -83,29 +83,55 @@ describe('TRUST_PROXY', () => {
   });
 });
 
+/** A production environment with everything production insists on. */
+const PROD = {
+  NODE_ENV: 'production',
+  ENCRYPTION_KEY: 'a-32-character-key-for-tests-012',
+  ALLOWED_ORIGIN: 'https://app.example.com',
+};
+
 describe('ENCRYPTION_KEY', () => {
   it('is required in production', () => {
-    const { exited, errors } = load({ NODE_ENV: 'production', ENCRYPTION_KEY: undefined });
+    const { exited, errors } = load({ ...PROD, ENCRYPTION_KEY: undefined });
     expect(exited).toBe(true);
     expect(errors).toContain('ENCRYPTION_KEY');
   });
 
   it('must be long enough to be worth deriving from', () => {
-    const { exited, errors } = load({ NODE_ENV: 'production', ENCRYPTION_KEY: 'too-short' });
+    const { exited, errors } = load({ ...PROD, ENCRYPTION_KEY: 'too-short' });
     expect(exited).toBe(true);
     expect(errors).toContain('ENCRYPTION_KEY');
   });
 
   it('is accepted in production when set', () => {
-    const { exited } = load({
-      NODE_ENV: 'production',
-      ENCRYPTION_KEY: 'a-32-character-key-for-tests-012',
-    });
+    const { exited } = load(PROD);
     expect(exited).toBe(false);
   });
 
   it('stays optional outside production, so `npm run dev` needs no secret', () => {
     const { exited } = load({ NODE_ENV: 'development', ENCRYPTION_KEY: undefined });
+    expect(exited).toBe(false);
+  });
+});
+
+describe('ALLOWED_ORIGIN', () => {
+  it('is required in production', () => {
+    // Nothing but the origin check stands between a page the user has open and
+    // this API, so a production deploy without a list has no safe reading: it
+    // either refuses every browser or trusts them all. Refusing to boot says so.
+    const { exited, errors } = load({ ...PROD, ALLOWED_ORIGIN: undefined });
+    expect(exited).toBe(true);
+    expect(errors).toContain('ALLOWED_ORIGIN');
+  });
+
+  it('is not satisfied by a blank value', () => {
+    const { exited, errors } = load({ ...PROD, ALLOWED_ORIGIN: '   ' });
+    expect(exited).toBe(true);
+    expect(errors).toContain('ALLOWED_ORIGIN');
+  });
+
+  it('stays optional outside production, where localhost is allowed instead', () => {
+    const { exited } = load({ NODE_ENV: 'development', ALLOWED_ORIGIN: undefined });
     expect(exited).toBe(false);
   });
 });

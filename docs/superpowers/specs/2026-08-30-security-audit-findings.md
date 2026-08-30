@@ -284,7 +284,7 @@ the private and carrier-NAT ranges an edge proxy reaches a container from. Two d
 An untrusted proxy is otherwise silent, so the backend logs a warning naming the
 peer the first time it sees one, and `DEPLOYMENT.md` says what to do with it.
 
-### [ ] S6 — CORS reflects any origin, with credentials allowed
+### [x] S6 — CORS reflects any origin, with credentials allowed
 
 *Severity: low-medium. Pre-existing.*
 
@@ -295,6 +295,46 @@ uses `origin: env.ALLOWED_ORIGIN ?? true`, and
 `Access-Control-Allow-Credentials: true`. No cookies are used, so exploitability
 is limited — but a deploy missing `ALLOWED_ORIGIN` lets any page read the SSE
 stream given a user id.
+
+**Fixed.** The origin decision is now an allowlist, made once, in
+[`security/cors.ts`](../../../backend-langgraph/src/security/cors.ts).
+
+Two things were wrong, and only one of them was the reflection. The streaming
+route decided the question a *second* time, by hand, because `reply.hijack()`
+takes the socket and nothing then sends the headers the CORS plugin set on the
+reply. Its answer differed from the plugin's: where the plugin would refuse an
+unknown origin, the route echoed it. `hijackedCorsHeaders` copies the plugin's
+own `Access-Control-Allow-Origin`, `Access-Control-Expose-Headers` and `Vary`
+into the raw `writeHead` instead, so there is one decision and no way for the
+two to disagree. `Vary: Origin` matters here on its own — without it a cache
+can hand one origin the answer computed for another.
+
+`Access-Control-Allow-Credentials: true` is gone rather than corrected. Nothing
+in this app authenticates by cookie (the frontend never sets
+`credentials: 'include'`), and the header is exactly what would turn a future
+mistake in the allowlist into a way to read a signed-in user's stream.
+
+`ALLOWED_ORIGIN` became comma-separated and **required in production**, checked
+in the same `superRefine` that already guards `ENCRYPTION_KEY`. The finding
+described the danger as "a deploy missing `ALLOWED_ORIGIN`", and there is no
+safe reading of that omission: the alternatives are refusing every browser and
+trusting all of them. Failing at boot says so out loud. The live Railway
+deployment already sets it, so the requirement costs nothing there. Development
+keeps working with nothing configured — `localhost` and `127.0.0.1` on any port
+are allowed, since the frontend's port already makes it cross-origin — and that
+default is unreachable in production, where the variable must be set.
+
+Non-browser callers are unaffected: an origin outside the list is not rejected,
+it merely receives no `Access-Control-Allow-Origin`. The Telegram bridge sends
+no `Origin` at all.
+
+Covered by [`tests/unit/security/cors.test.ts`](../../../backend-langgraph/tests/unit/security/cors.test.ts)
+— which mounts both an ordinary route and a hijacking one, so the two paths are
+asserted to agree — by three tests against the real `/api/chat` in
+[`chat.p0.test.ts`](../../../backend-langgraph/tests/unit/routes/chat.p0.test.ts),
+and by the `ALLOWED_ORIGIN` block of
+[`env.test.ts`](../../../backend-langgraph/tests/unit/config/env.test.ts).
+Eight mutations, including restoring the original reflection, were all caught.
 
 ### [ ] S7 — Small leaks
 

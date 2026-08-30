@@ -21,6 +21,7 @@ import { userRoutes } from './routes/users';
 import { pushRoutes } from './routes/push';
 import { startWebPushCron } from './notifier/web-push.cron';
 import { registerInternalAuth } from './security/internalAuth';
+import { allowedOrigins } from './security/cors';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -58,8 +59,13 @@ const fastify = Fastify({
 });
 
 async function bootstrap(): Promise<void> {
+  // An allowlist, not a reflection: a request carries no credential beyond a
+  // `userId`, so the origin check is what keeps an unrelated page from making
+  // one. `security/cors.ts` decides the list; an origin outside it simply gets
+  // no `Access-Control-Allow-Origin` back. No `credentials` option — nothing
+  // here authenticates by cookie.
   await fastify.register(cors, {
-    origin: env.ALLOWED_ORIGIN ?? true,
+    origin: allowedOrigins(env.ALLOWED_ORIGIN, env.NODE_ENV === 'production'),
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
   });
   // global: false — only routes that set config.rateLimit are limited.

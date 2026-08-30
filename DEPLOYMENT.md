@@ -83,7 +83,7 @@ once the container is up.
 | `ENCRYPTION_KEY` | **required when `NODE_ENV=production`** (the service refuses to start without it), 32+ char random string. Only iCloud credentials are encrypted with it, but the check is unconditional: a deploy that omits it used to silently fall back to a key committed to this repository |
 | `INTERNAL_API_SECRET` | **required if the Telegram bot is deployed.** A long random string, set to the *same value* on this service and on `backend-telegram`. Without it every Telegram-scoped request is refused with `503` and `/connect` stops working — see the note below |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
-| `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
+| `ALLOWED_ORIGIN` | **required when `NODE_ENV=production`** (the service refuses to start without it) — `https://<frontend-service-domain>`, or several comma-separated. See the note below |
 | `TRUST_PROXY` | optional — leave unset on Railway. Which peers may speak for the caller through `X-Forwarded-For`; the default trusts the private and carrier-NAT ranges an edge proxy reaches a container from. See the note below |
 | `PORT` | `3002` — recommended; see note below |
 
@@ -94,6 +94,23 @@ redirect after the Google OAuth callback finishes. Without it, the fallback
 is `http://localhost:3000` — the callback will complete and tokens will
 save correctly, but the user's browser ends up redirected to localhost
 instead of the deployed frontend.
+
+**About `ALLOWED_ORIGIN`** — a request to this API carries no credential beyond
+a `userId` in its body, so the origin check is the whole of what keeps an
+unrelated page in the user's browser from making one. It is an allowlist, never
+a reflection of whatever `Origin` arrives: an origin outside the list gets no
+`Access-Control-Allow-Origin` back and the browser refuses to hand the response
+to the page. Set it to the frontend's own URL, scheme included and no trailing
+slash (`https://app.example.com`); separate several with commas if more than one
+front end talks to this backend.
+
+A production deploy without it refuses to start, because there is no safe
+reading of the omission — the alternatives are refusing every browser or
+trusting all of them, and the second is what this variable's absence used to
+mean. Development needs no value: `localhost` and `127.0.0.1` on any port are
+allowed there, since the frontend's own port already makes it cross-origin.
+Nothing outside a browser is affected either way, so the Telegram bridge, which
+sends no `Origin` at all, needs no entry.
 
 **About `TRUST_PROXY`** — the rate limiter counts a web caller by `req.ip`,
 because a `userId` is a value the browser chose and rotating it would otherwise

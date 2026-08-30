@@ -8,9 +8,15 @@
  *   P0-2  User message is saved BEFORE the stream starts
  *   P0-3  AbortError (client disconnect) does NOT emit an SSE error event
  *   P0-4  SSE stream is always closed (raw.end) even when post-stream DB writes fail
+ *
+ * The suite also covers the CORS headers of the hijacked stream: the route
+ * writes its own headers on the raw socket, so it is the one place where the
+ * plugin's decision can be lost or contradicted.
  */
 
 import Fastify, { FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
+import { allowedOrigins } from '@/security/cors';
 import { chatRoutes } from '@/routes/chat';
 import type { UserService } from '@/services/UserService';
 import type { ConversationService } from '@/services/ConversationService';
@@ -54,6 +60,9 @@ function parseSse(body: string): Array<Record<string, unknown>> {
     .map((l) => JSON.parse(l.slice('data: '.length)) as Record<string, unknown>);
 }
 
+/** The single front end this test deployment serves. */
+const ALLOWED_ORIGIN = 'https://app.example.com';
+
 interface ServiceOverrides {
   saveMessage?: jest.Mock;
   streamEvents?: jest.Mock;
@@ -67,6 +76,13 @@ async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstan
   mockShoppingStreamEvents.mockImplementation(streamEvents);
 
   const app = Fastify({ logger: false });
+
+  // Registered the way index.ts does it, so the stream's headers are produced by
+  // the same allowlist a deploy uses rather than by the test.
+  await app.register(cors, {
+    origin: allowedOrigins(ALLOWED_ORIGIN, true),
+    methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
+  });
 
   // Inject compiled graphs via Fastify DI (mirrors how index.ts wires them at startup)
   app.decorate('travelGraph', { streamEvents: mockTravelStreamEvents });
@@ -302,6 +318,40 @@ describe('POST /api/chat — P0 correctness', () => {
       expect(response.statusCode).toBe(200);
       const events = parseSse(response.body);
       expect(events.some((e) => e.type === 'done')).toBe(true);
+    });
+  });
+
+  // ── CORS on a hijacked stream ─────────────────────────────────────────────
+
+  describe('the stream is readable only by an allowed origin', () => {
+    /** The CORS headers the raw stream comes back with for `origin`. */
+    async function streamHeaders(origin: string): Promise<Record<string, unknown>> {
+      const app = await buildApp();
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        headers: { origin },
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+      await app.close();
+      return response.headers as Record<string, unknown>;
+    }
+
+    it('carries the answer the plugin already gave across the hijack', async () => {
+      const headers = await streamHeaders(ALLOWED_ORIGIN);
+      expect(headers['access-control-allow-origin']).toBe(ALLOWED_ORIGIN);
+    });
+
+    it('tells an unknown origin nothing, rather than reflecting it back', async () => {
+      // The bug this replaces: with no allowlist configured, the route echoed
+      // whatever `Origin` it was sent, so any page could read a user's stream.
+      const headers = await streamHeaders('https://evil.example');
+      expect(headers['access-control-allow-origin']).toBeUndefined();
+    });
+
+    it('never allows credentials', async () => {
+      const headers = await streamHeaders(ALLOWED_ORIGIN);
+      expect(headers['access-control-allow-credentials']).toBeUndefined();
     });
   });
 });

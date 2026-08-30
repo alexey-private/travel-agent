@@ -14,6 +14,7 @@ import { Locale, DEFAULT_LOCALE, isLocale } from '../i18n/locale';
 import { detectReplyLocale } from '../i18n/detectReplyLocale';
 import { env } from '../config/env';
 import { rateLimitKey } from '../security/rateLimitKey';
+import { hijackedCorsHeaders } from '../security/cors';
 
 interface ChatRouteOptions {
   userService: UserService;
@@ -121,8 +122,11 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN ?? request.headers.origin ?? '*',
-        'Access-Control-Allow-Credentials': 'true',
+        // Hijacking the reply means nothing will send the headers the CORS
+        // plugin set, so its decision is carried across rather than made again:
+        // deciding twice is how this line came to reflect the caller's own
+        // origin while the plugin refused it. See security/cors.ts.
+        ...hijackedCorsHeaders(reply),
         'X-Request-Id': requestId,
       });
 

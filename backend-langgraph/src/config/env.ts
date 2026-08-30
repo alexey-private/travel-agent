@@ -57,8 +57,11 @@ const envSchema = z.object({
   // Server
   PORT: z.coerce.number().int().positive().default(3002),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  // Production CORS allowlist — set to the frontend URL (e.g. https://app.example.com).
-  // Omit in development to allow any origin.
+  // Which browser origins may read this API — one frontend URL
+  // (e.g. https://app.example.com), or several separated by commas. Optional
+  // here and required in production by the refinement below; omitted in
+  // development, `localhost` on any port is allowed instead, since the frontend
+  // sits on a different port and is already cross-origin. See src/security/cors.ts.
   ALLOWED_ORIGIN: z.string().optional(),
   // Which peers may speak for the caller through `X-Forwarded-For`, as a
   // comma-separated list of addresses, CIDR ranges, or the names proxy-addr
@@ -90,6 +93,15 @@ const envSchemaChecked = envSchema.superRefine((cfg, ctx) => {
       code: z.ZodIssueCode.custom,
       path: ['ENCRYPTION_KEY'],
       message: `ENCRYPTION_KEY must be at least ${MIN_ENCRYPTION_KEY_LENGTH} characters`,
+    });
+  }
+  if (!cfg.ALLOWED_ORIGIN?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ALLOWED_ORIGIN'],
+      message:
+        'ALLOWED_ORIGIN is required in production — without it there is no allowlist, and ' +
+        'the only alternatives are refusing every browser or trusting all of them',
     });
   }
 });

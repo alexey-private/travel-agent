@@ -55,6 +55,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/security/internalAuth.ts](backend-langgraph/src/security/internalAuth.ts) | Guards the `tg-` half of the user-id namespace — a Telegram id is public, so it answers only to the bridge; see [Telegram Bridge Authentication](#telegram-bridge-authentication-critical) |
 | [backend-langgraph/src/security/rateLimitKey.ts](backend-langgraph/src/security/rateLimitKey.ts) | Who a rate-limited request is counted against — a web caller by address, a bridged `tg-` id by id; see [Rate Limiting](#rate-limiting) |
 | [backend-langgraph/src/security/trustProxy.ts](backend-langgraph/src/security/trustProxy.ts) | Which peers may speak for the caller through `X-Forwarded-For` — the `TRUST_PROXY` default, and the warning that fires when the real proxy is missing from it |
+| [backend-langgraph/src/security/cors.ts](backend-langgraph/src/security/cors.ts) | Which browser origins may read this API — the `ALLOWED_ORIGIN` allowlist, and the headers the hijacked SSE stream carries across; see [CORS](#cors) |
 | [backend-telegram/src/backendAuth.ts](backend-telegram/src/backendAuth.ts) | The bot's half of that guard: `internalHeaders()` on every backend call, `signStartLink()` for the `/connect` link |
 | [backend-langgraph/src/db/migrations/](backend-langgraph/src/db/migrations/) | Numbered SQL migrations |
 | [backend-langgraph/src/db/backfill-embeddings.ts](backend-langgraph/src/db/backfill-embeddings.ts) | One-time embedding backfill with retry |
@@ -255,6 +256,31 @@ to the user directly, with no agent in between to retell it.
 
 ---
 
+## CORS
+
+A request to this API proves nothing about who sent it — it carries a `userId`
+in its body and no credential at all — so the origin check is the whole of what
+keeps an unrelated page in the user's browser from making one.
+[cors.ts](backend-langgraph/src/security/cors.ts) holds it.
+
+- **An allowlist, never a reflection.** `ALLOWED_ORIGIN` is comma-separated and
+  required in production; the process refuses to start without it, because the
+  alternatives are refusing every browser and trusting all of them. Development
+  gets `localhost` on any port instead — the frontend's own port already makes
+  it cross-origin. An origin outside the list is not rejected, it simply gets no
+  `Access-Control-Allow-Origin`, so nothing outside a browser is affected and
+  the Telegram bridge, which sends no `Origin`, needs no entry.
+- **The hijacked stream copies the decision, it does not make one.**
+  `/api/chat` calls `reply.hijack()` and writes its own headers, so the ones the
+  CORS plugin set on the reply would otherwise be dropped; `hijackedCorsHeaders`
+  carries them over. Deciding a second time is precisely how that route came to
+  reflect the caller's own `Origin` while the plugin refused it.
+- **`Access-Control-Allow-Credentials` is never sent.** Nothing here
+  authenticates by cookie, and that header is what would turn a mistake in the
+  list into a way to read a signed-in user's stream.
+
+---
+
 ## Database Schema (key tables)
 
 ```
@@ -305,7 +331,8 @@ GOOGLE_CLIENT_ID      # OAuth2
 GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI
 ENCRYPTION_KEY        # >=32 chars; iCloud credential encryption. Required when NODE_ENV=production
-ALLOWED_ORIGIN        # CORS origin for production
+ALLOWED_ORIGIN        # Browser origins allowed to read this API, comma-separated.
+                      # Required when NODE_ENV=production
 ```
 
 ---
