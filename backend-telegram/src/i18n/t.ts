@@ -5,6 +5,19 @@ import { escapeHtml } from '../render';
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
+/**
+ * Built once at import rather than per call: constructing an `Intl` object is
+ * what formatting actually costs, and `t` runs for every string the bot sends.
+ * A record rather than a lazy cache because there are three locales and the
+ * dictionaries beside it are already shaped this way — including the fallback,
+ * which keeps a locale from outside the type off the crash path.
+ */
+const PLURAL_RULES: Record<Locale, Intl.PluralRules> = {
+  en: new Intl.PluralRules('en'),
+  he: new Intl.PluralRules('he'),
+  ru: new Intl.PluralRules('ru'),
+};
+
 function isPluralForms(entry: unknown): entry is PluralForms {
   return typeof entry === 'object' && entry !== null && 'other' in entry;
 }
@@ -34,7 +47,8 @@ export function t(locale: Locale, key: TKey, vars?: TVars): string {
   let template: string;
   if (isPluralForms(entry)) {
     const count = Number(vars?.count ?? 0);
-    const form = new Intl.PluralRules(locale).select(count) as keyof PluralForms;
+    const rules = PLURAL_RULES[locale] ?? PLURAL_RULES[DEFAULT_LOCALE];
+    const form = rules.select(count) as keyof PluralForms;
     template = entry[form] ?? entry.other;
   } else {
     template = String(entry);

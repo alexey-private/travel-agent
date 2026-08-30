@@ -1,4 +1,5 @@
 import { notificationTitle, notificationOverflow, formatEventTime } from '@/i18n/notifications';
+import { countIntl } from '../../helpers/countIntl';
 
 describe('push notification copy', () => {
   it('titles the notification in each language', () => {
@@ -37,5 +38,43 @@ describe('push notification copy', () => {
 
   it('returns the time untouched when it cannot be parsed', () => {
     expect(formatEventTime('en', 'all day')).toBe('all day');
+  });
+});
+
+describe('push notification formatter reuse', () => {
+  it('builds one time formatter per locale at import, not one per event', async () => {
+    jest.resetModules();
+    const counter = countIntl('DateTimeFormat');
+
+    try {
+      const { formatEventTime: fresh } = await import('@/i18n/notifications');
+      expect(counter.count()).toBe(3);
+
+      // The daily cron formats a time for every event of every subscriber in
+      // one pass — that pass must not build a single formatter more.
+      for (let i = 0; i < 10; i += 1) {
+        fresh('ru', '14:30');
+        fresh('en', '09:05');
+        fresh('he', '23:59');
+      }
+      expect(counter.count()).toBe(3);
+    } finally {
+      counter.restore();
+    }
+  });
+
+  it('builds the Russian plural rules once, not once per overflow line', async () => {
+    jest.resetModules();
+    const counter = countIntl('PluralRules');
+
+    try {
+      const { notificationOverflow: fresh } = await import('@/i18n/notifications');
+      expect(counter.count()).toBe(1);
+
+      for (let i = 0; i < 10; i += 1) fresh('ru', i);
+      expect(counter.count()).toBe(1);
+    } finally {
+      counter.restore();
+    }
   });
 });

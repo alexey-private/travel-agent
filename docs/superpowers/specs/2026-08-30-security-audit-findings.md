@@ -450,16 +450,49 @@ mutations were applied by hand — dropping the hint, dropping the id, dropping 
 secret, restoring the OpenAI URL, emptying the code map, and so on — and every
 one of them turned the suite red.
 
-### [ ] O2 — `Intl` formatters constructed per call
+### [x] O2 — `Intl` formatters constructed per call
 
-Five sites: [`dateUtils.ts:21,29,33,36`](../../../frontend/src/lib/dateUtils.ts#L21-L36),
-[`fileUtils.ts:18,25,32`](../../../frontend/src/lib/fileUtils.ts#L18-L32),
-[`translate.ts:27`](../../../frontend/src/i18n/translate.ts#L27),
-[`backend-telegram/src/i18n/t.ts:27`](../../../backend-telegram/src/i18n/t.ts#L27),
-[`notifications.ts:18`](../../../backend-langgraph/src/i18n/notifications.ts#L18).
-Constructing an `Intl.*Format` is the classic expensive call; a 50-item
-conversation list builds 50 of them per render. One `Map<locale, formatter>`
-covers all five.
+**Fixed.** The finding named five files; there were six. The sixth is
+[`starterSuggestions.ts`](../../../frontend/src/data/starterSuggestions.ts),
+where `monthName` built a `DateTimeFormat` per suggestion that names a month —
+a dozen per set, three sets, all at import.
+
+Measured on this project's machine (Node 22, 20 000 iterations): constructing a
+`DateTimeFormat` costs **25.8 µs** and formatting with one **0.76 µs**; a
+`NumberFormat` 4.9 µs against 0.35 µs; `PluralRules` 4.2 µs against 0.36 µs. So
+a 50-row conversation list was spending ~1.3 ms per render building formatters
+to do ~38 µs of formatting. Nothing about the output changes — a cache is
+invisible to an assertion on the rendered string, which is why the tests count
+constructions instead.
+
+Two shapes, because the packages are not the same problem:
+
+- **Frontend — a lazy cache.** [`perLocale`](../../../frontend/src/i18n/perLocale.ts)
+  memoises one value per locale and builds on first use. Nine formatters across
+  four modules go through it (`dateUtils` ×4, `fileUtils` ×3, `translate`,
+  `starterSuggestions`), and building them at import would move the cost onto a
+  page that renders in one language and pays for three.
+- **Both backends — a `Record<Locale, …>` built at import.**
+  [`t.ts`](../../../backend-telegram/src/i18n/t.ts) needs one `PluralRules` per
+  locale and [`notifications.ts`](../../../backend-langgraph/src/i18n/notifications.ts)
+  one `DateTimeFormat` per locale plus the single Russian `PluralRules`. One
+  formatter per module does not justify a memo helper, a long-lived process has
+  no cold start to protect, and the dictionaries and phrase tables beside them
+  are already written as exhaustive records — including the
+  `?? DEFAULT_LOCALE` fallback, which the lookup one line above already had.
+  Copying a ten-line helper into three packages that cannot import each other
+  would have been the more expensive answer.
+
+The record in `t.ts` is a small behaviour change at the edge: a locale from
+outside the `Locale` type used to get that language's real plural rules and now
+gets the default's, matching the dictionary lookup directly above it, which has
+always answered such a caller in English. A test pins it.
+
+Eleven new tests — three for `perLocale`, one construction count for each of
+the six call sites, one more for the Russian plural rules in the notifications,
+and one for the fallback. Eleven mutations were applied by hand (each cache
+reverted to a per-call construction, plus three that break `perLocale` itself
+and one that drops the fallback); every one turned its suite red.
 
 ### [ ] O3 — PDF fonts re-registered on every request
 

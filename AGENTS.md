@@ -62,6 +62,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [frontend/src/components/ChatWindow.tsx](frontend/src/components/ChatWindow.tsx) | Main chat UI — SSE consumer, message state |
 | [frontend/src/app/settings/page.tsx](frontend/src/app/settings/page.tsx) | Google + iCloud connect/disconnect UI |
 | [frontend/src/i18n/](frontend/src/i18n/) | `LanguageProvider`, `useT`, dictionaries (`en`/`he`/`ru`), `translate()` — see the `add-ui-string` recipe in SKILL.md |
+| [frontend/src/i18n/perLocale.ts](frontend/src/i18n/perLocale.ts) | One `Intl` formatter per locale, built on first use — building one costs ~30× using it, and a list formats every row |
 | [frontend/src/i18n/detectLocale.ts](frontend/src/i18n/detectLocale.ts) | Browser-language detection — `headerLocale` (server, `Accept-Language`) and `browserLocale` (client, `navigator`); default for a visitor with nothing stored |
 | [frontend/src/i18n/direction.ts](frontend/src/i18n/direction.ts) | `MIRROR_UNDER_RTL` — the one class that flips a direction-carrying icon; see the `rtl-check` recipe in SKILL.md |
 | [frontend/src/i18n/detectTextDir.ts](frontend/src/i18n/detectTextDir.ts) | Which way a finished chat message reads — a reply follows its own language, not the interface locale, and `dir="auto"` cannot do it (leading emoji are strong LTR) |

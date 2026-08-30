@@ -1,4 +1,4 @@
-import { LOCALES, DEFAULT_LOCALE, isLocale, LOCALE_LABELS } from '../src/i18n/config';
+import { LOCALES, DEFAULT_LOCALE, isLocale, LOCALE_LABELS, type Locale } from '../src/i18n/config';
 import { DICTIONARIES } from '../src/i18n/dictionaries';
 import { t } from '../src/i18n/t';
 
@@ -87,5 +87,38 @@ describe('dictionary values are valid Telegram HTML', () => {
         expect({ key, text }).toEqual({ key, text: expect.not.stringMatching(/[<>]/) });
       }
     }
+  });
+});
+
+describe('bot plural rules', () => {
+  it('builds one PluralRules per locale at import, not one per message', async () => {
+    jest.resetModules();
+    const real = Intl.PluralRules as unknown as new (...args: unknown[]) => object;
+    let built = 0;
+    (Intl as unknown as Record<string, unknown>).PluralRules = function (...args: unknown[]) {
+      built += 1;
+      return new real(...args);
+    };
+
+    try {
+      const { t: fresh } = await import('../src/i18n/t');
+      expect(built).toBe(LOCALES.length);
+
+      // `t` runs for every string the bot sends; none of them may add to that.
+      for (let i = 0; i < 10; i += 1) fresh('ru', 'history.header', { count: i });
+      fresh('en', 'history.header', { count: 3 });
+      expect(built).toBe(LOCALES.length);
+    } finally {
+      (Intl as unknown as Record<string, unknown>).PluralRules = real;
+    }
+  });
+
+  it('falls back to the default locale for a language it has no rules for', () => {
+    // The record is exhaustive over `Locale`, so a value from outside the type
+    // has no entry — and the dictionary lookup one line above already answers
+    // such a caller in English rather than failing.
+    const off = t('de' as Locale, 'history.header', { count: 3 });
+
+    expect(off).toBe(t(DEFAULT_LOCALE, 'history.header', { count: 3 }));
   });
 });

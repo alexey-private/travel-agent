@@ -1,4 +1,5 @@
 import type { Locale } from "@/i18n/config";
+import { perLocale } from "@/i18n/perLocale";
 
 export type SuggestionAgent = "travel" | "shopping";
 
@@ -13,14 +14,21 @@ export type SuggestionAgent = "travel" | "shopping";
  * currencies that belong to the language.
  */
 
-/** Month name in the given locale, offset from today. Used inside suggestion text. */
+const monthFormat = perLocale((locale) => new Intl.DateTimeFormat(locale, { month: "long" }));
+
+/**
+ * Month name in the given locale, offset from today. Used inside suggestion text.
+ *
+ * Called once per suggestion that names a month, which is a dozen times per
+ * set, so the formatter is cached and only the date is recomputed.
+ */
 function monthName(locale: Locale, offsetMonths = 0): string {
   const d = new Date();
   // Day 1 first: setMonth on the 31st overflows into the month after the one
   // asked for, so "in two months" would skip a month for three days each year.
   d.setDate(1);
   d.setMonth(d.getMonth() + offsetMonths);
-  return new Intl.DateTimeFormat(locale, { month: "long" }).format(d);
+  return monthFormat(locale).format(d);
 }
 
 function englishSuggestions(): Record<SuggestionAgent, string[]> {
