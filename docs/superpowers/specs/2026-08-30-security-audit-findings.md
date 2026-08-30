@@ -122,12 +122,17 @@ still collides with its prefix. An environment variable cannot contain a NUL, so
 this is unreachable — but it is why the test asserts truncation past 32
 characters and not zero-padding.
 
-**Deploy note:** the check is keyed on `NODE_ENV`, and the Railway services do
-not set it — `travel-agent` runs with the schema default (`development`), so the
-new requirement does not fire there. The key itself is set on that service, so
-nothing is currently encrypted under the repository key; setting
-`NODE_ENV=production` is what arms the guard (and switches the logger out of
-pretty-printing at `info`).
+**Deploy note:** the check is keyed on `NODE_ENV`, which Railway's variable list
+did not show — but the runtime stage of
+[`Dockerfile.backend-langgraph`](../../../Dockerfile.backend-langgraph) sets
+`ENV NODE_ENV=production`, and the production logs confirm it: not one of the
+`info` boot lines appears, and nothing is pretty-printed. The guard is armed. The
+variable has since been set on the `travel-agent` service as well, with
+`--skip-deploys` — it names the value the image already carries, so it changes
+nothing at runtime and only makes the wiring visible in the Railway UI, the same
+reason `PORT` is set there explicitly. `ENCRYPTION_KEY` is set on that service
+and is 48 characters, so it clears the new minimum and nothing was ever
+encrypted under the repository key.
 
 ### [x] S3 — Unescaped interpolation into Telegram `parse_mode: 'HTML'`
 
