@@ -37,7 +37,9 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().optional(),
 
-  // iCloud credentials encryption
+  // iCloud credentials encryption. Optional here and required in production by
+  // the refinement below — a deploy without it used to fall back to a key
+  // committed to this repository, which is no protection at all.
   ENCRYPTION_KEY: z.string().optional(),
 
   // Shared with backend-telegram. A Telegram session id is derived from a public
@@ -60,10 +62,34 @@ const envSchema = z.object({
 });
 
 /**
+ * Secrets that development may go without and production may not. Checked here
+ * rather than at the point of use so the process refuses to start, instead of
+ * silently running with a weaker key until someone connects an iCloud account.
+ */
+const MIN_ENCRYPTION_KEY_LENGTH = 32;
+
+const envSchemaChecked = envSchema.superRefine((cfg, ctx) => {
+  if (cfg.NODE_ENV !== 'production') return;
+  if (!cfg.ENCRYPTION_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ENCRYPTION_KEY'],
+      message: 'ENCRYPTION_KEY is required in production — iCloud passwords are encrypted with it',
+    });
+  } else if (cfg.ENCRYPTION_KEY.length < MIN_ENCRYPTION_KEY_LENGTH) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ENCRYPTION_KEY'],
+      message: `ENCRYPTION_KEY must be at least ${MIN_ENCRYPTION_KEY_LENGTH} characters`,
+    });
+  }
+});
+
+/**
  * Parsed and validated environment configuration.
  * Throws at startup if any required variable is missing or invalid.
  */
-const parseResult = envSchema.safeParse(process.env);
+const parseResult = envSchemaChecked.safeParse(process.env);
 
 if (!parseResult.success) {
   console.error('Invalid environment variables:');

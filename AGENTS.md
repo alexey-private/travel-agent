@@ -271,7 +271,7 @@ VOYAGE_API_KEY        # Embeddings (optional — random fallback in dev)
 GOOGLE_CLIENT_ID      # OAuth2
 GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI
-ENCRYPTION_KEY        # 32-char key for iCloud credential encryption
+ENCRYPTION_KEY        # >=32 chars; iCloud credential encryption. Required when NODE_ENV=production
 ALLOWED_ORIGIN        # CORS origin for production
 ```
 

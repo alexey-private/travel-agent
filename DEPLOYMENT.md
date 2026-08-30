@@ -80,7 +80,7 @@ once the container is up.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
 | `NEXT_PUBLIC_FRONTEND_URL` | `https://<frontend-service-domain>` — required if using Google Calendar/Tasks (see below) |
-| `ENCRYPTION_KEY` | 32+ char random string, only if using iCloud |
+| `ENCRYPTION_KEY` | **required when `NODE_ENV=production`** (the service refuses to start without it), 32+ char random string. Only iCloud credentials are encrypted with it, but the check is unconditional: a deploy that omits it used to silently fall back to a key committed to this repository |
 | `INTERNAL_API_SECRET` | **required if the Telegram bot is deployed.** A long random string, set to the *same value* on this service and on `backend-telegram`. Without it every Telegram-scoped request is refused with `503` and `/connect` stops working — see the note below |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
 | `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |

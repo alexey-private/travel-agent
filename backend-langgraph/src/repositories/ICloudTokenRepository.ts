@@ -1,5 +1,5 @@
 import { BaseRepository } from './BaseRepository';
-import { encrypt, decrypt } from '../utils/crypto';
+import { encrypt, decrypt, isLegacyCiphertext } from '../utils/crypto';
 
 interface ICloudTokenRow {
   apple_id: string;
@@ -52,12 +52,29 @@ export class ICloudTokenRepository extends BaseRepository {
       [userId],
     );
     if (!row) return null;
+    const appPassword = decrypt(
+      { encrypted: row.encrypted_password, iv: row.iv, authTag: row.auth_tag },
+      this.encryptionKey,
+    );
+
+    // A row written before the key was derived still opens, but it is sealed
+    // with the weak key. Rewriting it here is the only thing that retires that
+    // key: nothing else in the system ever touches the password again, and a
+    // user who never reconnects would keep the old ciphertext forever. It
+    // happens once per row — the rewrite is what makes the next read a no-op.
+    if (isLegacyCiphertext(row.encrypted_password)) {
+      try {
+        await this.save(userId, { appleId: row.apple_id, appPassword });
+      } catch (err) {
+        // The credentials are in hand; failing to re-seal them must not fail
+        // the calendar operation that asked for them.
+        console.error('[icloud] failed to re-encrypt legacy credentials:', err);
+      }
+    }
+
     return {
       appleId: row.apple_id,
-      appPassword: decrypt(
-        { encrypted: row.encrypted_password, iv: row.iv, authTag: row.auth_tag },
-        this.encryptionKey,
-      ),
+      appPassword,
       calendarHref: row.calendar_href,
       shoppingCalHref: row.shopping_cal_href,
       reminderHref: row.reminder_href,

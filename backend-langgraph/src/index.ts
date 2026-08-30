@@ -72,7 +72,20 @@ async function bootstrap(): Promise<void> {
   const suggestionService = new SuggestionService();
 
   const tokenRepo = new GoogleTokenRepository(pool);
-  const icloudTokenRepo = new ICloudTokenRepository(pool, env.ENCRYPTION_KEY ?? 'default-dev-key-change-in-prod!!');
+  // Production cannot reach this fallback: env validation refuses to start
+  // without a real ENCRYPTION_KEY. Development gets a fixed throwaway so that
+  // `npm run dev` works without one and a restart can still read what the
+  // previous run wrote — anything sealed with it is dev data by definition.
+  // The value is the one that used to be reachable in production, kept
+  // verbatim: rotating it would orphan every credential already in a developer's
+  // database, and buys nothing once production cannot reach it.
+  if (!env.ENCRYPTION_KEY) {
+    fastify.log.warn('ENCRYPTION_KEY is not set — using the development key. Do not use this outside development.');
+  }
+  const icloudTokenRepo = new ICloudTokenRepository(
+    pool,
+    env.ENCRYPTION_KEY ?? 'default-dev-key-change-in-prod!!',
+  );
   const prefRepo = new UserPreferencesRepository(pool);
 
   const googleConfig = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI

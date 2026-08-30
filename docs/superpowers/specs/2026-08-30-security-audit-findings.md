@@ -65,7 +65,7 @@ logged at boot.
 **Deploy note:** both services must carry the same `INTERNAL_API_SECRET` before
 either is redeployed, or the bot goes offline until they agree.
 
-### [ ] S2 — Hardcoded fallback encryption key, and no KDF
+### [x] S2 — Hardcoded fallback encryption key, and no KDF
 
 *Severity: high. Pre-existing.*
 
@@ -84,6 +84,50 @@ AES-256-GCM construction itself is correct (random 12-byte IV, auth tag stored).
 derive the key with scrypt or HKDF rather than using the passphrase bytes.
 Deriving changes the key, so existing ciphertext needs a versioned prefix or a
 re-encryption pass.
+
+**Fixed.** The fallback is gone from production: `ENCRYPTION_KEY` is now
+required, and at least 32 characters, whenever `NODE_ENV=production`, checked in
+[`config/env.ts`](../../../backend-langgraph/src/config/env.ts) so the process
+exits at startup rather than at the moment someone connects an iCloud account.
+Development still gets a fixed throwaway — one restart has to be able to read
+what the previous one wrote — and its use is logged as a warning at boot. It is
+the same literal as before, deliberately: rotating it would orphan every
+credential already sitting in a developer's database and buys nothing once
+production cannot reach it.
+
+`NODE_ENV=test` is exempt along with development, which is narrower than "outside
+development" as this finding first put it. It has to be: jest sets `NODE_ENV` to
+`test`, the integration suite imports `config/env` through the database client,
+and requiring the key there would make the test suite — and CI — depend on a
+secret that protects nothing in it.
+
+The AES key is derived with scrypt over a fixed application salt. A per-row salt
+would be stronger, but it needs a column of its own and makes the derivation
+impossible to cache; with one long-lived key the salt's remaining job is domain
+separation. The derivation is memoised because scrypt is deliberately slow and
+every calendar read would otherwise pay it.
+
+Ciphertext written by the old scheme carries no marker, so the marker goes on the
+new: everything written from now on is prefixed `v2:`, anything else is read with
+the zero-padded key. That alone would leave a user who never reconnects sealed
+under the weak key forever, so
+[`ICloudTokenRepository.get`](../../../backend-langgraph/src/repositories/ICloudTokenRepository.ts)
+re-encrypts a legacy row the first time it reads one — nothing else in the system
+ever touches the password again. A failed rewrite is logged and does not fail the
+calendar operation that asked for the credentials.
+
+One property could not be recovered: Node's scrypt truncates a passphrase at the
+first NUL byte, whether it is given a string or a Buffer, so a key containing one
+still collides with its prefix. An environment variable cannot contain a NUL, so
+this is unreachable — but it is why the test asserts truncation past 32
+characters and not zero-padding.
+
+**Deploy note:** the check is keyed on `NODE_ENV`, and the Railway services do
+not set it — `travel-agent` runs with the schema default (`development`), so the
+new requirement does not fire there. The key itself is set on that service, so
+nothing is currently encrypted under the repository key; setting
+`NODE_ENV=production` is what arms the guard (and switches the logger out of
+pretty-printing at `info`).
 
 ### [x] S3 — Unescaped interpolation into Telegram `parse_mode: 'HTML'`
 
