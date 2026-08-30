@@ -4,6 +4,7 @@ import { BACKEND_URL } from '../config';
 import { internalHeaders } from '../backendAuth';
 import { ensureSessionId } from '../session';
 import { tFor } from '../i18n/language';
+import { escapeHtml } from '../render';
 
 const HISTORY_PAIRS = 5;
 const MAX_MSG_LENGTH = 300;
@@ -63,6 +64,7 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
         ctx.chat!.id,
         processing.message_id,
         t('history.loadFailed', { message: err instanceof Error ? err.message : String(err) }),
+        { parse_mode: 'HTML' },
       );
       return;
     }
@@ -89,8 +91,8 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
 
     const lines: string[] = [t('history.header', { count: recent.length })];
     for (const [user, assistant] of recent) {
-      lines.push(`👤 <i>${truncate(user.content, MAX_MSG_LENGTH)}</i>`);
-      lines.push(`🤖 ${truncate(assistant.content, MAX_MSG_LENGTH)}\n`);
+      lines.push(`👤 <i>${escapeHtml(truncate(user.content, MAX_MSG_LENGTH))}</i>`);
+      lines.push(`🤖 ${escapeHtml(truncate(assistant.content, MAX_MSG_LENGTH))}\n`);
     }
 
     const text = lines.join('\n');

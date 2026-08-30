@@ -4,6 +4,7 @@ import { BACKEND_URL } from '../config';
 import { internalHeaders } from '../backendAuth';
 import { fetchLocale } from '../i18n/language';
 import { t } from '../i18n/t';
+import { escapeHtml } from '../render';
 import type { Locale } from '../i18n/config';
 
 interface CalendarEvent {
@@ -55,15 +56,15 @@ function formatNotification(events: CalendarEvent[], tasks: Task[], locale: Loca
   if (events.length > 0) {
     lines.push(t(locale, 'notify.events'));
     for (const e of events) {
-      lines.push(`  • ${e.time ? `${e.time} — ` : ''}${e.title}`);
+      lines.push(`  • ${e.time ? `${e.time} — ` : ''}${escapeHtml(e.title)}`);
     }
   }
 
   if (tasks.length > 0) {
     if (events.length > 0) lines.push('');
     lines.push(t(locale, 'notify.tasks'));
-    for (const t of tasks) {
-      lines.push(`  • ${t.title}`);
+    for (const task of tasks) {
+      lines.push(`  • ${escapeHtml(task.title)}`);
     }
   }
 

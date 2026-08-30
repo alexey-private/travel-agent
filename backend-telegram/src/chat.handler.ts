@@ -5,7 +5,7 @@ import { setCalendarDispatch } from './commands/calendar';
 import { setTasksDispatch } from './commands/tasks';
 import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
-import { renderHtml } from './render';
+import { escapeHtml, renderHtml } from './render';
 import { getLocale, tFor, tIn } from './i18n/language';
 
 const MAX_TG_LENGTH = 4096;
@@ -101,7 +101,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       if (event.type === 'error') {
         clearInterval(typingInterval);
         await ctx.api
-          .editMessageText(chat.id, sent.message_id, t('chat.failed', { message: event.message }))
+          .editMessageText(chat.id, sent.message_id, event.message, { parse_mode: 'HTML' })
           .catch(() => {});
         return;
       }
@@ -132,7 +132,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       : t('chat.failed', { message: err instanceof Error ? err.message : String(err) });
     console.error('[chat.handler]', err);
     await ctx.api
-      .editMessageText(chat.id, sent.message_id, `⚠️ ${msg}`)
+      .editMessageText(chat.id, sent.message_id, `⚠️ ${msg}`, { parse_mode: 'HTML' })
       .catch(() => {});
   }
 }
@@ -186,6 +186,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
         ctx.chat.id,
         processing.message_id,
         t('chat.locationFailed', { message: err instanceof Error ? err.message : String(err) }),
+        { parse_mode: 'HTML' },
       );
     }
   });
@@ -198,12 +199,12 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
     const fileSize = doc.file_size ?? 0;
 
     if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
-      await ctx.reply(t('chat.unsupportedFile', { mimeType }));
+      await ctx.reply(t('chat.unsupportedFile', { mimeType }), { parse_mode: 'HTML' });
       return;
     }
 
     if (fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      await ctx.reply(t('chat.fileTooLarge', { max: MAX_FILE_SIZE_MB }));
+      await ctx.reply(t('chat.fileTooLarge', { max: MAX_FILE_SIZE_MB }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -214,7 +215,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(doc.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(t('chat.fileDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.fileDownloadFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -243,7 +244,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(best.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(t('chat.photoDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.photoDownloadFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -274,7 +275,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(ctx.message.voice.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(t('chat.voiceDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.voiceDownloadFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -292,7 +293,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const json = await res.json() as { text: string };
       transcribed = json.text.trim();
     } catch (err) {
-      await ctx.reply(t('chat.voiceTranscribeFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.voiceTranscribeFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -301,7 +302,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       return;
     }
 
-    await ctx.reply(`🎤 <i>${transcribed}</i>`, { parse_mode: 'HTML' });
+    await ctx.reply(`🎤 <i>${escapeHtml(transcribed)}</i>`, { parse_mode: 'HTML' });
     await handleChatMessage(ctx, transcribed);
   });
 

@@ -85,7 +85,7 @@ derive the key with scrypt or HKDF rather than using the passphrase bytes.
 Deriving changes the key, so existing ciphertext needs a versioned prefix or a
 re-encryption pass.
 
-### [ ] S3 — Unescaped interpolation into Telegram `parse_mode: 'HTML'`
+### [x] S3 — Unescaped interpolation into Telegram `parse_mode: 'HTML'`
 
 *Severity: high (one live user-visible failure). Pre-existing.*
 
@@ -108,12 +108,36 @@ Lower-severity variants of the same shape: `chat.locationSet` interpolates a
 reverse-geocoded city name, `history.loadFailed` and friends interpolate error
 messages.
 
-**Fix direction:** escape at the boundary rather than at each call site — the
-dictionary header already states that every value is sent as HTML, so `t()` (or
-a sibling used for HTML sends) must escape the *variables* it interpolates while
-leaving the template's own markup intact.
-[`backend-telegram/src/render.ts`](../../../backend-telegram/src/render.ts)
-already has `escapeHtml`; it is simply not on these paths.
+**Fixed** by escaping at the boundary rather than at each call site.
+[`escapeHtml`](../../../backend-telegram/src/render.ts) is now exported and is
+the single place that knows what Telegram treats as markup:
+
+- [`t()`](../../../backend-telegram/src/i18n/t.ts) escapes the values it
+  interpolates and leaves the template's own markup alone. That covers every
+  key that takes a variable, including the ones nobody has written yet.
+- the three sites that assemble HTML without going through `t()` — the calendar
+  titles, the stored messages behind `/history`, the Whisper transcript — call
+  `escapeHtml` on the interpolated half explicitly.
+
+Because `t()` now escapes, the nine sends that interpolate a variable but were
+posted as plain text would have shown `&amp;` to the user; they are sent as HTML
+instead. That leaves one rule: **a key that takes a variable is sent as HTML**.
+The exception is `commands.*`, which goes to `setMyCommands` as plain text and
+takes no variables — which is why `'Calendar & Tasks'` may keep its bare
+ampersand. A test walks every dictionary value outside `commands.*` and fails on
+a bare `&` or a stray angle bracket, so the templates stay valid HTML on their
+own.
+
+Escaping inside `t()` has one consequence worth naming, found in review: a value
+that is *already* a rendered message must not be handed back to `t()`, or it is
+escaped twice and the user reads `&amp;amp;`.
+[`sse-client.ts`](../../../backend-telegram/src/sse-client.ts) rendered two of
+its error events itself and
+[`chat.handler.ts`](../../../backend-telegram/src/chat.handler.ts) re-wrapped
+them. The error event now has a single owner: every one leaving `streamChat` is
+finished, translated HTML — including the ones the backend reports, which arrive
+as raw English and are wrapped at that one place — and the caller sends it
+unchanged.
 
 ### [ ] S4 — Paid and CPU-bound endpoints have no rate limit
 
@@ -263,11 +287,14 @@ and [`bidi.ts:16`](../../../backend-langgraph/src/utils/bidi.ts#L16) embed
 literal glyphs. Literal ranges are unreadable in a diff, fragile under
 re-encoding, and already resisted one edit.
 
-### [ ] R5 — `t` is shadowed inside a loop
+### [x] R5 — `t` is shadowed inside a loop
 
 [`calendar.cron.ts:64`](../../../backend-telegram/src/notifier/calendar.cron.ts#L64):
 `for (const t of tasks)` shadows the imported translate function. It works only
 because nothing inside the loop translates anything.
+
+**Fixed** alongside S3 — the loop body had to be edited to escape the title
+anyway, and the variable is now `task`.
 
 ### [ ] R6 — Memory extraction uses the setting, not the message's language
 
