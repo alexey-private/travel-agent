@@ -213,6 +213,14 @@ Three rules that are easy to break:
 - **Markers are written logically.** `• text`, `1. text` — the algorithm moves
   them to the right edge on its own. Repositioning them by hand double-flips them.
 
+The five DejaVu faces are parsed once for the life of the process and the parsed
+faces — not their paths, and not their bytes — are what `registerFont` receives.
+pdfkit reopens a path for every document, and reading the file is the cheap half:
+the cost is the tables, cmap processor and glyph cache fontkit memoises on the
+face and discards with the document. An export costs 28.5 ms with paths, 27.3 ms
+with buffers, 4.2 ms with shared faces. Sharing is safe because every document
+gets its own subset and layout cache.
+
 Indentation under `rtl` comes off a narrower column, not from pdfkit's `indent`,
 which only ever pushes from the left. Bold is dropped inside right-to-left text:
 emphasis needs `continued`, which cannot coexist with breaking the lines

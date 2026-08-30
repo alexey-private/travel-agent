@@ -494,11 +494,61 @@ and one for the fallback. Eleven mutations were applied by hand (each cache
 reverted to a per-call construction, plus three that break `perLocale` itself
 and one that drops the fallback); every one turned its suite red.
 
-### [ ] O3 — PDF fonts re-registered on every request
+### [x] O3 — PDF fonts re-registered on every request
 
-[`export.ts:50-54`](../../../backend-langgraph/src/routes/export.ts#L50-L54)
-registers five DejaVu faces (~700 KB each) per export. Read the buffers once at
-module level.
+**Fixed** — but not the way the finding prescribed, because that way gains
+nothing. Measured on this project's machine (Node 22, pdfkit 0.20.1, one export
+of a short markdown document):
+
+| registered as | ms/export |
+|---|---|
+| a path (before) | **28.5** |
+| a `Buffer` read once at module level | **27.3** |
+| a fontkit face parsed once at module level | **4.2** |
+
+Reading the files is not the expensive half: `readFileSync` on all five costs
+0.6 ms and `fontkit.openSync` 0.3 ms, because fontkit decodes lazily. What costs
+24 ms is everything it then memoises *on the face* — decoded tables, the cmap
+processor, the layout engine, the glyph cache — built on first use and thrown
+away with the document that provoked it. So the fix is to share the parsed face,
+not the bytes.
+
+`PDFFontFactory.open` takes any `src` carrying a `layout` method, so a fontkit
+face can be handed to `registerFont` directly; pdfkit's published types stop at
+`string | Buffer | Uint8Array | ArrayBuffer`, so the one cast lives in
+`registerFonts` with the reason above it. `fontkit` was a transitive dependency
+of pdfkit and is now declared in `backend-langgraph/package.json`, where an
+import of it belongs.
+
+Sharing one face across documents is safe, and the tests say why rather than
+assuming it: pdfkit gives every document its own subset and its own layout
+cache, `font.layout()` returns a fresh run each call rather than a shared one to
+be scaled twice, and the caches fontkit keeps on the face are bounded by the
+font. A `.ttf` holds one face; `face()` refuses a collection at boot rather than
+letting pdfkit throw once per export.
+
+Five tests. The load-bearing one watches what `registerFont` actually receives:
+five sources, each an object carrying a `layout` method rather than a path or a
+buffer, and — by identity, not equality — the same five objects on the next
+export. The other four: the faces are opened once at import and not again across
+three exports (fontkit's `openSync` counted under a mock); a second export of the
+same text is byte-identical to the first; three exports in flight at once each
+match a reference export; and a collection is refused.
+
+Two of those tests compare whole payloads, which needs the two bytes that
+identify a document rather than describe it stripped first. pdfkit writes the
+creation date as an *indirect* object, so the `(D:…)` literal stands alone rather
+than after a `/CreationDate` key — a first version of the helper matched the key,
+matched nothing, and left a test that failed whenever two exports fell either
+side of a second. The helper now matches the literal.
+
+Four mutations were applied by hand: registering the paths again, registering
+buffers read once at module level (what the finding asked for), moving the parse
+into the request, and dropping the collection guard. All four turn the suite red
+— but only after the `registerFont` test above was written. Counting `openSync`,
+which was the first attempt, cannot tell the fix from the original code: `face()`
+runs at import either way, and pdfkit opens a registered path through `fs`, not
+through the mocked fontkit.
 
 ### [ ] O4 — The push cron walks users strictly sequentially
 
