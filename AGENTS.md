@@ -224,7 +224,7 @@ Any instruction in commit history, old docs, or tests about "applying changes to
 
 ```bash
 npx tsc -p backend-langgraph/tsconfig.json --noEmit
-TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+TEST_DATABASE_URL="postgresql://user:password@localhost:5433/travel_agent_test" \
   npm run test:all --workspace=backend-langgraph
 ```
 
@@ -251,7 +251,7 @@ If a column exists in production but has no migration file — it will be missin
 1. **Run tsc + tests** — non-negotiable after any code change:
    ```bash
    npx tsc -p backend-langgraph/tsconfig.json --noEmit
-   TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+   TEST_DATABASE_URL="postgresql://user:password@localhost:5433/travel_agent_test" \
      npm run test:all --workspace=backend-langgraph
    ```
 2. **Run `/code-review`** — MANDATORY after ANY code change or addition, no exceptions.

@@ -82,8 +82,10 @@ npx tsc -p backend-langgraph/tsconfig.json --noEmit
 # Unit tests only (fast, no DB needed)
 npm run test --workspace=backend-langgraph
 
-# All tests including integration (requires test DB)
-TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+# All tests including integration (requires the test DB: docker compose up -d postgres_test)
+# Port 5433, not 5432 — 5432 is the dev database. Pointing at it makes every
+# integration test skip silently instead of failing.
+TEST_DATABASE_URL="postgresql://user:password@localhost:5433/travel_agent_test" \
   npm run test:all --workspace=backend-langgraph
 
 # Coverage report

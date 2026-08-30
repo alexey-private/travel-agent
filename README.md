@@ -432,9 +432,12 @@ npx tsc -p backend/tsconfig.json --noEmit && npx tsc -p backend-langgraph/tsconf
 # Unit tests (no DB required)
 npm run test --workspace=backend-langgraph
 
-# All tests including integration (requires test DB)
-docker exec travel-agent-postgres-1 psql -U user -d postgres -c "CREATE DATABASE travel_agent_test;" 2>/dev/null || true
-TEST_DATABASE_URL="postgresql://user:password@localhost:5432/travel_agent_test" \
+# All tests including integration — docker-compose already ships the test DB
+# on port 5433 (5432 is the dev database; pointing at it silently skips them all)
+docker compose up -d postgres_test
+DATABASE_URL="postgresql://user:password@localhost:5433/travel_agent_test" \
+  npm run migrate --workspace=backend-langgraph
+TEST_DATABASE_URL="postgresql://user:password@localhost:5433/travel_agent_test" \
   npm run test:all --workspace=backend-langgraph
 ```
 
