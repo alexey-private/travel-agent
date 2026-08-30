@@ -2,6 +2,7 @@ import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LanguageProvider } from "@/i18n/LanguageProvider";
 import { useT, useLocale } from "@/i18n/useT";
+import { cookieWrittenWhenSwitchingTo } from "../helpers/languageCookieWrite";
 
 jest.mock("@/lib/api", () => ({ getOrCreateUserId: () => "session-test" }));
 
@@ -71,6 +72,18 @@ describe("LanguageProvider", () => {
     await userEvent.click(screen.getByRole("button", { name: /to hebrew/i }));
     expect(document.cookie).toContain("lang=he");
     expect(window.localStorage.getItem("lang")).toBe("he");
+  });
+
+  // This environment is http://localhost. A browser silently discards a Secure
+  // cookie written from a plaintext page, so asking for the flag here would
+  // reset the language on every reload in development. The HTTPS half of this
+  // rule lives in languageCookieSecure.test.tsx.
+  it("omits Secure on a plaintext page, where the cookie would be dropped", async () => {
+    const written = await cookieWrittenWhenSwitchingTo("he");
+
+    expect(written).toBeDefined();
+    expect(written).not.toContain("Secure");
+    expect(written).toContain("SameSite=Lax");
   });
 
   it("pushes the choice to the backend", async () => {

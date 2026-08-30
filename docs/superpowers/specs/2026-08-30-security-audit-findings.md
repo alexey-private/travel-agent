@@ -336,7 +336,7 @@ and by the `ALLOWED_ORIGIN` block of
 [`env.test.ts`](../../../backend-langgraph/tests/unit/config/env.test.ts).
 Eight mutations, including restoring the original reflection, were all caught.
 
-### [ ] S7 — Small leaks
+### [x] S7 — Small leaks
 
 *Severity: low. Pre-existing.*
 
@@ -347,6 +347,66 @@ Eight mutations, including restoring the original reflection, were all caught.
 
 The frontend is clean for XSS: `react-markdown` runs without `rehype-raw` and
 there is no `dangerouslySetInnerHTML` anywhere.
+
+**Fixed.**
+
+*The CalDAV message.* iCloud writes its failures for whoever runs the server:
+the text can name the account, the collection URL or the upstream response
+verbatim. It now goes to `req.log.error` and the caller gets
+`Could not reach Apple iCloud` beside the unchanged `apple_request_failed`
+code. Nothing is lost — the detail moves to where it is useful, and it was
+never used at the other end anyway: `getAppleReminderLists` returns `[]` on a
+non-OK response without reading the body. `/auth/apple/connect`, the sibling
+route, already answered with fixed text; this was the one that did not.
+
+The same shape at [`chat.ts:290`](../../../backend-langgraph/src/routes/chat.ts#L290)
+is left alone here, but not because it is fine — it is a different failure with
+a different audience, and changing it is a product decision rather than a
+tightening. It is written up separately as S8 below.
+
+*The cookie.* `Secure` is now set, but only when the page is served over
+HTTPS. A browser silently discards a Secure cookie written from a plaintext
+page, so an unconditional flag would leave the language resetting on every
+reload in development — and over http there is no confidentiality to protect
+in the first place. `SameSite=Lax` is unchanged; `HttpOnly` is not available
+here, since the same JavaScript that writes the cookie reads it back to decide
+whether the server already had one.
+
+Covered by the `a CalDAV failure` suite in
+[`settings.test.ts`](../../../backend-langgraph/tests/unit/routes/settings.test.ts)
+— caller told nothing, log told everything, happy path intact — and by the two
+halves of the cookie rule, which need two jsdom environments: HTTPS in
+[`languageCookieSecure.test.tsx`](../../../frontend/src/__tests__/i18n/languageCookieSecure.test.tsx),
+plain HTTP in
+[`LanguageProvider.test.tsx`](../../../frontend/src/__tests__/i18n/LanguageProvider.test.tsx).
+`document.cookie` reads back name and value only, so both assert on the write
+itself via `captureCookieWrites`. Eight mutations were applied by hand — there
+is no mutation-testing tool in this repo — each reverting one line of the fix or
+one guarantee around it, including both original behaviours; every one of them
+turned a suite red.
+
+---
+
+### [ ] S8 — `/api/chat` sends its raw failure to Telegram and nothing to the web
+
+*Severity: low. Pre-existing. Found while fixing S7.*
+
+[`chat.ts:290`](../../../backend-langgraph/src/routes/chat.ts#L290) logs the
+error and then puts `err.message` on the wire as an SSE `error` event. Two
+things follow, and neither looks deliberate:
+
+- **Telegram shows it verbatim.** `chat.handler.ts` renders the event through
+  `chat.failed` — "Sorry, something went wrong: {message}" — so whatever the
+  model provider, the database driver or a tool threw is read by the user.
+- **The web shows nothing at all.** `AgentEvent` in
+  [`frontend/src/types/agent.ts`](../../../frontend/src/types/agent.ts) has no
+  `error` variant and the `switch` in `useStreamChat` has no case for it, so the
+  browser parses the event and discards it. The assistant bubble simply stops,
+  empty, when `done` follows.
+
+Fixing the leak and fixing the silence pull in opposite directions — one wants
+less text on the wire, the other wants the text to arrive somewhere — so this
+needs a decision about what a failed turn should say, not just an edit.
 
 ---
 

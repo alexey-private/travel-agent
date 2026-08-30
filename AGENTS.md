@@ -134,9 +134,25 @@ per-process cache (`session.locale`), refetched after a restart.
   natural routes and currencies. A test caps each at 64 UTF-8 bytes — roughly 30
   characters once Hebrew or Cyrillic takes two bytes each.
 
+---
+
+## Error Responses
+
 HTTP error responses carry a snake_case `code` next to the English `error`. The
 frontend translates by `code` (`errors.<code>` in the dictionaries) on the two paths
 that have no agent to translate for them: Apple iCloud connect and Drive export.
+
+The `error` string is written by us and never forwarded from an upstream service.
+A CalDAV or provider message is written for whoever runs the server — it can name
+accounts, collection URLs and raw upstream responses — so it goes to `req.log.error`
+and the caller gets a fixed sentence plus the `code`.
+
+`/api/chat` is the one place that still passes a raw `err.message` outward, over
+its SSE `error` event. It reaches Telegram users verbatim (the bot renders it
+through `chat.failed`) and reaches web users not at all — the frontend's
+`AgentEvent` union has no `error` variant, so the browser parses the event and
+drops it. Both halves of that are open, not intended; see S8 in the security
+audit findings.
 
 ---
 
