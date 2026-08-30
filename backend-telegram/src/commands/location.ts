@@ -1,25 +1,22 @@
 import type { Bot } from 'grammy';
 import type { BotContext } from '../types';
+import { tFor } from '../i18n/language';
 
 export function registerLocationCommand(bot: Bot<BotContext>): void {
   bot.command('location', async (ctx) => {
+    const t = await tFor(ctx);
     const city = ctx.session.currentCity;
     if (!city) {
-      await ctx.reply(
-        '📍 No location saved.\n\nShare your location using the 📎 attachment button → <b>Location</b> and I\'ll remember your city.',
-        { parse_mode: 'HTML' },
-      );
+      await ctx.reply(t('location.none'), { parse_mode: 'HTML' });
       return;
     }
-    await ctx.reply(
-      `📍 Your current location is set to <b>${city}</b>.\n\nSend /clearlocation to remove it.`,
-      { parse_mode: 'HTML' },
-    );
+    await ctx.reply(t('location.current', { city }), { parse_mode: 'HTML' });
   });
 
   bot.command('clearlocation', async (ctx) => {
+    const t = await tFor(ctx);
     const prev = ctx.session.currentCity;
     ctx.session.currentCity = null;
-    await ctx.reply(prev ? `📍 Location cleared (was: ${prev}).` : '📍 No location was set.');
+    await ctx.reply(prev ? t('location.cleared', { city: prev }) : t('location.nothingToClear'));
   });
 }

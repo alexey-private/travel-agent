@@ -1,7 +1,8 @@
 import type { Bot } from 'grammy';
 import type { BotContext } from '../types';
-import { BACKEND_URL } from '../index';
+import { BACKEND_URL } from '../config';
 import { ensureSessionId } from '../session';
+import { tFor } from '../i18n/language';
 
 const HISTORY_PAIRS = 5;
 const MAX_MSG_LENGTH = 300;
@@ -20,8 +21,9 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
     ensureSessionId(ctx);
 
     const { sessionId, conversationId } = ctx.session;
+    const t = await tFor(ctx);
 
-    const processing = await ctx.reply('📋 Loading history…');
+    const processing = await ctx.reply(t('history.loading'));
 
     // If conversationId is not in session (e.g. after bot restart), fetch most recent from backend
     let resolvedConversationId = conversationId;
@@ -40,7 +42,7 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
     }
 
     if (!resolvedConversationId) {
-      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, 'No conversation history yet. Start chatting first!');
+      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, t('history.none'));
       return;
     }
 
@@ -57,13 +59,13 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
       await ctx.api.editMessageText(
         ctx.chat!.id,
         processing.message_id,
-        `Could not load history: ${err instanceof Error ? err.message : String(err)}`,
+        t('history.loadFailed', { message: err instanceof Error ? err.message : String(err) }),
       );
       return;
     }
 
     if (!messages.length) {
-      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, 'No messages in this conversation yet.');
+      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, t('history.empty'));
       return;
     }
 
@@ -78,11 +80,11 @@ export function registerHistoryCommand(bot: Bot<BotContext>): void {
     const recent = pairs.slice(-HISTORY_PAIRS);
 
     if (!recent.length) {
-      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, 'No complete message pairs found.');
+      await ctx.api.editMessageText(ctx.chat!.id, processing.message_id, t('history.noPairs'));
       return;
     }
 
-    const lines: string[] = [`<b>📋 Last ${recent.length} exchange${recent.length > 1 ? 's' : ''}:</b>\n`];
+    const lines: string[] = [t('history.header', { count: recent.length })];
     for (const [user, assistant] of recent) {
       lines.push(`👤 <i>${truncate(user.content, MAX_MSG_LENGTH)}</i>`);
       lines.push(`🤖 ${truncate(assistant.content, MAX_MSG_LENGTH)}\n`);

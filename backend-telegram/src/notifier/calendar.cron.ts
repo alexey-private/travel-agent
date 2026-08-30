@@ -1,6 +1,9 @@
 import cron from 'node-cron';
 import type { Api } from 'grammy';
-import { BACKEND_URL } from '../index';
+import { BACKEND_URL } from '../config';
+import { fetchLocale } from '../i18n/language';
+import { t } from '../i18n/t';
+import type { Locale } from '../i18n/config';
 
 interface CalendarEvent {
   id: string;
@@ -45,11 +48,11 @@ async function fetchTomorrowReminders(sessionId: string): Promise<{ events: Cale
   };
 }
 
-function formatNotification(events: CalendarEvent[], tasks: Task[]): string {
-  const lines: string[] = ['📅 <b>Tomorrow\'s reminders:</b>\n'];
+function formatNotification(events: CalendarEvent[], tasks: Task[], locale: Locale): string {
+  const lines: string[] = [t(locale, 'notify.header')];
 
   if (events.length > 0) {
-    lines.push('🗓 <b>Events:</b>');
+    lines.push(t(locale, 'notify.events'));
     for (const e of events) {
       lines.push(`  • ${e.time ? `${e.time} — ` : ''}${e.title}`);
     }
@@ -57,7 +60,7 @@ function formatNotification(events: CalendarEvent[], tasks: Task[]): string {
 
   if (tasks.length > 0) {
     if (events.length > 0) lines.push('');
-    lines.push('✅ <b>Tasks due:</b>');
+    lines.push(t(locale, 'notify.tasks'));
     for (const t of tasks) {
       lines.push(`  • ${t.title}`);
     }
@@ -93,7 +96,10 @@ export function startCalendarCron(api: Api): void {
         const { events, tasks } = await fetchTomorrowReminders(sessionId);
         if (events.length === 0 && tasks.length === 0) continue;
 
-        const text = formatNotification(events, tasks);
+        // No grammY context here — the recipient's language comes straight
+        // from their stored settings, keyed by the same tg-<id> session id.
+        const locale = await fetchLocale(sessionId);
+        const text = formatNotification(events, tasks, locale);
         await api.sendMessage(telegramId, text, { parse_mode: 'HTML' });
         console.log(`[cron] Notified tg user ${telegramId}: ${events.length} event(s), ${tasks.length} task(s)`);
       } catch (err) {

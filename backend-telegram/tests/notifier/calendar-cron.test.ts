@@ -3,8 +3,9 @@
  * Mocks: node-cron (captures callback), fetch (simulates backend API), grammy Api.
  */
 
-// Prevent index.ts from executing (it throws without BOT_TOKEN)
-jest.mock('../../src/index', () => ({ BACKEND_URL: 'http://localhost:3002' }));
+// The cron reads BACKEND_URL from src/config — pin it so the test does not
+// depend on the developer's environment.
+jest.mock('../../src/config', () => ({ BACKEND_URL: 'http://localhost:3002' }));
 
 let capturedCronCallback: (() => Promise<void>) | null = null;
 jest.mock('node-cron', () => ({
@@ -182,5 +183,42 @@ describe('startCalendarCron', () => {
     const messageText = (api.sendMessage as jest.Mock).mock.calls[0][1] as string;
     expect(messageText).toContain('Doctor appointment');
     expect(messageText).toContain('Pack bag');
+  });
+
+  it('writes the reminder in the language stored for the recipient', async () => {
+    const api = buildMockApi();
+    startCalendarCron(api as unknown as Api);
+
+    mockFetch({
+      '/api/users/telegram': { sessionIds: ['tg-444'] },
+      '/api/settings': { language: 'he' },
+      'calendar/events': { upcoming: [{ id: 'e5', title: 'Flight to Rome', date: tomorrow(), time: '07:30' }] },
+      'calendar/tasks': { tasks: [] },
+    });
+
+    await capturedCronCallback!();
+
+    const messageText = (api.sendMessage as jest.Mock).mock.calls[0][1] as string;
+    expect(messageText).toContain('תזכורות למחר');
+    expect(messageText).toContain('אירועים');
+    // Event titles come from the calendar, so they stay as the user wrote them.
+    expect(messageText).toContain('Flight to Rome');
+  });
+
+  it('falls back to English when the recipient has no stored language', async () => {
+    const api = buildMockApi();
+    startCalendarCron(api as unknown as Api);
+
+    mockFetch({
+      '/api/users/telegram': { sessionIds: ['tg-555'] },
+      '/api/settings': {},
+      'calendar/events': { upcoming: [{ id: 'e6', title: 'Standup', date: tomorrow(), time: '10:00' }] },
+      'calendar/tasks': { tasks: [] },
+    });
+
+    await capturedCronCallback!();
+
+    const messageText = (api.sendMessage as jest.Mock).mock.calls[0][1] as string;
+    expect(messageText).toContain("Tomorrow's reminders");
   });
 });

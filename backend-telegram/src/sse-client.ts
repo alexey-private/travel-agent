@@ -1,4 +1,6 @@
-import { BACKEND_URL } from './index';
+import { BACKEND_URL } from './config';
+import { DEFAULT_LOCALE, type Locale } from './i18n/config';
+import { t } from './i18n/t';
 
 export type AgentEvent =
   | { type: 'conversation_id'; conversationId: string }
@@ -22,6 +24,8 @@ interface ChatRequest {
   message: string;
   agentType: 'travel' | 'shopping';
   attachments?: Attachment[];
+  /** Language of the error events this generator yields; defaults to English. */
+  locale?: Locale;
 }
 
 /**
@@ -29,6 +33,7 @@ interface ChatRequest {
  * The caller is responsible for breaking on 'done' or 'error'.
  */
 export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> {
+  const locale = req.locale ?? DEFAULT_LOCALE;
   const body = JSON.stringify({
     userId: req.sessionId,
     message: req.message,
@@ -47,14 +52,14 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    yield { type: 'error', message: `Cannot reach backend: ${message}` };
+    yield { type: 'error', message: t(locale, 'chat.cannotReachBackend', { message }) };
     yield { type: 'done' };
     return;
   }
 
   if (!response.ok || !response.body) {
     const text = await response.text().catch(() => 'unknown error');
-    yield { type: 'error', message: `Backend error ${response.status}: ${text}` };
+    yield { type: 'error', message: t(locale, 'chat.backendError', { status: response.status, text }) };
     yield { type: 'done' };
     return;
   }

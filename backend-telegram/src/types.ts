@@ -1,4 +1,5 @@
 import type { Context, SessionFlavor } from 'grammy';
+import type { Locale } from './i18n/config';
 
 export interface SessionData {
   sessionId: string | null;
@@ -8,6 +9,8 @@ export interface SessionData {
   suggestions: string[];
   // Reverse-geocoded city from shared location, prepended to agent queries
   currentCity: string | null;
+  // Cached copy of the language stored in the backend; null until first read
+  locale: Locale | null;
 }
 
 export type BotContext = Context & SessionFlavor<SessionData>;

@@ -10,9 +10,9 @@ import http from 'http';
 import type { AddressInfo } from 'net';
 import type { Api } from 'grammy';
 
-// Prevent index.ts from running (BOT_TOKEN guard). We'll override BACKEND_URL
-// via process.env before importing the module under test.
-jest.mock('../../src/index', () => ({ BACKEND_URL: process.env.__TEST_BACKEND_URL__ ?? '' }));
+// The cron reads BACKEND_URL from src/config. We override it per test via the
+// factory below; this default keeps the module importable at load time.
+jest.mock('../../src/config', () => ({ BACKEND_URL: process.env.__TEST_BACKEND_URL__ ?? '' }));
 
 let capturedCallback: (() => Promise<void>) | null = null;
 jest.mock('node-cron', () => ({
@@ -65,7 +65,7 @@ async function loadCron(backendUrl: string) {
   jest.mock('node-cron', () => ({
     schedule: jest.fn((_expr: string, cb: () => Promise<void>) => { capturedCallback = cb; }),
   }));
-  jest.mock('../../src/index', () => ({ BACKEND_URL: backendUrl }));
+  jest.mock('../../src/config', () => ({ BACKEND_URL: backendUrl }));
   const mod = await import('../../src/notifier/calendar.cron');
   return mod.startCalendarCron;
 }

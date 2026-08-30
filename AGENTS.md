@@ -59,6 +59,10 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [frontend/src/i18n/](frontend/src/i18n/) | `LanguageProvider`, `useT`, dictionaries (`en`/`he`/`ru`), `translate()` — see the `add-ui-string` recipe in SKILL.md |
 | [frontend/src/i18n/detectLocale.ts](frontend/src/i18n/detectLocale.ts) | Browser-language detection — `headerLocale` (server, `Accept-Language`) and `browserLocale` (client, `navigator`); default for a visitor with nothing stored |
 | [frontend/src/i18n/direction.ts](frontend/src/i18n/direction.ts) | `MIRROR_UNDER_RTL` — the one class that flips a direction-carrying icon; see the `rtl-check` recipe in SKILL.md |
+| [backend-telegram/src/i18n/](backend-telegram/src/i18n/) | Bot dictionaries (`en`/`he`/`ru`), `t()`, and `language.ts` — reads/writes the language through `/api/settings`, caches it in the grammY session |
+| [backend-telegram/src/commands/lang.ts](backend-telegram/src/commands/lang.ts) | `/lang` — inline keyboard that switches the bot language |
+| [backend-telegram/src/data/suggestions.ts](backend-telegram/src/data/suggestions.ts) | `STARTER_POOLS` — starter buttons written per language, not translated |
+| [backend-telegram/src/config.ts](backend-telegram/src/config.ts) | `BACKEND_URL`, `BACKEND_PUBLIC_URL` — kept out of `index.ts`, which boots the bot on import |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Railway deploy: per-service env vars, Dockerfile paths, migration/networking notes |
 | [Dockerfile.backend-langgraph](Dockerfile.backend-langgraph), [Dockerfile.backend-telegram](Dockerfile.backend-telegram), [Dockerfile.frontend](Dockerfile.frontend) | Multi-stage builds, root-context (npm workspaces) |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | tsc + tests (real pgvector service container) on push/PR to main |
@@ -97,6 +101,32 @@ Three rules that are easy to break:
   `diet`), so only memory *values* follow the user's language. `FIRST_PERSON_RE`
   gates extraction and must recognise every supported language — one it cannot read
   is one whose users never accumulate any memory.
+
+---
+
+## Telegram Bot Language
+
+The bot stores nothing of its own: the language lives in `user_service_preferences`
+under the same `tg-<telegram user id>` the web app would use, so `/lang` and the
+web language switcher move the same value. The grammY session holds only a
+per-process cache (`session.locale`), refetched after a restart.
+
+- **The bot never sends `language` in the `/api/chat` body.** A body value is
+  treated as the user's newest choice and written back, so a session cache that
+  went stale after a switch on the web would overwrite the fresher value. The
+  backend reads the stored preference under the same id anyway.
+- **A failed settings read is not cached.** `getLocale` caches a real answer only —
+  caching the English fallback would outlive the blip and keep answering the wrong
+  language until the process restarts.
+- **The native command menu follows the Telegram client's language, not ours.**
+  `setMyCommands` is registered per `language_code` plus a default set; a user whose
+  Telegram UI is English sees English command descriptions even after picking
+  Hebrew. The bot's own replies still follow the stored value. Telegram offers no
+  other scope.
+- **Starter buttons are written, not translated.** Each entry in `STARTER_POOLS` is
+  both a button label and the message sent to the LLM, so every locale gets its own
+  natural routes and currencies. A test caps each at 64 UTF-8 bytes — roughly 30
+  characters once Hebrew or Cyrillic takes two bytes each.
 
 HTTP error responses carry a snake_case `code` next to the English `error`. The
 frontend translates by `code` (`errors.<code>` in the dictionaries) on the two paths

@@ -3,8 +3,9 @@
  * `fetch` is mocked globally to simulate server-sent event streams.
  */
 
-// Mock index.ts to avoid requiring BOT_TOKEN at module load
-jest.mock('../src/index', () => ({ BACKEND_URL: 'http://localhost:3002' }));
+// streamChat reads BACKEND_URL from src/config — pin it so the test does not
+// depend on the developer's environment.
+jest.mock('../src/config', () => ({ BACKEND_URL: 'http://localhost:3002' }));
 
 import { streamChat, type AgentEvent } from '../src/sse-client';
 

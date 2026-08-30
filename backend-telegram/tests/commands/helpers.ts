@@ -25,6 +25,10 @@ export function defaultSession(overrides: Partial<SessionData> = {}): SessionDat
     agentType: 'travel',
     suggestions: [],
     currentCity: null,
+    // Pre-seeded so getLocale() answers from the session cache. Without it
+    // every command test would try to reach a real backend for the language,
+    // and would read a real preference whenever one happens to be running.
+    locale: 'en',
     ...overrides,
   };
 }

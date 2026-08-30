@@ -214,6 +214,34 @@ Component tests render through `renderWithI18n` from `src/__tests__/helpers/rend
 
 ---
 
+## SKILL: add-bot-string
+
+**When:** Any text the Telegram bot sends is added — a reply, an error, a command
+description, a cron notification.
+
+1. Add the key to `backend-telegram/src/i18n/locales/en.ts`. Name it
+   `<namespace>.<camelCase>`, namespaced by the surface: `common.*`, `start.*`,
+   `chat.*`, `commands.*`, `history.*`, `location.*`, `connect.*`, `agent.*`,
+   `mode.*`, `calendar.*`, `tasks.*`, `clear.*`, `lang.*`, `notify.*`.
+2. Add the **same key** to `he.ts` and `ru.ts`. `Dictionary` is inferred from
+   `en.ts` and the other two are annotated with it, so a missed key is a compile
+   error — `npm run typecheck --workspace=backend-telegram` is the check.
+3. Read it in a handler with `const t = await tFor(ctx);` → `t('namespace.key')`.
+   Resolve `t` **before** any code that clears `ctx.session.sessionId` (`/clear`),
+   because the stored language is looked up by that id.
+4. HTML markup (`<b>`, `<i>`, `<code>`) is part of the value, since the reply is
+   sent with `parse_mode: 'HTML'`. Keep `&amp;` escaped.
+
+**No `ctx` available?** `notifier/calendar.cron.ts` has recipients but no context —
+use `fetchLocale(sessionId)` and the bare `t(locale, key)`. `sse-client.ts` takes
+the locale as a field on its request object.
+
+**Not translated:** `console.*` output, the `[My current location: …]` prefix and
+the `/calendar` and `/tasks` dispatch prompts — those are messages to the LLM, and
+the agent's own `## Language` block makes it answer in the user's language anyway.
+
+---
+
 ## SKILL: rtl-check
 
 **When:** Any markup is added or changed in the frontend. Hebrew renders the

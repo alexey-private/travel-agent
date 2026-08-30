@@ -14,6 +14,9 @@ Telegram frontend for the Travel & Shopping AI agent. Bridges user messages to `
 
 ### Set bot commands (optional but recommended)
 
+The bot registers its own command menu in all three languages on startup, so this
+step is only useful before the first run.
+
 Still in BotFather, send `/setcommands`, select your bot, then paste:
 
 ```
@@ -23,6 +26,7 @@ shopping - Switch to Shopping Agent mode
 mode - Show current agent mode
 calendar - List upcoming calendar events
 connect - Link your Google account (Calendar & Tasks)
+lang - Change the language of the bot
 clear - Reset conversation
 ```
 
@@ -100,4 +104,5 @@ bot sends POST /api/chat
 | `/mode` | Show current agent mode and session ID |
 | `/calendar` | Ask the agent to list upcoming events (requires Google account) |
 | `/connect` | Get a personal Google OAuth link to enable Calendar & Tasks |
+| `/lang` | Switch the bot language (English / עברית / Russian) — shared with the web app |
 | `/clear` | Reset conversation — next message starts fresh |

@@ -5,13 +5,9 @@ import type { BotContext, SessionData } from './types';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN is required');
 
-export const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3002';
-
-// Separate from BACKEND_URL: that one is a private-network address the bot's
-// own server-to-server fetch calls use, which is unreachable from a user's
-// browser (e.g. Railway's `*.railway.internal`). Links sent to the user
-// (like /connect's OAuth link) must use a publicly reachable URL instead.
-export const BACKEND_PUBLIC_URL = process.env.BACKEND_PUBLIC_URL ?? BACKEND_URL;
+// BACKEND_URL and BACKEND_PUBLIC_URL live in ./config, and are imported from
+// there — never re-exported here. Importing this file runs it, and running it
+// starts the bot, so a module that only wants a URL must not reach for it here.
 
 const bot = new Bot<BotContext>(BOT_TOKEN);
 
@@ -23,6 +19,7 @@ bot.use(
       agentType: 'travel',
       suggestions: [],
       currentCity: null,
+      locale: null,
     }),
   }),
 );
@@ -36,8 +33,12 @@ import { registerTasksCommand } from './commands/tasks';
 import { registerModeCommand } from './commands/mode';
 import { registerLocationCommand } from './commands/location';
 import { registerHistoryCommand } from './commands/history';
+import { registerLangCommand } from './commands/lang';
 import { registerChatHandler, handleChatMessage } from './chat.handler';
 import { startCalendarCron } from './notifier/calendar.cron';
+import { LOCALES, DEFAULT_LOCALE } from './i18n/config';
+import { t } from './i18n/t';
+import type { TKey } from './i18n/dictionaries';
 
 registerStartCommand(bot);
 registerAgentTypeCommands(bot);
@@ -48,6 +49,7 @@ registerTasksCommand(bot);
 registerModeCommand(bot);
 registerLocationCommand(bot);
 registerHistoryCommand(bot);
+registerLangCommand(bot);
 
 // Inline keyboard: suggestion buttons (data = "sugg:<index>")
 bot.callbackQuery(/^sugg:(\d+)$/, async (ctx) => {
@@ -66,25 +68,40 @@ bot.catch((err) => {
   console.error('Unhandled bot error:', err.message, err.stack);
 });
 
-const BOT_COMMANDS = [
-  { command: 'start',    description: 'Show welcome message and quick examples' },
-  { command: 'travel',   description: 'Switch to Travel Agent mode' },
-  { command: 'shopping', description: 'Switch to Shopping Agent mode' },
-  { command: 'mode',     description: 'Show current agent mode' },
-  { command: 'calendar', description: 'List upcoming calendar events' },
-  { command: 'tasks',    description: 'List your Google Tasks' },
-  { command: 'connect',  description: 'Link your Google account (Calendar & Tasks)' },
-  { command: 'clear',       description: 'Reset conversation' },
-  { command: 'location',    description: 'Show saved location' },
-  { command: 'clearlocation', description: 'Clear saved location' },
-  { command: 'history',       description: 'Show last 5 exchanges in this conversation' },
+const BOT_COMMAND_KEYS: { command: string; key: TKey }[] = [
+  { command: 'start',         key: 'commands.start' },
+  { command: 'travel',        key: 'commands.travel' },
+  { command: 'shopping',      key: 'commands.shopping' },
+  { command: 'mode',          key: 'commands.mode' },
+  { command: 'calendar',      key: 'commands.calendar' },
+  { command: 'tasks',         key: 'commands.tasks' },
+  { command: 'connect',       key: 'commands.connect' },
+  { command: 'clear',         key: 'commands.clear' },
+  { command: 'location',      key: 'commands.location' },
+  { command: 'clearlocation', key: 'commands.clearLocation' },
+  { command: 'history',       key: 'commands.history' },
+  { command: 'lang',          key: 'commands.lang' },
 ];
 
 bot.start({
   onStart: async (info) => {
     console.log(`Bot started as @${info.username}`);
-    await bot.api.setMyCommands(BOT_COMMANDS);
-    console.log('Bot commands registered');
+
+    // Telegram scopes the command menu by the CLIENT's language, which is not
+    // necessarily the language the user picked in our settings. The menu follows
+    // Telegram; the bot's replies follow our stored value. Registering the
+    // default set last makes it the fallback for every other client language.
+    for (const locale of LOCALES) {
+      await bot.api.setMyCommands(
+        BOT_COMMAND_KEYS.map(({ command, key }) => ({ command, description: t(locale, key) })),
+        { language_code: locale },
+      );
+    }
+    await bot.api.setMyCommands(
+      BOT_COMMAND_KEYS.map(({ command, key }) => ({ command, description: t(DEFAULT_LOCALE, key) })),
+    );
+
+    console.log('Bot commands registered for', LOCALES.join(', '));
     startCalendarCron(bot.api);
   },
 });

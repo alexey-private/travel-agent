@@ -6,6 +6,7 @@ import { setTasksDispatch } from './commands/tasks';
 import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
 import { renderHtml } from './render';
+import { getLocale, tFor, tIn } from './i18n/language';
 
 const MAX_TG_LENGTH = 4096;
 const EDIT_THROTTLE_MS = 1000;
@@ -33,7 +34,11 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
   const chat = ctx.chat!;
   ensureSessionId(ctx);
 
-  const sent = await ctx.reply('...');
+  // The locale itself is needed further down, for the SSE request.
+  const locale = await getLocale(ctx);
+  const t = tIn(locale);
+
+  const sent = await ctx.reply(t('common.thinking'));
   const typingInterval = setInterval(() => {
     ctx.api.sendChatAction(chat.id, 'typing').catch(() => {});
   }, TYPING_INTERVAL_MS);
@@ -55,6 +60,12 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       message: messageWithLocation,
       agentType: ctx.session.agentType,
       attachments,
+      // Only for the error events this generator yields. It is deliberately
+      // NOT sent in the chat body: /api/chat treats a body language as the
+      // user's newest choice and writes it back, so a session cache that went
+      // stale after a switch on the web would overwrite the fresher value.
+      // The backend reads the stored preference under the same tg-<id> anyway.
+      locale,
     })) {
       if (event.type === 'conversation_id') {
         ctx.session.conversationId = event.conversationId;
@@ -75,7 +86,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       if (event.type === 'tool_start') {
         if (!toolActivity) {
           await ctx.api
-            .editMessageText(chat.id, sent.message_id, `⚙️ Using <b>${event.tool}</b>…`, { parse_mode: 'HTML' })
+            .editMessageText(chat.id, sent.message_id, t('chat.usingTool', { tool: event.tool }), { parse_mode: 'HTML' })
             .catch(() => {});
           toolActivity = true;
         }
@@ -90,7 +101,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       if (event.type === 'error') {
         clearInterval(typingInterval);
         await ctx.api
-          .editMessageText(chat.id, sent.message_id, `Sorry, something went wrong: ${event.message}`)
+          .editMessageText(chat.id, sent.message_id, t('chat.failed', { message: event.message }))
           .catch(() => {});
         return;
       }
@@ -100,7 +111,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
 
     clearInterval(typingInterval);
 
-    const chunks = splitMessage(accumulated || '(no response)');
+    const chunks = splitMessage(accumulated || t('chat.noResponse'));
     await ctx.api
       .editMessageText(chat.id, sent.message_id, renderHtml(chunks[0]), { parse_mode: 'HTML' })
       .catch(() => {});
@@ -111,13 +122,13 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
     // Show dynamic follow-up suggestions as inline keyboard
     if (pendingSuggestions.length > 0) {
       const kb = buildSuggestionsKeyboard(pendingSuggestions, ctx);
-      await ctx.reply('What would you like to do next?', { reply_markup: kb });
+      await ctx.reply(t('chat.nextStep'), { reply_markup: kb });
     }
   } catch (err) {
     clearInterval(typingInterval);
     const isConnectError = err instanceof TypeError && err.message.includes('fetch failed');
     const msg = isConnectError
-      ? 'Cannot reach the backend. Make sure backend-langgraph is running.'
+      ? t('chat.backendUnreachable')
       : err instanceof Error ? err.message : String(err);
     console.error('[chat.handler]', err);
     await ctx.api
@@ -159,38 +170,40 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
   // Location handler — reverse-geocode and store city in session
   bot.on('message:location', async (ctx) => {
     const { latitude, longitude } = ctx.message.location;
-    const processing = await ctx.reply('📍 Getting your location…');
+    const t = await tFor(ctx);
+    const processing = await ctx.reply(t('chat.gettingLocation'));
     try {
       const city = await reverseGeocode(latitude, longitude);
       ctx.session.currentCity = city;
       await ctx.api.editMessageText(
         ctx.chat.id,
         processing.message_id,
-        `📍 Location set to <b>${city}</b>.\n\nI'll include your location in travel queries. Use /clearlocation to remove it.`,
+        t('chat.locationSet', { city }),
         { parse_mode: 'HTML' },
       );
     } catch (err) {
       await ctx.api.editMessageText(
         ctx.chat.id,
         processing.message_id,
-        `Could not determine your location: ${err instanceof Error ? err.message : String(err)}`,
+        t('chat.locationFailed', { message: err instanceof Error ? err.message : String(err) }),
       );
     }
   });
 
   // Document handler — PDF and plain text files
   bot.on('message:document', async (ctx) => {
+    const t = await tFor(ctx);
     const doc = ctx.message.document;
     const mimeType = doc.mime_type ?? 'application/octet-stream';
     const fileSize = doc.file_size ?? 0;
 
     if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
-      await ctx.reply(`Unsupported file type: ${mimeType}.\nI can read PDF and plain text files.`);
+      await ctx.reply(t('chat.unsupportedFile', { mimeType }));
       return;
     }
 
     if (fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      await ctx.reply(`File is too large (max ${MAX_FILE_SIZE_MB} MB).`);
+      await ctx.reply(t('chat.fileTooLarge', { max: MAX_FILE_SIZE_MB }));
       return;
     }
 
@@ -201,7 +214,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(doc.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(`Could not download the file: ${err instanceof Error ? err.message : String(err)}`);
+      await ctx.reply(t('chat.fileDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
       return;
     }
 
@@ -219,6 +232,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
 
   // Photo handler
   bot.on('message:photo', async (ctx) => {
+    const t = await tFor(ctx);
     const photos = ctx.message.photo;
     const best = photos[photos.length - 1]; // highest resolution
 
@@ -229,7 +243,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(best.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(`Could not download the photo: ${err instanceof Error ? err.message : String(err)}`);
+      await ctx.reply(t('chat.photoDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
       return;
     }
 
@@ -246,9 +260,10 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
 
   // Voice handler — transcribes via OpenAI Whisper, then sends text to agent
   bot.on('message:voice', async (ctx) => {
+    const t = await tFor(ctx);
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      await ctx.reply('Voice messages require OPENAI_API_KEY to be configured.');
+      await ctx.reply(t('chat.voiceNeedsKey'));
       return;
     }
 
@@ -259,7 +274,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(ctx.message.voice.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(`Could not download voice message: ${err instanceof Error ? err.message : String(err)}`);
+      await ctx.reply(t('chat.voiceDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
       return;
     }
 
@@ -277,12 +292,12 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const json = await res.json() as { text: string };
       transcribed = json.text.trim();
     } catch (err) {
-      await ctx.reply(`Could not transcribe voice message: ${err instanceof Error ? err.message : String(err)}`);
+      await ctx.reply(t('chat.voiceTranscribeFailed', { message: err instanceof Error ? err.message : String(err) }));
       return;
     }
 
     if (!transcribed) {
-      await ctx.reply('Could not understand the voice message.');
+      await ctx.reply(t('chat.voiceEmpty'));
       return;
     }
 

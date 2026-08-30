@@ -9,14 +9,14 @@ import http from 'http';
 import type { AddressInfo } from 'net';
 import type { AgentEvent } from '../../src/sse-client';
 
-// Prevent index.ts from running (BOT_TOKEN guard)
-jest.mock('../../src/index', () => ({ BACKEND_URL: '' }));
+// streamChat reads BACKEND_URL from src/config, so that is what gets injected.
+jest.mock('../../src/config', () => ({ BACKEND_URL: '' }));
 
 // We import streamChat AFTER we know the server URL, so we use dynamic imports
 // inside each test via a factory that injects the URL.
 async function makeStreamChat(backendUrl: string) {
   jest.resetModules();
-  jest.mock('../../src/index', () => ({ BACKEND_URL: backendUrl }));
+  jest.mock('../../src/config', () => ({ BACKEND_URL: backendUrl }));
   const mod = await import('../../src/sse-client');
   return mod.streamChat;
 }
