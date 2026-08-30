@@ -138,4 +138,37 @@ describe("MessageBubble — text direction", () => {
     renderWithI18n(<MessageBubble message={makeMessage({ content: "I found 3 flights" })} />);
     expect(screen.getByText(/3 flights/).closest("[dir]")).toHaveAttribute("dir", "ltr");
   });
+
+  // A reply that has streamed nothing but a flag emoji so far used to be called
+  // left-to-right, and then jumped right the moment the first Hebrew letter
+  // landed. With no `dir` of its own the bubble keeps the document's, which
+  // `<html dir>` already sets from the interface locale, until the text has
+  // something to say.
+  // The bubble itself, not `closest("[dir]")` — jsdom puts a `dir` on <html>,
+  // and inline code carries one of its own, so both would answer the wrong
+  // question here.
+  const bubbleAround = (el: HTMLElement) => el.parentElement;
+
+  it("claims no direction while the reply is still only an emoji", () => {
+    renderWithI18n(
+      <MessageBubble message={makeMessage({ content: "# 🇯🇵 ", streaming: true })} />,
+    );
+    expect(bubbleAround(screen.getByText(/🇯🇵/))).not.toHaveAttribute("dir");
+  });
+
+  it("settles on the text once the text arrives", () => {
+    const message = makeMessage({ content: "# 🇯🇵 ", streaming: true });
+    const { rerender } = renderWithI18n(<MessageBubble message={message} />);
+    expect(bubbleAround(screen.getByText(/🇯🇵/))).not.toHaveAttribute("dir");
+
+    rerender(<MessageBubble message={{ ...message, content: "# 🇯🇵 יפן" }} />);
+    expect(bubbleAround(screen.getByText(/יפן/))).toHaveAttribute("dir", "rtl");
+  });
+
+  // A message that has finished arriving always has a direction, even with no
+  // letter in it to derive one from — that is where it was before this hook.
+  it("gives a finished letterless message a direction of its own", () => {
+    renderWithI18n(<MessageBubble message={makeMessage({ content: "120 $" })} />);
+    expect(bubbleAround(screen.getByText(/120/))).toHaveAttribute("dir", "ltr");
+  });
 });

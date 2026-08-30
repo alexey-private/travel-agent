@@ -616,7 +616,7 @@ at a time, starting everyone at once, a limit of ten instead of five, dropping
 the guard around the run, letting one rejection strand the queue, and accepting
 a limit of zero.
 
-### [ ] O5 — `detectTextDir` recomputes on every stream chunk
+### [x] O5 — `detectTextDir` recomputes on every stream chunk
 
 [`MessageBubble.tsx:108`](../../../frontend/src/components/chat/MessageBubble.tsx#L108).
 Measured: 22 ms across a full 400-chunk stream of a 5 KB reply — real but not
@@ -624,6 +624,93 @@ the bottleneck, since `ReactMarkdown` re-parses the whole document on each chunk
 and costs far more. The interesting part is the side effect: the direction
 **flips mid-stream** (`# 🇯🇵` alone resolves `ltr`, then Hebrew arrives and it
 becomes `rtl`).
+
+**Fixed.** Both halves, in a new
+[`frontend/src/i18n/useTextDirection.ts`](../../../frontend/src/i18n/useTextDirection.ts).
+
+The cost first, because measuring it changed what was worth doing. Two regex
+passes over a string that grows with every chunk is quadratic, and 5 KB is where
+it still looks harmless. Reproduced at one chunk per ~12 characters:
+
+| Reply | chunks | before | after |
+|-------|--------|--------|-------|
+| 5 KB | 417 | 16 ms | 0.5 ms |
+| 20 KB | 1 667 | 267 ms | 40 ms |
+| 50 KB | 4 167 | 1 756 ms | 264 ms |
+
+The hook counts only the tail each chunk adds, which it can because neither
+pattern matches across a join. What it does *not* do is assume the text only
+grows: `startsWith` checks that the new text extends what was counted, and
+anything else — a different message in a reused instance, a render React began
+with older state and discarded — is recounted from the start. That check is why
+the "after" column is still quadratic. It compares bytes where the old code
+matched two regexes — six to forty times cheaper on the same string, the gap
+widening as the string gets shorter — and on a realistically sized reply the
+whole remaining term is half a millisecond. Buying it out would mean trusting
+the caller instead of checking, which is not worth 0.5 ms.
+
+The flip is the half a reader actually notices, and it is not a rounding error:
+on the reply from the original bug report the bubble is left-aligned for the
+whole of `# 🇯🇵 ` and jumps right the moment the first Hebrew letter lands behind
+it — five visible characters in, which at streaming speed is long enough to see. The cause is that `detectTextDir` has to return
+some direction even when the text holds no letter of any script, and `ltr` was
+the fallback. `dirFromCounts` now returns `null` in that state and the hook turns
+it into `undefined`, so no `dir` attribute is written and the bubble keeps the
+document direction — which `<html dir>` already carries from the interface
+locale. That is a better provisional answer than a fixed `ltr`: a Hebrew
+interface is where Hebrew replies turn up. It is still provisional, and the text
+overrules it the moment the text says anything.
+
+Saying nothing is confined to the gap it was meant for. The hook takes
+`streaming`, and a message that has *finished* arriving with no letters in it —
+a price, a room number, an emoji — is not waiting for evidence, it is the whole
+message; it stays `ltr`, which is what `detectTextDir` has always said about it.
+Without that distinction such a bubble would have no direction of its own for
+good, and switching the interface language would re-align something the reader
+had already read. Review caught this: the finding is about a provisional prefix,
+and nothing about a finished message was asked to change.
+
+This does not abolish flipping, and cannot. A reply opening `JST — Japan
+Standard Time` has real Latin evidence from its third character and is read that
+way; the Hebrew that overturns it arrives forty characters later. Nothing short
+of waiting for the whole message avoids that, and waiting means showing nothing.
+What the fix removes is the flip that came from *guessing with no evidence*,
+which is the common one — the agent opens replies with an emoji heading. The
+trade is that the remaining guess is now the interface locale, so the reply that
+reads the opposite way from the window around it flips once where it did not
+before.
+
+`detectTextDir` keeps its old signature and its eight tests unchanged; it is now
+`dirFromCounts(countLetters(text)) ?? "ltr"`, which agrees with the old body on
+every input — the old one skipped the Latin count when there was no Hebrew, and
+the answer in that case is `ltr` either way. After this change nothing outside the
+test suite calls it, where it goes on serving as the statement of the rule and as
+the yardstick the hook's incremental counting is checked against.
+
+Sixteen new tests. Thirteen on the hook: while a message is arriving it says
+nothing for an empty one, for an emoji heading, or for a line of digits and
+symbols, and answers on the first letter; once it has finished, a letterless
+message is `ltr` and one with letters still reads as itself; it never reverses a
+direction it has already shown across the whole bug-report reply, character by
+character; it agrees with a full scan at *every* prefix, which is what proves the
+incremental counting has not drifted; it recounts when the text is replaced
+rather than extended, and when the text goes backwards; and it survives a
+StrictMode double render. Three on the bubble: no `dir` attribute while the reply
+is still an emoji, `rtl` once Hebrew arrives, and `ltr` on a finished message
+with nothing but a price in it. Those three assert on the bubble element itself
+rather than `closest("[dir]")`, which would have found the `dir` jsdom puts on
+`<html>` — or the one an inline `code` span carries.
+
+Ten mutations applied by hand, all caught: dropping the `startsWith` guard,
+weakening it to a length comparison, adding the whole text to the running total
+instead of the tail, restoring the `ltr` guess, calling a Hebrew-only message
+undecided, dropping the 3:1 margin, committing the bubble to `ltr` while it is
+undecided, extending the silence to finished messages, dropping the streaming
+distinction altogether, and telling the hook every message is still streaming.
+The third of those was expected to survive — the margin compares
+the counts against each other, so uniform double counting is invisible — and did
+not, because the composition of a reply changes as it streams and the inflated
+totals no longer sum to the same ratio.
 
 ### [ ] O6 — All three dictionaries ship to every client
 

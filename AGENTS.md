@@ -67,6 +67,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [frontend/src/i18n/detectLocale.ts](frontend/src/i18n/detectLocale.ts) | Browser-language detection — `headerLocale` (server, `Accept-Language`) and `browserLocale` (client, `navigator`); default for a visitor with nothing stored |
 | [frontend/src/i18n/direction.ts](frontend/src/i18n/direction.ts) | `MIRROR_UNDER_RTL` — the one class that flips a direction-carrying icon; see the `rtl-check` recipe in SKILL.md |
 | [frontend/src/i18n/detectTextDir.ts](frontend/src/i18n/detectTextDir.ts) | Which way a finished chat message reads — a reply follows its own language, not the interface locale, and `dir="auto"` cannot do it (leading emoji are strong LTR) |
+| [frontend/src/i18n/useTextDirection.ts](frontend/src/i18n/useTextDirection.ts) | The same question for a message still arriving — counts each chunk once, and while it is still arriving writes no `dir` at all until some letter has come with it; see [Streaming Text Direction](#streaming-text-direction) |
 | [backend-telegram/src/i18n/](backend-telegram/src/i18n/) | Bot dictionaries (`en`/`he`/`ru`), `t()`, and `language.ts` — reads/writes the language through `/api/settings`, caches it in the grammY session |
 | [backend-telegram/src/commands/lang.ts](backend-telegram/src/commands/lang.ts) | `/lang` — inline keyboard that switches the bot language |
 | [backend-telegram/src/data/suggestions.ts](backend-telegram/src/data/suggestions.ts) | `STARTER_POOLS` — starter buttons written per language, not translated |
@@ -242,6 +243,46 @@ Indentation under `rtl` comes off a narrower column, not from pdfkit's `indent`,
 which only ever pushes from the left. Bold is dropped inside right-to-left text:
 emphasis needs `continued`, which cannot coexist with breaking the lines
 ourselves. Code blocks stay left-to-right always.
+
+---
+
+## Streaming Text Direction
+
+A chat message arrives a chunk at a time, and its direction is a property of the
+whole of it, so every render before the last one is answering the question from a
+prefix. [useTextDirection.ts](frontend/src/i18n/useTextDirection.ts) is where that
+is handled; [detectTextDir.ts](frontend/src/i18n/detectTextDir.ts) still holds the
+rule itself, and after this change is called only from tests — where it doubles as
+the yardstick the hook's incremental counting is checked against.
+
+- **Nothing is said until a letter arrives.** `# 🇯🇵` holds no letter of any
+  script. Answering `ltr` there left-aligned the bubble and then jumped it right
+  as soon as the first Hebrew letter landed. The hook returns
+  `undefined` instead, no `dir` attribute is written, and the bubble inherits the
+  document direction that `<html dir>` carries from the interface locale. That is
+  a provisional answer and the text overrules it — which is the same rule the
+  agent's own language follows.
+- **Only a message still arriving may go without a direction.** The hook takes
+  `streaming` for this. A finished message with no letters — a price, an emoji —
+  is not waiting for evidence, it is the whole message, and it stays `ltr` as it
+  always was. Leaving it undirected would hand it to the interface locale
+  permanently, and switching languages would re-align a bubble already read.
+- **Real evidence is still read as evidence.** A reply opening `JST — Japan
+  Standard Time` is left-to-right from its third character and flips when the
+  Hebrew arrives. That flip is not a bug and cannot be removed without waiting
+  for the whole message.
+- **Each chunk is counted once.** Two regex passes over a string that grows with
+  every chunk is quadratic: 16 ms across a 5 KB reply, 1.8 s across a 50 KB one.
+  The hook adds only the tail — safe because neither pattern can match across a
+  join — and checks with `startsWith` that the text really does extend what it
+  counted, recounting when it does not. The check costs a sixth to a fortieth of
+  the scan it replaces, and it is what makes the append-only assumption a check
+  rather than a hope.
+- **The ref is written during render, deliberately.** It is a cache whose value
+  is a pure function of the text, so a discarded render cannot leave it wrong.
+  `react-hooks/refs` is disabled for the body and re-enabled after it; state
+  instead would re-render on every chunk to report what the same render already
+  knows.
 
 ---
 
