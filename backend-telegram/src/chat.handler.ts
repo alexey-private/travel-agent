@@ -7,6 +7,7 @@ import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
 import { escapeHtml, renderHtml } from './render';
 import { getLocale, tFor, tIn } from './i18n/language';
+import { transcribeVoice } from './transcribe';
 
 const MAX_TG_LENGTH = 4096;
 const EDIT_THROTTLE_MS = 1000;
@@ -259,14 +260,13 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
     await handleChatMessage(ctx, caption, [attachment]);
   });
 
-  // Voice handler — transcribes via OpenAI Whisper, then sends text to agent
+  // Voice handler — transcribes through the backend, then sends text to agent
   bot.on('message:voice', async (ctx) => {
-    const t = await tFor(ctx);
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      await ctx.reply(t('chat.voiceNeedsKey'));
-      return;
-    }
+    // The transcription is a Telegram-scoped backend call, so it needs the id
+    // before `handleChatMessage` would otherwise mint one.
+    ensureSessionId(ctx);
+    const locale = await getLocale(ctx);
+    const t = tIn(locale);
 
     await ctx.api.sendChatAction(ctx.chat.id, 'typing');
 
@@ -279,31 +279,21 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       return;
     }
 
-    let transcribed: string;
-    try {
-      const form = new FormData();
-      form.append('file', new Blob([new Uint8Array(fileData)], { type: 'audio/ogg' }), 'voice.ogg');
-      form.append('model', 'whisper-1');
-      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-      });
-      if (!res.ok) throw new Error(`Whisper API error: ${res.status} ${await res.text()}`);
-      const json = await res.json() as { text: string };
-      transcribed = json.text.trim();
-    } catch (err) {
-      await ctx.reply(t('chat.voiceTranscribeFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
+    // The language this user is being spoken to in is the hint Whisper needs:
+    // left to guess it returns a short Hebrew clip transliterated into Latin.
+    const transcription = await transcribeVoice(fileData, ctx.session.sessionId!, locale);
+    if (!transcription.ok) {
+      await ctx.reply(t(transcription.key), { parse_mode: 'HTML' });
       return;
     }
 
-    if (!transcribed) {
+    if (!transcription.text) {
       await ctx.reply(t('chat.voiceEmpty'));
       return;
     }
 
-    await ctx.reply(`🎤 <i>${escapeHtml(transcribed)}</i>`, { parse_mode: 'HTML' });
-    await handleChatMessage(ctx, transcribed);
+    await ctx.reply(`🎤 <i>${escapeHtml(transcription.text)}</i>`, { parse_mode: 'HTML' });
+    await handleChatMessage(ctx, transcription.text);
   });
 
   // Catch-all text handler — MUST be registered last

@@ -49,7 +49,9 @@ export const he: Dictionary = {
   'chat.photoDownloadFailed': 'לא הצלחתי להוריד את התמונה: {message}',
   'chat.voiceNeedsKey': 'הודעות קוליות דורשות הגדרה של OPENAI_API_KEY.',
   'chat.voiceDownloadFailed': 'לא הצלחתי להוריד את ההודעה הקולית: {message}',
-  'chat.voiceTranscribeFailed': 'לא הצלחתי לתמלל את ההודעה הקולית: {message}',
+  'chat.voiceTranscribeFailed': 'לא הצלחתי לתמלל את ההודעה הקולית.',
+  'chat.voiceTooLong': 'ההודעה הקולית ארוכה מדי לתמלול.',
+  'chat.voiceTooMany': 'יותר מדי הודעות קוליות ברצף. המתינו רגע ונסו שוב.',
   'chat.voiceEmpty': 'לא הצלחתי להבין את ההודעה הקולית.',
 
   // ── Telegram command menu ─────────────────────────────────────

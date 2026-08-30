@@ -50,7 +50,9 @@ export const ru: Dictionary = {
   'chat.photoDownloadFailed': 'Не удалось скачать фото: {message}',
   'chat.voiceNeedsKey': 'Для голосовых сообщений нужно настроить OPENAI_API_KEY.',
   'chat.voiceDownloadFailed': 'Не удалось скачать голосовое сообщение: {message}',
-  'chat.voiceTranscribeFailed': 'Не удалось расшифровать голосовое сообщение: {message}',
+  'chat.voiceTranscribeFailed': 'Не удалось расшифровать голосовое сообщение.',
+  'chat.voiceTooLong': 'Голосовое сообщение слишком длинное для расшифровки.',
+  'chat.voiceTooMany': 'Слишком много голосовых сообщений подряд. Подождите немного и попробуйте снова.',
   'chat.voiceEmpty': 'Не удалось разобрать голосовое сообщение.',
 
   // ── Telegram command menu ─────────────────────────────────────

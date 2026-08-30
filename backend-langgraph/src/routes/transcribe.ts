@@ -7,6 +7,14 @@ interface TranscribeBody {
   audio: string;   // base64-encoded audio
   mimeType: string;
   language?: string;
+  /**
+   * Read by nothing in this handler — the Telegram bridge sends it, and the two
+   * hooks that run before the route do the reading: `rateLimitKey` counts a
+   * `tg-` id per user instead of putting the whole bot on one address, and
+   * `registerInternalAuth` demands the bridge secret of anything naming such an
+   * id. A web caller sends no `userId` here and is counted by address.
+   */
+  userId?: string;
 }
 
 /**

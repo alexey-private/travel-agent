@@ -75,7 +75,7 @@ once the container is up.
 | `ANTHROPIC_API_KEY` | your key |
 | `TAVILY_API_KEY` | required |
 | `OPENWEATHER_API_KEY` | required |
-| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`, used by the web frontend's mic button) — without it the endpoint returns `503`. Separate from the same-named variable on `backend-telegram`, which powers voice notes sent to the bot instead |
+| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`) — without it the endpoint returns `503`. This is the only copy: the web mic button and Telegram voice notes both go through this route, so the bot needs no key of its own |
 | `VOYAGE_API_KEY` | optional (random-vector fallback if unset) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
@@ -195,7 +195,6 @@ long-polling mode (`bot.start()`) — **no public domain, no exposed port**.
 | `BACKEND_URL` | `http://${{travel-agent.RAILWAY_PRIVATE_DOMAIN}}:3002` (resolves to `travel-agent.railway.internal`) — use the private domain, not the public one, to avoid an unnecessary public-network hop for the bot's own server-to-server calls (chat, history, calendar cron). The port **must** match whatever `PORT` is actually set to on the `travel-agent` service (see below) — there's no auto-detection over the private network like there is for public domains |
 | `BACKEND_PUBLIC_URL` | `https://<travel-agent-public-domain>` — **required**, separate from `BACKEND_URL` above. Used only for links sent *to the user* (currently `/connect`'s Google OAuth link). `*.railway.internal` addresses only resolve inside Railway's private network — a user's own browser can't open them, so without this set explicitly the `/connect` link is broken even though every other bot feature works fine |
 | `OPENWEATHER_API_KEY` | required |
-| `OPENAI_API_KEY` | if voice transcription is enabled |
 | `INTERNAL_API_SECRET` | **required.** Must be byte-for-byte the same value as on the `travel-agent` service. Without it every backend call this bot makes comes back `403` and `/connect` refuses to issue a link |
 | `NOTIFY_HOUR` | optional, defaults to `9` |
 

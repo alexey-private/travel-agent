@@ -69,6 +69,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-telegram/src/commands/lang.ts](backend-telegram/src/commands/lang.ts) | `/lang` — inline keyboard that switches the bot language |
 | [backend-telegram/src/data/suggestions.ts](backend-telegram/src/data/suggestions.ts) | `STARTER_POOLS` — starter buttons written per language, not translated |
 | [backend-telegram/src/config.ts](backend-telegram/src/config.ts) | `BACKEND_URL`, `BACKEND_PUBLIC_URL` — kept out of `index.ts`, which boots the bot on import |
+| [backend-telegram/src/transcribe.ts](backend-telegram/src/transcribe.ts) | A voice note goes to the backend's `/api/transcribe`, not to Whisper — that is where the language hint and the only copy of the OpenAI key live |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Railway deploy: per-service env vars, Dockerfile paths, migration/networking notes |
 | [Dockerfile.backend-langgraph](Dockerfile.backend-langgraph), [Dockerfile.backend-telegram](Dockerfile.backend-telegram), [Dockerfile.frontend](Dockerfile.frontend) | Multi-stage builds, root-context (npm workspaces) |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | tsc + tests (real pgvector service container) on push/PR to main |
@@ -91,15 +92,21 @@ feeds the `## Language` block of both system prompts. Precedence is
 `body.language` → `prefs.language` → `DEFAULT_LOCALE`; a body value that differs
 from the stored one is written back without blocking the stream.
 
-The same value goes to `SuggestionService`, to `MemoryService` (extraction), and —
-from the frontend — to `POST /api/transcribe` as a Whisper hint.
+The same value goes to `SuggestionService`, to `MemoryService` (extraction), and to
+`POST /api/transcribe` as a Whisper hint — from the web mic button and from the
+Telegram bot alike, since both now reach Whisper through that one route.
 
-Three rules that are easy to break:
+Four rules that are easy to break:
 
 - **The message outranks the setting.** The prompt tells the agent to answer in the
   language of the user's latest message, so a Hebrew-configured user who writes in
   English gets an English answer. Follow-up suggestions must therefore be generated
   for the language of the *reply* (`detectReplyLocale`), not the stored preference.
+- **Voice goes through the backend.** The hint exists because Whisper mis-detects
+  short Hebrew clips and returns them transliterated into Latin. A surface that
+  calls Whisper itself gets the mis-detection back, which is exactly what the bot
+  did until it was routed through `/api/transcribe`; anything transcribing audio
+  from now on asks that route rather than growing a third copy of the key.
 - **Tool strings stay English.** Errors and results in `src/tools/**` are a contract
   with the model, and ~50 tests assert their exact English text. The prompt makes the
   agent retell them in the user's language instead of surfacing them raw.

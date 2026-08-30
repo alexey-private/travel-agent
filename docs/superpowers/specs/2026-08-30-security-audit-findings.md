@@ -412,17 +412,43 @@ needs a decision about what a failed turn should say, not just an edit.
 
 ## Correctness / optimisation
 
-### [ ] O1 — The bot's voice path never sends the language hint
+### [x] O1 — The bot's voice path never sends the language hint
 
-*Severity: medium — a shipped feature that does not work on one surface.*
+*Severity: medium — a shipped feature that did not work on one surface.*
 
-[`backend-telegram/src/chat.handler.ts:283-288`](../../../backend-telegram/src/chat.handler.ts#L283-L288)
-calls Whisper directly, with the bot's own OpenAI key, and passes no
-`language`. The bug the hint exists to fix — short Hebrew clips coming back
-transliterated into Latin, see
-[`transcribe.ts:29-33`](../../../backend-langgraph/src/routes/transcribe.ts#L29-L33) —
-is therefore still live for Telegram voice messages. Routing the bot through
-`/api/transcribe` fixes the hint and removes a second copy of a paid key.
+**Fixed.** The bot no longer talks to Whisper. A voice note now goes to
+[`/api/transcribe`](../../../backend-langgraph/src/routes/transcribe.ts) through
+[`backend-telegram/src/transcribe.ts`](../../../backend-telegram/src/transcribe.ts),
+which is where the `language` hint has been sent since the web mic button was
+built. The hint exists because Whisper mis-detects short Hebrew clips and returns
+them transliterated into Latin; a Telegram voice note got exactly that, because
+the bot's own call had no field for it. The second copy of the OpenAI key is gone
+with it — `OPENAI_API_KEY` is no longer a `backend-telegram` variable at all.
+
+Three things had to come with the move, none of them optional:
+
+- **The request names the user.** `userId: tg-<id>` is in the body because the
+  backend's limiter reads it there. Without it every Telegram voice note is keyed
+  by address, and they all arrive from the one bridge process — the whole bot
+  would share one 20-a-minute bucket. Naming a `tg-` id is also what makes the
+  request Telegram-scoped, so it carries `internalHeaders()` like every other
+  call this bridge makes; one that forgot would be a 403, not a subtle bug.
+- **The refusal is translated, not forwarded.** The backend answers in English
+  with a snake_case `code`, and the bot has its own three dictionaries, so it maps
+  the code (`audio_too_large`, `rate_limited`, `transcribe_not_configured`) to a
+  key of its own and logs the rest. Two of those the bot could not receive at all
+  before — it was not behind a rate limit or a size cap — so
+  `chat.voiceTooLong` and `chat.voiceTooMany` are new in all three locales.
+- **`chat.voiceTranscribeFailed` lost its `{message}`.** It used to interpolate
+  whatever was thrown, which on the old path was Whisper's raw response body.
+  What replaces it is a fixed sentence, with the detail in the log — the same
+  rule as S7. `chat.voiceDownloadFailed` still interpolates: that is the Telegram
+  download, untouched by this change.
+
+Twelve tests cover the request the bot makes and the answer it renders. Ten
+mutations were applied by hand — dropping the hint, dropping the id, dropping the
+secret, restoring the OpenAI URL, emptying the code map, and so on — and every
+one of them turned the suite red.
 
 ### [ ] O2 — `Intl` formatters constructed per call
 

@@ -49,7 +49,9 @@ export const en = {
   'chat.photoDownloadFailed': 'Could not download the photo: {message}',
   'chat.voiceNeedsKey': 'Voice messages require OPENAI_API_KEY to be configured.',
   'chat.voiceDownloadFailed': 'Could not download voice message: {message}',
-  'chat.voiceTranscribeFailed': 'Could not transcribe voice message: {message}',
+  'chat.voiceTranscribeFailed': 'Could not transcribe the voice message.',
+  'chat.voiceTooLong': 'That voice message is too long to transcribe.',
+  'chat.voiceTooMany': 'Too many voice messages in a row. Wait a moment and try again.',
   'chat.voiceEmpty': 'Could not understand the voice message.',
 
   // ── Telegram command menu ─────────────────────────────────────
