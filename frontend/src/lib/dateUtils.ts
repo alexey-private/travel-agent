@@ -15,7 +15,14 @@ export function formatDate(iso: string, locale: Locale, now: Date = new Date()):
   const diffDays = Math.floor((now.getTime() - date.getTime()) / 86_400_000);
 
   if (diffDays === 0) {
-    return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(date);
+    // `hourCycle: "h23"` for the same reason the push notifications pin it:
+    // English is a 12-hour locale by default, and a user who reads "14:30" in a
+    // reminder should not read "02:30 PM" for the same conversation here.
+    return new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
   }
 
   if (diffDays === 1) {

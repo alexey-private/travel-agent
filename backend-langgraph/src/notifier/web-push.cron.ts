@@ -3,6 +3,8 @@ import webpush from 'web-push';
 import type { Pool } from 'pg';
 import type { CalendarProvider } from '../tools/providers/CalendarProvider';
 import type { TasksProvider } from '../tools/providers/TasksProvider';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locale';
+import { notificationTitle, notificationOverflow, formatEventTime } from '../i18n/notifications';
 
 interface PushSubscriptionRow {
   id: string;
@@ -10,6 +12,7 @@ interface PushSubscriptionRow {
   endpoint: string;
   p256dh: string;
   auth: string;
+  language: string | null;
 }
 
 function tomorrowDate(): string {
@@ -22,20 +25,33 @@ function isTomorrow(dateStr: string | undefined): boolean {
   return !!dateStr && dateStr.slice(0, 10) === tomorrowDate();
 }
 
-function buildPayload(events: { title: string; time?: string }[], tasks: { title: string }[]): string {
+/**
+ * Exported so the copy can be checked without standing up the cron.
+ *
+ * Only the wrapping is translated. Event and task titles are the user's own
+ * words, in whatever language they wrote them, and are passed through untouched.
+ */
+export function buildPayload(
+  events: { title: string; time?: string }[],
+  tasks: { title: string }[],
+  locale: Locale,
+): string {
   const lines: string[] = [];
 
   if (events.length > 0) {
-    lines.push(...events.map((e) => (e.time ? `${e.time} ${e.title}` : e.title)));
+    lines.push(...events.map((e) => (e.time ? `${formatEventTime(locale, e.time)} ${e.title}` : e.title)));
   }
   if (tasks.length > 0) {
     lines.push(...tasks.map((t) => `✅ ${t.title}`));
   }
 
-  const title = "Tomorrow's reminders";
-  const body = lines.slice(0, 3).join('\n') + (lines.length > 3 ? `\n…and ${lines.length - 3} more` : '');
+  const shown = lines.slice(0, 3);
+  const hidden = lines.length - shown.length;
+  const body = hidden > 0
+    ? `${shown.join('\n')}\n${notificationOverflow(locale, hidden)}`
+    : shown.join('\n');
 
-  return JSON.stringify({ title, body, url: '/' });
+  return JSON.stringify({ title: notificationTitle(locale), body, url: '/' });
 }
 
 export function startWebPushCron(
@@ -62,9 +78,13 @@ export function startWebPushCron(
     let rows: PushSubscriptionRow[];
     try {
       const result = await pool.query<PushSubscriptionRow>(
-        `SELECT ps.id, u.session_id, ps.endpoint, ps.p256dh, ps.auth
+        // LEFT JOIN, not JOIN: a subscription exists whether or not the person
+        // ever opened the settings page. With no preferences row the language
+        // comes back NULL and they get an English notification, not none.
+        `SELECT ps.id, u.session_id, ps.endpoint, ps.p256dh, ps.auth, p.language
          FROM push_subscriptions ps
-         JOIN users u ON u.id = ps.user_id`,
+         JOIN users u ON u.id = ps.user_id
+         LEFT JOIN user_service_preferences p ON p.user_id = u.session_id`,
       );
       rows = result.rows;
     } catch (err) {
@@ -107,7 +127,12 @@ export function startWebPushCron(
 
       if (events.length === 0 && tasks.length === 0) continue;
 
-      const payload = buildPayload(events, tasks);
+      // Every subscription under one session_id belongs to one person, so the
+      // language is the same on all of them — read it off the first.
+      const rawLanguage = subscriptions[0]?.language;
+      const locale: Locale = isLocale(rawLanguage) ? rawLanguage : DEFAULT_LOCALE;
+
+      const payload = buildPayload(events, tasks, locale);
 
       for (const sub of subscriptions) {
         try {

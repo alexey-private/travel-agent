@@ -134,6 +134,35 @@ that have no agent to translate for them: Apple iCloud connect and Drive export.
 
 ---
 
+## Push Notification Language
+
+The daily reminder cron notifies every subscriber in one pass, so the language has
+to be per-user, not per-process. It comes out of the subscription query itself —
+`LEFT JOIN user_service_preferences p ON p.user_id = u.session_id` — rather than a
+second round trip per person.
+
+- **`LEFT JOIN`, never `JOIN`.** A push subscription exists whether or not the
+  person ever opened `/settings`. An inner join would silently stop notifying
+  everyone who has no preferences row.
+- **A `NULL` language is English, not a crash.** `isLocale` gates the raw column;
+  anything it rejects falls back to `DEFAULT_LOCALE`.
+- **Only the wrapping is translated.** The title and the overflow line follow the
+  locale; event and task titles are the user's own words and are passed through
+  untouched.
+- **The clock is 24-hour in every language, app-wide.** `formatEventTime` passes
+  `hourCycle: 'h23'`, so English does not drift to "02:30 PM" — the calendar sends
+  24-hour times and existing subscribers keep seeing them. The locale still decides
+  separator and digits. The rule is not local to notifications: `formatDate` in
+  [frontend/src/lib/dateUtils.ts](frontend/src/lib/dateUtils.ts) pins the same
+  cycle, so a conversation timestamp and a reminder about it agree. These two are
+  the only places in the repo that format a clock time — any third must pin it too.
+- The copy lives in [backend-langgraph/src/i18n/notifications.ts](backend-langgraph/src/i18n/notifications.ts) —
+  three phrases, deliberately not a frontend-sized dictionary. These are the only
+  strings in this package that reach a person without passing through the agent or
+  the frontend.
+
+---
+
 ## PDF Direction
 
 pdfkit paints glyphs in string order and implements no part of the Unicode

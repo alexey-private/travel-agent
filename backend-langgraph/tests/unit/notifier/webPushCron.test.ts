@@ -11,6 +11,7 @@
 import type { Pool } from 'pg';
 import type { CalendarProvider } from '@/tools/providers/CalendarProvider';
 import type { TasksProvider } from '@/tools/providers/TasksProvider';
+import type { Locale } from '@/i18n/locale';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -208,6 +209,38 @@ describe('startWebPushCron', () => {
     );
   });
 
+  it('notifies in the language stored for the subscriber', async () => {
+    const { startWebPushCron } = await import('@/notifier/web-push.cron');
+
+    const pool = buildPool([
+      { id: 'sub-he', session_id: 'sess-he', endpoint: 'https://push.example.com/he', p256dh: 'k', auth: 'a', language: 'he' },
+    ]);
+    const cal = buildCalendarProvider([{ title: 'טיסה לרומא', date: tomorrow(), time: '14:30' }]);
+
+    startWebPushCron(pool, cal, buildTasksProvider());
+    await capturedCronCallback!();
+
+    const parsed = JSON.parse(mockSendNotification.mock.calls[0][1] as string) as { title: string; body: string };
+    expect(parsed.title).toMatch(/[֐-׿]/);
+    expect(parsed.body).toContain('טיסה לרומא');
+  });
+
+  it('notifies in English when the subscriber has no preferences row', async () => {
+    const { startWebPushCron } = await import('@/notifier/web-push.cron');
+
+    // What the LEFT JOIN yields for someone who never opened /settings.
+    const pool = buildPool([
+      { id: 'sub-none', session_id: 'sess-none', endpoint: 'https://push.example.com/none', p256dh: 'k', auth: 'a', language: null },
+    ]);
+    const cal = buildCalendarProvider([{ title: 'Flight to Rome', date: tomorrow(), time: '14:30' }]);
+
+    startWebPushCron(pool, cal, buildTasksProvider());
+    await capturedCronCallback!();
+
+    const parsed = JSON.parse(mockSendNotification.mock.calls[0][1] as string) as { title: string };
+    expect(parsed.title).toMatch(/tomorrow/i);
+  });
+
   it('skips completed tasks when filtering', async () => {
     const { startWebPushCron } = await import('@/notifier/web-push.cron');
 
@@ -223,5 +256,52 @@ describe('startWebPushCron', () => {
 
     // Completed task should be filtered out → nothing to send
     expect(mockSendNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildPayload — language', () => {
+  const events = [
+    { title: 'טיסה לרומא', time: '14:30' },
+    { title: 'צ׳ק-אין במלון', time: '18:00' },
+  ];
+  const tasks = [{ title: 'לבדוק דרכון' }, { title: 'להזמין מונית' }];
+
+  /**
+   * Imported inside the test, like everywhere else in this file: `jest.mock` is
+   * hoisted above the imports, so a static one would evaluate the module — and
+   * its web-push mock — before `mockSendNotification` above exists.
+   */
+  async function payload(
+    evts: { title: string; time?: string }[],
+    tsks: { title: string }[],
+    locale: Locale,
+  ): Promise<{ title: string; body: string; url: string }> {
+    const { buildPayload } = await import('@/notifier/web-push.cron');
+    return JSON.parse(buildPayload(evts, tsks, locale));
+  }
+
+  it('titles the notification in Hebrew', async () => {
+    expect((await payload(events, tasks, 'he')).title).toMatch(/[֐-׿]/);
+  });
+
+  it('titles the notification in Russian', async () => {
+    expect((await payload(events, tasks, 'ru')).title).toMatch(/[Ѐ-ӿ]/);
+  });
+
+  it('falls back to English', async () => {
+    expect((await payload(events, tasks, 'en')).title).toMatch(/tomorrow/i);
+  });
+
+  it('writes the overflow line in the subscriber language', async () => {
+    const many = [...events, ...events, ...events];
+    expect((await payload(many, tasks, 'ru')).body).toMatch(/ещё/);
+  });
+
+  it('keeps the event titles untouched', async () => {
+    expect((await payload(events, [], 'ru')).body).toContain('טיסה לרומא');
+  });
+
+  it('still points at the app root', async () => {
+    expect((await payload(events, tasks, 'he')).url).toBe('/');
   });
 });

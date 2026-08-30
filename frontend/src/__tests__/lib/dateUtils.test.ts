@@ -4,9 +4,13 @@ const NOW = new Date("2026-08-28T12:00:00Z");
 const iso = (d: string) => new Date(d).toISOString();
 
 describe("formatDate", () => {
-  it("shows the time for today", () => {
-    const out = formatDate(iso("2026-08-28T09:30:00Z"), "en", NOW);
-    expect(out).toMatch(/\d{1,2}:\d{2}/);
+  it("shows the time for today, on a 24-hour clock", () => {
+    // Anchored, and no meridiem: English would otherwise render "09:30 AM", and
+    // a pattern loose enough to accept that cannot tell the two clocks apart.
+    // The exact digits stay unasserted — this formats in the machine's timezone.
+    for (const locale of ["en", "he", "ru"] as const) {
+      expect(formatDate(iso("2026-08-28T09:30:00Z"), locale, NOW)).toMatch(/^\d{2}:\d{2}$/);
+    }
   });
 
   it("says yesterday in English", () => {
