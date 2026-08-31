@@ -1,4 +1,5 @@
 import { translate } from '../src/translate';
+import { countIntl } from './helpers/countIntl';
 import type { PluralForms } from '../src/types';
 
 const dict = {
@@ -50,5 +51,47 @@ describe('translate', () => {
 
   it('returns the key itself when it is missing from the dictionary', () => {
     expect(translate(dict, 'en', key('nope.missing'))).toBe('nope.missing');
+  });
+});
+
+describe('translate escaping', () => {
+  const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  it('escapes an interpolated value when the caller asks it to', () => {
+    expect(translate(dict, 'en', 'chat.attached', { count: '<b>' }, escape)).toBe(
+      '&lt;b> file attached',
+    );
+  });
+
+  it('leaves the template alone', () => {
+    const markup = { 'chat.bold': '<b>{count}</b>' };
+    expect(translate(markup, 'en', 'chat.bold', { count: 'a&b' }, escape)).toBe('<b>a&amp;b</b>');
+  });
+
+  it('does not escape when no escaper is passed', () => {
+    expect(translate(dict, 'en', 'chat.attached', { count: 'a&b' })).toBe('a&b file attached');
+  });
+});
+
+describe('translate plural rules reuse', () => {
+  it('builds one PluralRules per locale, not one per string', async () => {
+    jest.resetModules();
+    const counter = countIntl('PluralRules');
+
+    try {
+      const { translate: fresh } = await import('../src/translate');
+
+      // Every string on a screen comes through here; a list of counted items
+      // would otherwise build a rules object per row.
+      for (let i = 0; i < 10; i += 1) {
+        fresh(dict, 'ru', 'memory.itemsCountRu', { count: i });
+      }
+      expect(counter.count()).toBe(1);
+
+      fresh(dict, 'en', 'memory.itemsCount', { count: 2 });
+      expect(counter.count()).toBe(2);
+    } finally {
+      counter.restore();
+    }
   });
 });

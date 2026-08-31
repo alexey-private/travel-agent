@@ -257,10 +257,16 @@ Calendar events use VEVENT; reminders use VTODO. Users can select which Reminder
 
 Provider switching between Google and Apple is instant — the `UserAwareCalendarProvider` and `UserAwareTasksProvider` delegate based on the `calendarProvider` preference in `user_service_preferences`.
 
-Required env var:
+Required env var — the process refuses to start without it when
+`NODE_ENV=production`:
 ```env
 ENCRYPTION_KEY=<32-character-secret>
 ```
+
+The AES key is derived from it with scrypt, not taken from its bytes, so the
+whole string counts and a short one is not padded with zeros. Credentials
+written before the derivation existed carry no version marker; they are still
+read with the old scheme and re-sealed the first time they are used.
 
 ---
 
@@ -411,7 +417,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `GOOGLE_CLIENT_ID` | Google Calendar | OAuth2 client ID |
 | `GOOGLE_CLIENT_SECRET` | Google Calendar | OAuth2 client secret |
 | `GOOGLE_REDIRECT_URI` | Google Calendar | `http://localhost:3002/auth/google/callback` |
-| `ENCRYPTION_KEY` | iCloud | 32-char key for AES-256-GCM credential encryption |
+| `ENCRYPTION_KEY` | iCloud; **required in production** | >=32-char key; the AES-256-GCM key is derived from it with scrypt |
 | `VAPID_PUBLIC_KEY` | Web Push | VAPID public key |
 | `VAPID_PRIVATE_KEY` | Web Push | VAPID private key |
 | `VAPID_EMAIL` | Web Push | `mailto:you@example.com` |

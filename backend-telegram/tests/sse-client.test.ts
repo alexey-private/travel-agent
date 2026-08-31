@@ -136,7 +136,9 @@ describe('streamChat', () => {
     expect(events[0]).toEqual({ type: 'conversation_id', conversationId: 'conv-new' });
   });
 
-  it('yields error events from the stream without throwing', async () => {
+  it('wraps an error the backend reported, so the caller can send it as-is', async () => {
+    // The backend writes raw English; the wrapper is translated and the raw
+    // half is escaped exactly once. The caller must not translate it again.
     mockFetch(200, makeSseBody([
       { type: 'error', message: 'LLM overloaded' },
       { type: 'done' },
@@ -144,6 +146,21 @@ describe('streamChat', () => {
 
     const events = await collect();
 
-    expect(events[0]).toEqual({ type: 'error', message: 'LLM overloaded' });
+    expect(events[0]).toEqual({
+      type: 'error',
+      message: 'Sorry, something went wrong: LLM overloaded',
+    });
+  });
+
+  it('escapes the markup characters in an error the backend reported', async () => {
+    mockFetch(200, makeSseBody([
+      { type: 'error', message: 'upstream said <nope> & gave up' },
+      { type: 'done' },
+    ]));
+
+    const events = await collect();
+
+    expect((events[0] as { type: 'error'; message: string }).message)
+      .toContain('upstream said &lt;nope&gt; &amp; gave up');
   });
 });

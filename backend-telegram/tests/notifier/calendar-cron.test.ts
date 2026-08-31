@@ -185,6 +185,27 @@ describe('startCalendarCron', () => {
     expect(messageText).toContain('Pack bag');
   });
 
+  it('escapes markup characters in event and task titles', async () => {
+    // An ampersand in a meeting name is ordinary. Unescaped, Telegram answered
+    // 400 and the catch swallowed it, so the person simply stopped receiving
+    // their daily reminder with no way to find out why.
+    const api = buildMockApi();
+    startCalendarCron(api as unknown as Api);
+
+    const tomorrow_ = tomorrow();
+    mockFetch({
+      '/api/users/telegram': { sessionIds: ['tg-555'] },
+      'calendar/events': { upcoming: [{ id: 'e6', title: 'R&D <team> sync', date: tomorrow_, time: '11:00' }] },
+      'calendar/tasks': { tasks: [{ id: 't4', title: 'Read Q3 <draft> & sign', due: tomorrow_, status: 'needsAction' }] },
+    });
+
+    await capturedCronCallback!();
+
+    const messageText = (api.sendMessage as jest.Mock).mock.calls[0][1] as string;
+    expect(messageText).toContain('R&amp;D &lt;team&gt; sync');
+    expect(messageText).toContain('Read Q3 &lt;draft&gt; &amp; sign');
+  });
+
   it('writes the reminder in the language stored for the recipient', async () => {
     const api = buildMockApi();
     startCalendarCron(api as unknown as Api);

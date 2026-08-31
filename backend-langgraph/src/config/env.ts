@@ -5,6 +5,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 import { z } from 'zod';
+import { DEFAULT_TRUST_PROXY } from '../security/trustProxy';
 
 /**
  * Zod schema for environment variable validation.
@@ -37,8 +38,16 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().optional(),
 
-  // iCloud credentials encryption
+  // iCloud credentials encryption. Optional here and required in production by
+  // the refinement below — a deploy without it used to fall back to a key
+  // committed to this repository, which is no protection at all.
   ENCRYPTION_KEY: z.string().optional(),
+
+  // Shared with backend-telegram. A Telegram session id is derived from a public
+  // Telegram user id, so it cannot double as a bearer capability the way a web
+  // UUID does — this secret is what makes that half of the namespace addressable
+  // by the bridge alone. See src/security/internalAuth.ts.
+  INTERNAL_API_SECRET: z.string().optional(),
 
   // Web Push (VAPID)
   VAPID_PUBLIC_KEY: z.string().optional(),
@@ -48,16 +57,60 @@ const envSchema = z.object({
   // Server
   PORT: z.coerce.number().int().positive().default(3002),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  // Production CORS allowlist — set to the frontend URL (e.g. https://app.example.com).
-  // Omit in development to allow any origin.
+  // Which browser origins may read this API — one frontend URL
+  // (e.g. https://app.example.com), or several separated by commas. Optional
+  // here and required in production by the refinement below; omitted in
+  // development, `localhost` on any port is allowed instead, since the frontend
+  // sits on a different port and is already cross-origin. See src/security/cors.ts.
   ALLOWED_ORIGIN: z.string().optional(),
+  // Which peers may speak for the caller through `X-Forwarded-For`, as a
+  // comma-separated list of addresses, CIDR ranges, or the names proxy-addr
+  // defines. `req.ip` is what the rate limiter counts a web caller by, so a
+  // deploy whose edge proxy is missing here counts its entire user base as one
+  // caller — see `security/trustProxy.ts`, which holds the default and logs
+  // when that happens. Empty means no proxy is trusted, which is right when
+  // clients reach this server directly.
+  TRUST_PROXY: z.string().default(DEFAULT_TRUST_PROXY),
+});
+
+/**
+ * Secrets that development may go without and production may not. Checked here
+ * rather than at the point of use so the process refuses to start, instead of
+ * silently running with a weaker key until someone connects an iCloud account.
+ */
+const MIN_ENCRYPTION_KEY_LENGTH = 32;
+
+const envSchemaChecked = envSchema.superRefine((cfg, ctx) => {
+  if (cfg.NODE_ENV !== 'production') return;
+  if (!cfg.ENCRYPTION_KEY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ENCRYPTION_KEY'],
+      message: 'ENCRYPTION_KEY is required in production — iCloud passwords are encrypted with it',
+    });
+  } else if (cfg.ENCRYPTION_KEY.length < MIN_ENCRYPTION_KEY_LENGTH) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ENCRYPTION_KEY'],
+      message: `ENCRYPTION_KEY must be at least ${MIN_ENCRYPTION_KEY_LENGTH} characters`,
+    });
+  }
+  if (!cfg.ALLOWED_ORIGIN?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['ALLOWED_ORIGIN'],
+      message:
+        'ALLOWED_ORIGIN is required in production — without it there is no allowlist, and ' +
+        'the only alternatives are refusing every browser or trusting all of them',
+    });
+  }
 });
 
 /**
  * Parsed and validated environment configuration.
  * Throws at startup if any required variable is missing or invalid.
  */
-const parseResult = envSchema.safeParse(process.env);
+const parseResult = envSchemaChecked.safeParse(process.env);
 
 if (!parseResult.success) {
   console.error('Invalid environment variables:');

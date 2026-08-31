@@ -7,6 +7,7 @@
 
 import Fastify, { FastifyInstance } from 'fastify';
 import { authRoutes } from '@/routes/auth';
+import { canonicalPayload, sign } from '@/security/internalAuth';
 import type { GoogleTokenRepository } from '@/repositories/GoogleTokenRepository';
 import type { UserService } from '@/services/UserService';
 
@@ -23,6 +24,26 @@ jest.mock('googleapis', () => ({
     },
   },
 }));
+
+const CLIENT_SECRET = 'client-secret';
+const INTERNAL_SECRET = 'bridge-secret';
+
+/**
+ * `state` is signed with the Google client secret, so the callback cannot be
+ * pointed at an id nobody consented for. Tests that used to hand-write a state
+ * string now have to produce one the route would have issued.
+ */
+function signedState(userId: string, platform?: string): string {
+  const payload = Buffer.from(JSON.stringify({ userId, platform })).toString('base64url');
+  return `${payload}.${sign(payload, CLIENT_SECRET)}`;
+}
+
+/** A `/connect` link as the bot would mint it: signed over id, platform and expiry. */
+function telegramStartUrl(userId: string): string {
+  const exp = Date.now() + 60_000;
+  const sig = sign(canonicalPayload([userId, 'telegram', exp]), INTERNAL_SECRET);
+  return `/auth/google/start?userId=${encodeURIComponent(userId)}&platform=telegram&exp=${exp}&sig=${sig}`;
+}
 
 function buildMockTokenRepo(): jest.Mocked<GoogleTokenRepository> {
   return {
@@ -44,8 +65,9 @@ async function buildApp(tokenRepo = buildMockTokenRepo(), userService = buildMoc
     tokenRepo,
     userService,
     clientId: 'client-id',
-    clientSecret: 'client-secret',
+    clientSecret: CLIENT_SECRET,
     redirectUri: 'https://backend.example.com/auth/google/callback',
+    internalSecret: INTERNAL_SECRET,
   });
   return { app, tokenRepo, userService };
 }
@@ -64,16 +86,16 @@ describe('GET /auth/google/start', () => {
     await app.inject({ method: 'GET', url: '/auth/google/start?userId=session-abc' });
 
     expect(mockGenerateAuthUrl).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'session-abc' }),
+      expect.objectContaining({ state: signedState('session-abc') }),
     );
   });
 
   it('encodes userId and platform into state when platform is given', async () => {
     const { app } = await buildApp();
-    await app.inject({ method: 'GET', url: '/auth/google/start?userId=tg-123&platform=telegram' });
+    await app.inject({ method: 'GET', url: telegramStartUrl('tg-123') });
 
     expect(mockGenerateAuthUrl).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'tg-123|telegram' }),
+      expect.objectContaining({ state: signedState('tg-123', 'telegram') }),
     );
   });
 });
@@ -85,7 +107,7 @@ describe('GET /auth/google/callback', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/auth/google/callback?code=auth-code&state=session-abc',
+      url: `/auth/google/callback?code=auth-code&state=${encodeURIComponent(signedState('session-abc'))}`,
     });
 
     expect(response.statusCode).toBe(302);
@@ -103,7 +125,7 @@ describe('GET /auth/google/callback', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/auth/google/callback?code=auth-code&state=tg-123|telegram',
+      url: `/auth/google/callback?code=auth-code&state=${encodeURIComponent(signedState('tg-123', 'telegram'))}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -119,7 +141,8 @@ describe('GET /auth/google/callback', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/auth/google/callback?state=tg-123|telegram&error=' + encodeURIComponent('<script>bad</script>'),
+      url: `/auth/google/callback?state=${encodeURIComponent(signedState('tg-123', 'telegram'))}` +
+           `&error=${encodeURIComponent('<script>bad</script>')}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -135,7 +158,7 @@ describe('GET /auth/google/callback', () => {
 
     const response = await app.inject({
       method: 'GET',
-      url: '/auth/google/callback?state=session-abc&error=access_denied',
+      url: `/auth/google/callback?state=${encodeURIComponent(signedState('session-abc'))}&error=access_denied`,
     });
 
     expect(response.statusCode).toBe(302);

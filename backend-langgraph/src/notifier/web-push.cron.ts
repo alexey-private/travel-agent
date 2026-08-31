@@ -5,6 +5,17 @@ import type { CalendarProvider } from '../tools/providers/CalendarProvider';
 import type { TasksProvider } from '../tools/providers/TasksProvider';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '@travel-agent/i18n';
 import { notificationTitle, notificationOverflow, formatEventTime } from '../i18n/notifications';
+import { forEachWithConcurrency } from '../utils/concurrency';
+
+/**
+ * How many people the run has in flight at once.
+ *
+ * Each one costs two provider calls, so this is the number of calendar and task
+ * requests in the air, not a count of local work — which is why it is five and
+ * not fifty. It divides the run's wall clock by five; raising it further trades
+ * a shorter run for a better chance that Google rate-limits the whole batch.
+ */
+const USER_CONCURRENCY = 5;
 
 interface PushSubscriptionRow {
   id: string;
@@ -15,10 +26,30 @@ interface PushSubscriptionRow {
   language: string | null;
 }
 
-function tomorrowDate(): string {
-  const d = new Date();
+/**
+ * Tomorrow's date, as the server's own calendar reads it.
+ *
+ * Exported so the boundary can be tested without standing up the cron.
+ *
+ * The day has to be counted in one clock throughout. `toISOString()` was the
+ * bug: it renders in UTC, so a server far enough east reported today and one
+ * far enough west reported the day after. At the default 09:00 run, east means
+ * any offset past nine hours — Adelaide's UTC+9:30 included, and all of eastern
+ * Australia and New Zealand, whose users were told about the events they were
+ * already having.
+ *
+ * Local is the right clock of the two available. The cron fires on local time
+ * and a calendar's all-day dates are local to whoever wrote them; the server's
+ * timezone is only ever an approximation of the user's, but UTC is not even
+ * that.
+ */
+export function tomorrowDate(now: Date = new Date()): string {
+  const d = new Date(now);
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day   = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 function isTomorrow(dateStr: string | undefined): boolean {
@@ -102,7 +133,10 @@ export function startWebPushCron(
       byUser.set(row.session_id, list);
     }
 
-    for (const [sessionId, subscriptions] of byUser) {
+    async function notify(
+      sessionId: string,
+      subscriptions: PushSubscriptionRow[],
+    ): Promise<void> {
       let events: { title: string; date: string; time?: string }[] = [];
       let tasks:  { title: string; due?: string; status: string }[] = [];
 
@@ -121,11 +155,12 @@ export function startWebPushCron(
           tasks = (data.tasks ?? []).filter((t) => t.status !== 'completed' && isTomorrow(t.due));
         }
       } catch (err) {
+        // One person's calendar being unreachable is not the run's problem.
         console.error(`[web-push cron] Failed to fetch calendar for ${sessionId}:`, err);
-        continue;
+        return;
       }
 
-      if (events.length === 0 && tasks.length === 0) continue;
+      if (events.length === 0 && tasks.length === 0) return;
 
       // Every subscription under one session_id belongs to one person, so the
       // language is the same on all of them — read it off the first.
@@ -134,6 +169,9 @@ export function startWebPushCron(
 
       const payload = buildPayload(events, tasks, locale);
 
+      // Sequential, deliberately: these are one person's own devices, two or
+      // three of them, and the round trips are to a push service rather than to
+      // the provider that made the run slow.
       for (const sub of subscriptions) {
         try {
           await webpush.sendNotification(
@@ -152,6 +190,18 @@ export function startWebPushCron(
           }
         }
       }
+    }
+
+    try {
+      await forEachWithConcurrency(
+        [...byUser],
+        USER_CONCURRENCY,
+        ([sessionId, subscriptions]) => notify(sessionId, subscriptions),
+      );
+    } catch (err) {
+      // `notify` handles what it expects; this is what it did not — a failed
+      // cleanup of a stale subscription, say. The run still reached everyone.
+      console.error('[web-push cron] Finished with errors:', err);
     }
   });
 

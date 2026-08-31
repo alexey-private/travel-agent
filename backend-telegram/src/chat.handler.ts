@@ -5,8 +5,9 @@ import { setCalendarDispatch } from './commands/calendar';
 import { setTasksDispatch } from './commands/tasks';
 import { buildSuggestionsKeyboard } from './commands/start';
 import { ensureSessionId } from './session';
-import { renderHtml } from './render';
+import { escapeHtml, renderHtml } from './render';
 import { getLocale, tFor, tIn } from './i18n/language';
+import { transcribeVoice } from './transcribe';
 
 const MAX_TG_LENGTH = 4096;
 const EDIT_THROTTLE_MS = 1000;
@@ -101,7 +102,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       if (event.type === 'error') {
         clearInterval(typingInterval);
         await ctx.api
-          .editMessageText(chat.id, sent.message_id, t('chat.failed', { message: event.message }))
+          .editMessageText(chat.id, sent.message_id, event.message, { parse_mode: 'HTML' })
           .catch(() => {});
         return;
       }
@@ -132,7 +133,7 @@ export async function handleChatMessage(ctx: BotContext, userText: string, attac
       : t('chat.failed', { message: err instanceof Error ? err.message : String(err) });
     console.error('[chat.handler]', err);
     await ctx.api
-      .editMessageText(chat.id, sent.message_id, `⚠️ ${msg}`)
+      .editMessageText(chat.id, sent.message_id, `⚠️ ${msg}`, { parse_mode: 'HTML' })
       .catch(() => {});
   }
 }
@@ -186,6 +187,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
         ctx.chat.id,
         processing.message_id,
         t('chat.locationFailed', { message: err instanceof Error ? err.message : String(err) }),
+        { parse_mode: 'HTML' },
       );
     }
   });
@@ -198,12 +200,12 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
     const fileSize = doc.file_size ?? 0;
 
     if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
-      await ctx.reply(t('chat.unsupportedFile', { mimeType }));
+      await ctx.reply(t('chat.unsupportedFile', { mimeType }), { parse_mode: 'HTML' });
       return;
     }
 
     if (fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      await ctx.reply(t('chat.fileTooLarge', { max: MAX_FILE_SIZE_MB }));
+      await ctx.reply(t('chat.fileTooLarge', { max: MAX_FILE_SIZE_MB }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -214,7 +216,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(doc.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(t('chat.fileDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.fileDownloadFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -243,7 +245,7 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(best.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(t('chat.photoDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.photoDownloadFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
@@ -258,14 +260,13 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
     await handleChatMessage(ctx, caption, [attachment]);
   });
 
-  // Voice handler — transcribes via OpenAI Whisper, then sends text to agent
+  // Voice handler — transcribes through the backend, then sends text to agent
   bot.on('message:voice', async (ctx) => {
-    const t = await tFor(ctx);
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      await ctx.reply(t('chat.voiceNeedsKey'));
-      return;
-    }
+    // The transcription is a Telegram-scoped backend call, so it needs the id
+    // before `handleChatMessage` would otherwise mint one.
+    ensureSessionId(ctx);
+    const locale = await getLocale(ctx);
+    const t = tIn(locale);
 
     await ctx.api.sendChatAction(ctx.chat.id, 'typing');
 
@@ -274,35 +275,25 @@ export function registerChatHandler(bot: Bot<BotContext>): void {
       const { data } = await downloadTelegramFile(ctx.message.voice.file_id, ctx);
       fileData = data;
     } catch (err) {
-      await ctx.reply(t('chat.voiceDownloadFailed', { message: err instanceof Error ? err.message : String(err) }));
+      await ctx.reply(t('chat.voiceDownloadFailed', { message: err instanceof Error ? err.message : String(err) }), { parse_mode: 'HTML' });
       return;
     }
 
-    let transcribed: string;
-    try {
-      const form = new FormData();
-      form.append('file', new Blob([new Uint8Array(fileData)], { type: 'audio/ogg' }), 'voice.ogg');
-      form.append('model', 'whisper-1');
-      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-      });
-      if (!res.ok) throw new Error(`Whisper API error: ${res.status} ${await res.text()}`);
-      const json = await res.json() as { text: string };
-      transcribed = json.text.trim();
-    } catch (err) {
-      await ctx.reply(t('chat.voiceTranscribeFailed', { message: err instanceof Error ? err.message : String(err) }));
+    // The language this user is being spoken to in is the hint Whisper needs:
+    // left to guess it returns a short Hebrew clip transliterated into Latin.
+    const transcription = await transcribeVoice(fileData, ctx.session.sessionId!, locale);
+    if (!transcription.ok) {
+      await ctx.reply(t(transcription.key), { parse_mode: 'HTML' });
       return;
     }
 
-    if (!transcribed) {
+    if (!transcription.text) {
       await ctx.reply(t('chat.voiceEmpty'));
       return;
     }
 
-    await ctx.reply(`🎤 <i>${transcribed}</i>`, { parse_mode: 'HTML' });
-    await handleChatMessage(ctx, transcribed);
+    await ctx.reply(`🎤 <i>${escapeHtml(transcription.text)}</i>`, { parse_mode: 'HTML' });
+    await handleChatMessage(ctx, transcription.text);
   });
 
   // Catch-all text handler — MUST be registered last

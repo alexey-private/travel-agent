@@ -75,14 +75,16 @@ once the container is up.
 | `ANTHROPIC_API_KEY` | your key |
 | `TAVILY_API_KEY` | required |
 | `OPENWEATHER_API_KEY` | required |
-| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`, used by the web frontend's mic button) — without it the endpoint returns `503`. Separate from the same-named variable on `backend-telegram`, which powers voice notes sent to the bot instead |
+| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`) — without it the endpoint returns `503`. This is the only copy: the web mic button and Telegram voice notes both go through this route, so the bot needs no key of its own |
 | `VOYAGE_API_KEY` | optional (random-vector fallback if unset) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
 | `NEXT_PUBLIC_FRONTEND_URL` | `https://<frontend-service-domain>` — required if using Google Calendar/Tasks (see below) |
-| `ENCRYPTION_KEY` | 32+ char random string, only if using iCloud |
+| `ENCRYPTION_KEY` | **required when `NODE_ENV=production`** (the service refuses to start without it), 32+ char random string. Only iCloud credentials are encrypted with it, but the check is unconditional: a deploy that omits it used to silently fall back to a key committed to this repository |
+| `INTERNAL_API_SECRET` | **required if the Telegram bot is deployed.** A long random string, set to the *same value* on this service and on `backend-telegram`. Without it every Telegram-scoped request is refused with `503` and `/connect` stops working — see the note below |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_EMAIL` | if using web push |
-| `ALLOWED_ORIGIN` | `https://<frontend-service-domain>` |
+| `ALLOWED_ORIGIN` | **required when `NODE_ENV=production`** (the service refuses to start without it) — `https://<frontend-service-domain>`, or several comma-separated. See the note below |
+| `TRUST_PROXY` | optional — leave unset on Railway. Which peers may speak for the caller through `X-Forwarded-For`; the default trusts the private and carrier-NAT ranges an edge proxy reaches a container from. See the note below |
 | `PORT` | `3002` — recommended; see note below |
 
 `NEXT_PUBLIC_FRONTEND_URL` is read directly via `process.env` in
@@ -92,6 +94,69 @@ redirect after the Google OAuth callback finishes. Without it, the fallback
 is `http://localhost:3000` — the callback will complete and tokens will
 save correctly, but the user's browser ends up redirected to localhost
 instead of the deployed frontend.
+
+**About `ALLOWED_ORIGIN`** — a request to this API carries no credential beyond
+a `userId` in its body, so the origin check is the whole of what keeps an
+unrelated page in the user's browser from making one. It is an allowlist, never
+a reflection of whatever `Origin` arrives: an origin outside the list gets no
+`Access-Control-Allow-Origin` back and the browser refuses to hand the response
+to the page. Set it to the frontend's own URL, scheme included and no trailing
+slash (`https://app.example.com`); separate several with commas if more than one
+front end talks to this backend.
+
+A production deploy without it refuses to start, because there is no safe
+reading of the omission — the alternatives are refusing every browser or
+trusting all of them, and the second is what this variable's absence used to
+mean. Development needs no value: `localhost` and `127.0.0.1` on any port are
+allowed there, since the frontend's own port already makes it cross-origin.
+Nothing outside a browser is affected either way, so the Telegram bridge, which
+sends no `Origin` at all, needs no entry.
+
+**About `TRUST_PROXY`** — the rate limiter counts a web caller by `req.ip`,
+because a `userId` is a value the browser chose and rotating it would otherwise
+buy an unlimited budget. Behind a proxy, `req.ip` is the proxy unless the proxy
+is trusted, and then every user in the world is counted as one caller: the limit
+becomes an outage at 30 requests a minute rather than a defence. The default
+trusts `loopback, linklocal, uniquelocal, 100.64.0.0/10` — ranges an edge proxy
+plausibly reaches a container from and a public client cannot arrive from — and
+only the entry *that* peer appended is believed, so a caller prepending hops of
+their own gains nothing.
+
+If the platform's proxy is outside those ranges, the backend says so in the log
+on the first request that shows it:
+
+```
+X-Forwarded-For arrived from a peer TRUST_PROXY does not trust — every web
+caller is being rate limited as one. Add this peer to TRUST_PROXY.
+```
+
+The line carries the peer address; add it (or its range) to `TRUST_PROXY` as a
+comma-separated list. Set it to an empty string when clients reach the server
+directly with no proxy at all.
+
+Do not widen it to ranges a client can actually arrive from just to make the
+warning go away. With every peer trusted, `req.ip` becomes the *first* entry of
+the header — the part the caller wrote — and rotating that buys a fresh budget
+per request, which is the bypass this key exists to close. The value is a list
+of addresses and ranges, and the parser rejects both `true` and a literal
+`0.0.0.0/0`, so "trust everything" cannot be reached by a typo; a value Fastify
+cannot parse stops the process at startup instead of degrading the limit
+quietly.
+
+**About `INTERNAL_API_SECRET`** — a web visitor's session id is a random
+UUID, unguessable, and that is the only thing standing between a request and
+the data behind it. A Telegram user's session id is `tg-<telegram user id>`,
+built from a number anyone sharing a group with them can read, so it cannot
+protect anything on its own. The backend therefore refuses to answer for a
+`tg-` id unless the caller presents this secret in an `x-internal-secret`
+header, and the `/connect` consent link — which a browser opens, and so cannot
+carry a header — is signed with it instead. Both services must hold the same
+value; there is no default, and the backend logs an error on startup when it is
+missing. Generate one with `openssl rand -hex 32`.
+
+Deploying the backend with this set while the bot still lacks it (or the
+reverse) takes the bot offline until both agree — set it on both services
+before redeploying either.
 
 **About `PORT`** — Railway does **not** inject `PORT` into this service
 (despite what you might expect), so the container falls back to the default in
@@ -130,7 +195,7 @@ long-polling mode (`bot.start()`) — **no public domain, no exposed port**.
 | `BACKEND_URL` | `http://${{travel-agent.RAILWAY_PRIVATE_DOMAIN}}:3002` (resolves to `travel-agent.railway.internal`) — use the private domain, not the public one, to avoid an unnecessary public-network hop for the bot's own server-to-server calls (chat, history, calendar cron). The port **must** match whatever `PORT` is actually set to on the `travel-agent` service (see below) — there's no auto-detection over the private network like there is for public domains |
 | `BACKEND_PUBLIC_URL` | `https://<travel-agent-public-domain>` — **required**, separate from `BACKEND_URL` above. Used only for links sent *to the user* (currently `/connect`'s Google OAuth link). `*.railway.internal` addresses only resolve inside Railway's private network — a user's own browser can't open them, so without this set explicitly the `/connect` link is broken even though every other bot feature works fine |
 | `OPENWEATHER_API_KEY` | required |
-| `OPENAI_API_KEY` | if voice transcription is enabled |
+| `INTERNAL_API_SECRET` | **required.** Must be byte-for-byte the same value as on the `travel-agent` service. Without it every backend call this bot makes comes back `403` and `/connect` refuses to issue a link |
 | `NOTIFY_HOUR` | optional, defaults to `9` |
 
 ## 4. frontend — Railway service `frontend`

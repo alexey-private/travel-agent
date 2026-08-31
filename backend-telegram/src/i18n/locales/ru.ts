@@ -50,7 +50,9 @@ export const ru: Dictionary = {
   'chat.photoDownloadFailed': 'Не удалось скачать фото: {message}',
   'chat.voiceNeedsKey': 'Для голосовых сообщений нужно настроить OPENAI_API_KEY.',
   'chat.voiceDownloadFailed': 'Не удалось скачать голосовое сообщение: {message}',
-  'chat.voiceTranscribeFailed': 'Не удалось расшифровать голосовое сообщение: {message}',
+  'chat.voiceTranscribeFailed': 'Не удалось расшифровать голосовое сообщение.',
+  'chat.voiceTooLong': 'Голосовое сообщение слишком длинное для расшифровки.',
+  'chat.voiceTooMany': 'Слишком много голосовых сообщений подряд. Подождите немного и попробуйте снова.',
   'chat.voiceEmpty': 'Не удалось разобрать голосовое сообщение.',
 
   // ── Telegram command menu ─────────────────────────────────────
@@ -96,7 +98,9 @@ export const ru: Dictionary = {
     'Чтобы включить Google Calendar и Tasks, откройте эту ссылку в браузере:\n\n' +
     '<code>{url}</code>\n\n' +
     'После подтверждения доступа вернитесь сюда и попробуйте /calendar снова.\n\n' +
-    '<i>Ссылка личная — не делитесь ею.</i>',
+    '<i>Ссылка личная и действует несколько минут — не делитесь ею.</i>',
+  'connect.notConfigured':
+    'Подключение Google сейчас недоступно: бот не настроен на защищённое обращение к бэкенду. Сообщите администратору.',
 
   // ── /travel, /shopping ────────────────────────────────────────
   'agent.switchedTravel':

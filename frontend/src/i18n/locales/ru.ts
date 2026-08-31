@@ -236,6 +236,11 @@ export const ru: Dictionary = {
   "errors.userIdRequired": "Сессия истекла. Перезагрузите страницу.",
   "errors.driveNotConfigured": "Google Drive не настроен на этом сервере.",
   "errors.driveUploadFailed": "Не удалось загрузить файл в Google Drive.",
+  "errors.rateLimited": "Слишком много запросов. Подождите немного и попробуйте снова.",
+  "errors.textTooLong": "Это сообщение слишком длинное для экспорта в PDF.",
+  "errors.textUnbreakableRun": "В сообщении есть очень длинное слово без пробелов — такой текст нельзя сверстать в PDF.",
+  "errors.transcriptionFailed": "Не удалось распознать запись.",
+  "errors.audioTooLarge": "Запись слишком длинная для распознавания.",
   "errors.appleCredentialsRequired": "Введите Apple ID и пароль приложения.",
   "errors.appleInvalidCredentials": "Неверный Apple ID или пароль приложения. Используйте пароль приложения с appleid.apple.com.",
 };

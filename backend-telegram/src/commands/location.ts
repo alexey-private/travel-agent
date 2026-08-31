@@ -17,6 +17,6 @@ export function registerLocationCommand(bot: Bot<BotContext>): void {
     const t = await tFor(ctx);
     const prev = ctx.session.currentCity;
     ctx.session.currentCity = null;
-    await ctx.reply(prev ? t('location.cleared', { city: prev }) : t('location.nothingToClear'));
+    await ctx.reply(prev ? t('location.cleared', { city: prev }) : t('location.nothingToClear'), { parse_mode: 'HTML' });
   });
 }

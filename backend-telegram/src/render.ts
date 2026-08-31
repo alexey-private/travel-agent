@@ -1,6 +1,15 @@
 const LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
 
-function escapeHtml(text: string): string {
+/**
+ * Escapes the three characters Telegram's HTML parser treats as markup.
+ *
+ * Anything the app did not write itself — a calendar title, a stored message,
+ * a Whisper transcript — has to pass through here before it is interpolated
+ * into a message sent with `parse_mode: 'HTML'`. An unescaped `&` or `<` is
+ * not a cosmetic problem: Telegram answers 400 and the message is never
+ * delivered.
+ */
+export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 

@@ -25,7 +25,13 @@ export interface LanguageContextValue {
 export const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 function writeCookie(locale: Locale): void {
-  document.cookie = `${LANG_COOKIE}=${locale}; path=/; max-age=${LANG_COOKIE_MAX_AGE}; SameSite=Lax`;
+  // `Secure` keeps the cookie off any plaintext request once the site is served
+  // over HTTPS. It is set conditionally because a browser silently discards a
+  // Secure cookie written from an http: page, and development runs on http —
+  // an unconditional flag would leave the language resetting on every reload
+  // there. Over http there is nothing to protect in the first place.
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${LANG_COOKIE}=${locale}; path=/; max-age=${LANG_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
 }
 
 function hasCookie(): boolean {

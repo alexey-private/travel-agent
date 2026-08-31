@@ -1,8 +1,10 @@
 import cron from 'node-cron';
 import type { Api } from 'grammy';
 import { BACKEND_URL } from '../config';
+import { internalHeaders } from '../backendAuth';
 import { fetchLocale } from '../i18n/language';
 import { t } from '../i18n/t';
+import { escapeHtml } from '../render';
 import type { Locale } from '@travel-agent/i18n';
 
 interface CalendarEvent {
@@ -32,8 +34,8 @@ function isTomorrow(dateStr: string | undefined): boolean {
 
 async function fetchTomorrowReminders(sessionId: string): Promise<{ events: CalendarEvent[]; tasks: Task[] }> {
   const [eventsRes, tasksRes] = await Promise.all([
-    fetch(`${BACKEND_URL}/api/calendar/events?userId=${encodeURIComponent(sessionId)}`),
-    fetch(`${BACKEND_URL}/api/calendar/tasks?userId=${encodeURIComponent(sessionId)}`),
+    fetch(`${BACKEND_URL}/api/calendar/events?userId=${encodeURIComponent(sessionId)}`, { headers: internalHeaders() }),
+    fetch(`${BACKEND_URL}/api/calendar/tasks?userId=${encodeURIComponent(sessionId)}`, { headers: internalHeaders() }),
   ]);
 
   const eventsData = eventsRes.ok ? (await eventsRes.json() as { upcoming?: CalendarEvent[]; events?: CalendarEvent[] }) : {};
@@ -54,15 +56,15 @@ function formatNotification(events: CalendarEvent[], tasks: Task[], locale: Loca
   if (events.length > 0) {
     lines.push(t(locale, 'notify.events'));
     for (const e of events) {
-      lines.push(`  • ${e.time ? `${e.time} — ` : ''}${e.title}`);
+      lines.push(`  • ${e.time ? `${e.time} — ` : ''}${escapeHtml(e.title)}`);
     }
   }
 
   if (tasks.length > 0) {
     if (events.length > 0) lines.push('');
     lines.push(t(locale, 'notify.tasks'));
-    for (const t of tasks) {
-      lines.push(`  • ${t.title}`);
+    for (const task of tasks) {
+      lines.push(`  • ${escapeHtml(task.title)}`);
     }
   }
 
@@ -77,7 +79,7 @@ export function startCalendarCron(api: Api): void {
 
     let sessionIds: string[];
     try {
-      const res = await fetch(`${BACKEND_URL}/api/users/telegram`);
+      const res = await fetch(`${BACKEND_URL}/api/users/telegram`, { headers: internalHeaders() });
       if (!res.ok) throw new Error(`Backend error: ${res.status}`);
       const data = await res.json() as { sessionIds: string[] };
       sessionIds = data.sessionIds;

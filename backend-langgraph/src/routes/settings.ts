@@ -148,7 +148,13 @@ export async function settingsRoutes(
         .map((c) => ({ name: String(c.displayName ?? ''), url: c.url }));
       return { lists };
     } catch (err) {
-      return reply.code(500).send({ error: (err as Error).message, code: 'apple_request_failed' });
+      // Whatever iCloud said goes to the log, not to the caller. A CalDAV
+      // failure message is written for whoever runs the server — it can name
+      // the account, the collection URL or the upstream response verbatim —
+      // and the client has no use for it: the caller here shows a list or
+      // shows nothing. The `code` is what the frontend translates by.
+      req.log.error({ err }, 'apple reminder-lists request failed');
+      return reply.code(500).send({ error: 'Could not reach Apple iCloud', code: 'apple_request_failed' });
     }
   });
 

@@ -18,3 +18,5 @@ export {
 export type { Dict, Entry, PluralForms, TVars } from './types';
 
 export { translate } from './translate';
+
+export { perLocale } from './perLocale';

@@ -27,13 +27,13 @@ describe('/clearlocation command', () => {
     const ctx = makeCtx({ currentCity: 'Tokyo, Tokyo, JP' });
     await handlers.get('clearlocation')!(ctx);
     expect(ctx.session.currentCity).toBeNull();
-    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('Tokyo, Tokyo, JP'));
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('Tokyo, Tokyo, JP'), expect.any(Object));
   });
 
   it('replies with "no location was set" when city was already null', async () => {
     const ctx = makeCtx({ currentCity: null });
     await handlers.get('clearlocation')!(ctx);
     expect(ctx.session.currentCity).toBeNull();
-    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('No location was set'));
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining('No location was set'), expect.any(Object));
   });
 });

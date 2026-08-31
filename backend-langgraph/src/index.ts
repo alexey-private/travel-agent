@@ -20,6 +20,8 @@ import { transcribeRoutes } from './routes/transcribe';
 import { userRoutes } from './routes/users';
 import { pushRoutes } from './routes/push';
 import { startWebPushCron } from './notifier/web-push.cron';
+import { registerInternalAuth } from './security/internalAuth';
+import { allowedOrigins } from './security/cors';
 import { GoogleTokenRepository } from './repositories/GoogleTokenRepository';
 import { ICloudTokenRepository } from './repositories/ICloudTokenRepository';
 import { UserPreferencesRepository } from './repositories/UserPreferencesRepository';
@@ -48,16 +50,40 @@ const fastify = Fastify({
   genReqId: () => `req-${(++_reqCounter).toString().padStart(6, '0')}`,
   requestIdHeader: 'x-request-id',
   bodyLimit: 25 * 1024 * 1024, // 25 MB — accommodate base64-encoded file attachments
+  // Behind a proxy, the socket peer is the proxy. `req.ip` is the key the rate
+  // limiter counts web callers by, so without this every user shares one bucket.
+  // `TRUST_PROXY` names which peers may speak for the caller (see
+  // security/trustProxy.ts); empty means none, and a value Fastify cannot parse
+  // stops the process here rather than degrading the limit quietly.
+  trustProxy: env.TRUST_PROXY.trim() || false,
 });
 
 async function bootstrap(): Promise<void> {
+  // An allowlist, not a reflection: a request carries no credential beyond a
+  // `userId`, so the origin check is what keeps an unrelated page from making
+  // one. `security/cors.ts` decides the list; an origin outside it simply gets
+  // no `Access-Control-Allow-Origin` back. No `credentials` option — nothing
+  // here authenticates by cookie.
   await fastify.register(cors, {
-    origin: env.ALLOWED_ORIGIN ?? true,
+    origin: allowedOrigins(env.ALLOWED_ORIGIN, env.NODE_ENV === 'production'),
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS'],
   });
   // global: false — only routes that set config.rateLimit are limited.
   // hook: 'preHandler' — body is parsed at this stage, so keyGenerator can read req.body.userId.
-  await fastify.register(rateLimit, { global: false, hook: 'preHandler' });
+  await fastify.register(rateLimit, {
+    global: false,
+    hook: 'preHandler',
+    // A 429 carries a snake_case `code` like every other error response here.
+    // The PDF export shows this one to the user directly, with no agent in
+    // between to retell it, and `code` is what the frontend translates by.
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: 429,
+      error: `Too many requests, retry in ${context.after}`,
+      code: 'rate_limited',
+    }),
+  });
+  // Before any route is registered: a hook only guards what comes after it.
+  registerInternalAuth(fastify, env.INTERNAL_API_SECRET);
 
   // Shared singletons — created once at startup, reused across all requests
   const pool = getPool();
@@ -69,7 +95,20 @@ async function bootstrap(): Promise<void> {
   const suggestionService = new SuggestionService();
 
   const tokenRepo = new GoogleTokenRepository(pool);
-  const icloudTokenRepo = new ICloudTokenRepository(pool, env.ENCRYPTION_KEY ?? 'default-dev-key-change-in-prod!!');
+  // Production cannot reach this fallback: env validation refuses to start
+  // without a real ENCRYPTION_KEY. Development gets a fixed throwaway so that
+  // `npm run dev` works without one and a restart can still read what the
+  // previous run wrote — anything sealed with it is dev data by definition.
+  // The value is the one that used to be reachable in production, kept
+  // verbatim: rotating it would orphan every credential already in a developer's
+  // database, and buys nothing once production cannot reach it.
+  if (!env.ENCRYPTION_KEY) {
+    fastify.log.warn('ENCRYPTION_KEY is not set — using the development key. Do not use this outside development.');
+  }
+  const icloudTokenRepo = new ICloudTokenRepository(
+    pool,
+    env.ENCRYPTION_KEY ?? 'default-dev-key-change-in-prod!!',
+  );
   const prefRepo = new UserPreferencesRepository(pool);
 
   const googleConfig = env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI
@@ -110,6 +149,7 @@ async function bootstrap(): Promise<void> {
       clientId: googleConfig.clientId,
       clientSecret: googleConfig.clientSecret,
       redirectUri: googleConfig.redirectUri,
+      internalSecret: env.INTERNAL_API_SECRET,
     });
     fastify.log.info('Google Calendar OAuth2 routes registered');
   }

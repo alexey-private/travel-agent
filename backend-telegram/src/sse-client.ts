@@ -1,4 +1,5 @@
 import { BACKEND_URL } from './config';
+import { internalHeaders } from './backendAuth';
 import { DEFAULT_LOCALE, type Locale } from '@travel-agent/i18n';
 import { t } from './i18n/t';
 
@@ -31,6 +32,13 @@ interface ChatRequest {
 /**
  * Opens a POST /api/chat SSE stream and yields parsed AgentEvent objects.
  * The caller is responsible for breaking on 'done' or 'error'.
+ *
+ * Every `error` event that leaves here is a finished, translated string whose
+ * variable part is already escaped, so the caller sends it as-is. Running it
+ * through `t()` again would escape it twice, and an error quoting a URL would
+ * reach the user as `&amp;amp;`. That includes the errors the backend itself
+ * reports: they arrive as raw English text and are wrapped here, at the one
+ * place that knows which half of the sentence is ours and which is not.
  */
 export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> {
   const locale = req.locale ?? DEFAULT_LOCALE;
@@ -47,7 +55,7 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
   try {
     response = await fetch(`${BACKEND_URL}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: internalHeaders({ 'Content-Type': 'application/json' }),
       body,
     });
   } catch (err) {
@@ -81,6 +89,10 @@ export async function* streamChat(req: ChatRequest): AsyncGenerator<AgentEvent> 
       const json = line.slice(6);
       try {
         const event = JSON.parse(json) as AgentEvent;
+        if (event.type === 'error') {
+          yield { type: 'error', message: t(locale, 'chat.failed', { message: event.message }) };
+          continue;
+        }
         yield event;
         if (event.type === 'done') return;
       } catch {

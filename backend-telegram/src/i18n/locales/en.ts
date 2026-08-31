@@ -49,7 +49,9 @@ export const en = {
   'chat.photoDownloadFailed': 'Could not download the photo: {message}',
   'chat.voiceNeedsKey': 'Voice messages require OPENAI_API_KEY to be configured.',
   'chat.voiceDownloadFailed': 'Could not download voice message: {message}',
-  'chat.voiceTranscribeFailed': 'Could not transcribe voice message: {message}',
+  'chat.voiceTranscribeFailed': 'Could not transcribe the voice message.',
+  'chat.voiceTooLong': 'That voice message is too long to transcribe.',
+  'chat.voiceTooMany': 'Too many voice messages in a row. Wait a moment and try again.',
   'chat.voiceEmpty': 'Could not understand the voice message.',
 
   // ── Telegram command menu ─────────────────────────────────────
@@ -93,7 +95,9 @@ export const en = {
     'To enable Google Calendar and Tasks, open this link in your browser:\n\n' +
     '<code>{url}</code>\n\n' +
     'After you approve access, come back here and try /calendar again.\n\n' +
-    '<i>This link is personal — do not share it.</i>',
+    '<i>This link is personal and expires in a few minutes — do not share it.</i>',
+  'connect.notConfigured':
+    'Connecting Google is unavailable right now: this bot is not configured to reach the backend securely. Please tell the administrator.',
 
   // ── /travel, /shopping ────────────────────────────────────────
   'agent.switchedTravel':

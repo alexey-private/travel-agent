@@ -49,7 +49,9 @@ export const he: Dictionary = {
   'chat.photoDownloadFailed': 'לא הצלחתי להוריד את התמונה: {message}',
   'chat.voiceNeedsKey': 'הודעות קוליות דורשות הגדרה של OPENAI_API_KEY.',
   'chat.voiceDownloadFailed': 'לא הצלחתי להוריד את ההודעה הקולית: {message}',
-  'chat.voiceTranscribeFailed': 'לא הצלחתי לתמלל את ההודעה הקולית: {message}',
+  'chat.voiceTranscribeFailed': 'לא הצלחתי לתמלל את ההודעה הקולית.',
+  'chat.voiceTooLong': 'ההודעה הקולית ארוכה מדי לתמלול.',
+  'chat.voiceTooMany': 'יותר מדי הודעות קוליות ברצף. המתינו רגע ונסו שוב.',
   'chat.voiceEmpty': 'לא הצלחתי להבין את ההודעה הקולית.',
 
   // ── Telegram command menu ─────────────────────────────────────
@@ -93,7 +95,9 @@ export const he: Dictionary = {
     'כדי להפעיל את Google Calendar ו־Tasks, פתחו את הקישור הזה בדפדפן:\n\n' +
     '<code>{url}</code>\n\n' +
     'אחרי אישור הגישה חזרו לכאן ונסו שוב /calendar.\n\n' +
-    '<i>הקישור אישי — אל תשתפו אותו.</i>',
+    '<i>הקישור אישי ופג תוך כמה דקות — אל תשתפו אותו.</i>',
+  'connect.notConfigured':
+    'החיבור ל־Google אינו זמין כרגע: הבוט אינו מוגדר לפנות לשרת בצורה מאובטחת. אנא פנו למנהל המערכת.',
 
   // ── /travel, /shopping ────────────────────────────────────────
   'agent.switchedTravel':

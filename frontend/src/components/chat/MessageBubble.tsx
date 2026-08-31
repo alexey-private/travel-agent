@@ -9,7 +9,7 @@ import { exportToPdf, exportToPdfDrive, derivePdfFilename } from "@/lib/api";
 import { type Message } from "@/types/agent";
 import { useT, useLocale } from "@/i18n/useT";
 import { MIRROR_UNDER_RTL } from "@/i18n/direction";
-import { detectTextDir } from "@/i18n/detectTextDir";
+import { useTextDirection } from "@/i18n/useTextDirection";
 import type { TKey } from "@/i18n/dictionaries";
 
 export type { Message };
@@ -34,6 +34,10 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
   const [driveError, setDriveError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Undefined while a reply is still arriving and has said nothing yet, so one
+  // that opens on an emoji inherits the document direction instead of guessing
+  // and then jumping. A finished message always has a direction of its own.
+  const contentDir = useTextDirection(message.content, message.streaming ?? false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -105,7 +109,7 @@ const MessageBubble = memo(function MessageBubble({ message, userId, agentType =
         {/* Bubble text */}
         {message.content && (
           <div
-            dir={detectTextDir(message.content)}
+            dir={contentDir}
             className={`px-4 py-3 rounded-2xl shadow-xs text-sm leading-relaxed ${
               isUser
                 ? "bg-blue-600 text-white rounded-se-sm whitespace-pre-wrap"

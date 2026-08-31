@@ -9,6 +9,7 @@
 
 import { ALL_SUGGESTIONS, getRandomSuggestions } from "@/data/starterSuggestions";
 import { LOCALES } from "@travel-agent/i18n";
+import { countIntl } from "../helpers/countIntl";
 
 const HEBREW = /[֐-׿]/;
 const CYRILLIC = /[Ѐ-ӿ]/;
@@ -75,6 +76,23 @@ describe("starter suggestions", () => {
   it("defaults to English travel suggestions", () => {
     for (const s of getRandomSuggestions(3)) {
       expect(ALL_SUGGESTIONS.en.travel).toContain(s);
+    }
+  });
+});
+
+describe("month names in suggestion text", () => {
+  it("builds one month formatter per locale for the whole set", async () => {
+    jest.resetModules();
+    const counter = countIntl("DateTimeFormat");
+
+    try {
+      await import("@/data/starterSuggestions");
+
+      // Dozens of suggestions name a month, and the sets are built at import.
+      // Three locales, three formatters.
+      expect(counter.count()).toBe(LOCALES.length);
+    } finally {
+      counter.restore();
     }
   });
 });
