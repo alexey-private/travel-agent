@@ -239,6 +239,8 @@ export const ru: Dictionary = {
   "errors.rateLimited": "Слишком много запросов. Подождите немного и попробуйте снова.",
   "errors.textTooLong": "Это сообщение слишком длинное для экспорта в PDF.",
   "errors.textUnbreakableRun": "В сообщении есть очень длинное слово без пробелов — такой текст нельзя сверстать в PDF.",
+  "errors.agentFailed": "Ассистент не смог закончить ответ. Попробуйте ещё раз.",
+  "errors.requestTimedOut": "Запрос выполнялся слишком долго и был прерван. Попробуйте ещё раз.",
   "errors.transcriptionFailed": "Не удалось распознать запись.",
   "errors.audioTooLarge": "Запись слишком длинная для распознавания.",
   "errors.appleCredentialsRequired": "Введите Apple ID и пароль приложения.",

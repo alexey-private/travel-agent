@@ -33,6 +33,8 @@ export const he: Dictionary = {
   // ── Chat handler ──────────────────────────────────────────────
   'chat.usingTool': '⚙️ משתמש ב־<b>{tool}</b>…',
   'chat.failed': 'משהו השתבש: {message}',
+  'chat.agentFailed': 'לא הצלחתי לסיים את התשובה. נסו שוב.',
+  'chat.requestTimedOut': 'הבקשה ארכה יותר מדי וההרצה הופסקה. נסו שוב.',
   'chat.noResponse': '(אין תשובה)',
   'chat.nextStep': 'מה תרצו לעשות עכשיו?',
   'chat.backendUnreachable': 'אין גישה לשרת. ודאו ש־backend-langgraph פועל.',

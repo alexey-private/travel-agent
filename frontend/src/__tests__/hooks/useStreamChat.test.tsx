@@ -77,4 +77,48 @@ describe("useStreamChat", () => {
 
     expect(mockStreamChat.mock.calls[0][7]).toBe("he");
   });
+  /**
+   * The stream can end in a failure instead of an answer. The event union had no
+   * `error` variant, so the browser parsed the event and dropped it: the bubble
+   * was marked done by the `done` that follows and stayed empty, saying nothing
+   * at all about what had happened.
+   */
+  it("reports a failed turn instead of finishing the bubble empty", async () => {
+    mockStreamChat.mockImplementation(async (_userId, _msg, _convId, onEvent) => {
+      onEvent({ type: "error", code: "agent_failed" } as AgentEvent);
+      onEvent({ type: "done" } as AgentEvent);
+    });
+
+    const dispatch = jest.fn();
+    const { result } = renderHook(() =>
+      useStreamChat({ userId: "user-1", agentType: "travel", dispatch, t, locale: "en" }),
+    );
+
+    await act(async () => {
+      await result.current.send("hi", "hi");
+    });
+
+    const marked = dispatch.mock.calls.map(([action]) => action).find((a) => a.type === "MARK_ERROR");
+    expect(marked).toBeDefined();
+    expect(marked.error).toContain("errors.agentFailed");
+  });
+
+  it("falls back to a general failure for a code it does not know", async () => {
+    mockStreamChat.mockImplementation(async (_userId, _msg, _convId, onEvent) => {
+      onEvent({ type: "error", code: "something_new" } as AgentEvent);
+      onEvent({ type: "done" } as AgentEvent);
+    });
+
+    const dispatch = jest.fn();
+    const { result } = renderHook(() =>
+      useStreamChat({ userId: "user-1", agentType: "travel", dispatch, t, locale: "en" }),
+    );
+
+    await act(async () => {
+      await result.current.send("hi", "hi");
+    });
+
+    const marked = dispatch.mock.calls.map(([action]) => action).find((a) => a.type === "MARK_ERROR");
+    expect(marked.error).toContain("errors.chatRequestFailed");
+  });
 });

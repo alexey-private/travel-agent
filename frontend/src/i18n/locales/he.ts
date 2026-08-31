@@ -237,6 +237,8 @@ export const he: Dictionary = {
   "errors.rateLimited": "יותר מדי בקשות. המתינו רגע ונסו שוב.",
   "errors.textTooLong": "ההודעה ארוכה מכדי לייצא אותה כ-PDF.",
   "errors.textUnbreakableRun": "ההודעה מכילה מילה ארוכה מאוד ללא רווחים, ולא ניתן לסדר אותה ב-PDF.",
+  "errors.agentFailed": "העוזר לא הצליח לסיים את התשובה. נסו שוב.",
+  "errors.requestTimedOut": "הבקשה ארכה יותר מדי וההרצה הופסקה. נסו שוב.",
   "errors.transcriptionFailed": "לא הצלחנו לתמלל את ההקלטה.",
   "errors.audioTooLarge": "ההקלטה ארוכה מדי לתמלול.",
   "errors.appleCredentialsRequired": "הזינו Apple ID וסיסמה ייעודית לאפליקציה.",

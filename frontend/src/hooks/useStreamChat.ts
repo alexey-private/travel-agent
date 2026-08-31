@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { streamChat } from "@/lib/api";
+import { errorKeyFor } from "@/lib/errorCode";
 import { type MessagesAction, type Attachment } from "@/types/agent";
 import { type AgentType } from "@/components/shared/AgentSelector";
 import type { TKey } from "@/i18n/dictionaries";
@@ -91,6 +92,15 @@ export function useStreamChat({
               break;
             case "suggestions":
               dispatch({ type: "SET_SUGGESTIONS", id: assistantMsgId, suggestions: event.suggestions });
+              break;
+            // The turn failed on the server. `done` follows, so without this the
+            // bubble was marked finished and stayed empty with nothing said.
+            case "error":
+              dispatch({
+                type: "MARK_ERROR",
+                id: assistantMsgId,
+                error: t(errorKeyFor(event.code, "errors.chatRequestFailed")),
+              });
               break;
             case "done":
               dispatch({ type: "MARK_DONE", id: assistantMsgId });

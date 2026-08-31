@@ -136,11 +136,11 @@ describe('streamChat', () => {
     expect(events[0]).toEqual({ type: 'conversation_id', conversationId: 'conv-new' });
   });
 
-  it('wraps an error the backend reported, so the caller can send it as-is', async () => {
-    // The backend writes raw English; the wrapper is translated and the raw
-    // half is escaped exactly once. The caller must not translate it again.
+  it('turns the backend failure code into a sentence of ours', async () => {
+    // The backend sends a code and no prose. It used to send `err.message` —
+    // whatever the model provider or a tool threw — and the bot read it out.
     mockFetch(200, makeSseBody([
-      { type: 'error', message: 'LLM overloaded' },
+      { type: 'error', code: 'agent_failed' },
       { type: 'done' },
     ]));
 
@@ -148,19 +148,48 @@ describe('streamChat', () => {
 
     expect(events[0]).toEqual({
       type: 'error',
-      message: 'Sorry, something went wrong: LLM overloaded',
+      message: "Sorry, I couldn't finish that answer. Please try again.",
     });
   });
 
-  it('escapes the markup characters in an error the backend reported', async () => {
+  it('has its own sentence for a timed-out turn', async () => {
     mockFetch(200, makeSseBody([
-      { type: 'error', message: 'upstream said <nope> & gave up' },
+      { type: 'error', code: 'request_timed_out' },
       { type: 'done' },
     ]));
 
     const events = await collect();
 
     expect((events[0] as { type: 'error'; message: string }).message)
-      .toContain('upstream said &lt;nope&gt; &amp; gave up');
+      .toBe('That took too long and was stopped. Please try again.');
+  });
+
+  it('says something for a code it does not know', async () => {
+    mockFetch(200, makeSseBody([
+      { type: 'error', code: 'something_new' },
+      { type: 'done' },
+    ]));
+
+    const events = await collect();
+
+    expect((events[0] as { type: 'error'; message: string }).message)
+      .toBe("Sorry, I couldn't finish that answer. Please try again.");
+  });
+
+  /**
+   * The point of the code: nothing an upstream service wrote can reach a user
+   * through this path, whatever the backend happens to put next to it.
+   */
+  it('never passes upstream text through, even when the event carries some', async () => {
+    mockFetch(200, makeSseBody([
+      { type: 'error', code: 'agent_failed', message: 'upstream said <nope> & gave up' },
+      { type: 'done' },
+    ]));
+
+    const events = await collect();
+    const message = (events[0] as { type: 'error'; message: string }).message;
+
+    expect(message).not.toContain('upstream');
+    expect(message).not.toContain('nope');
   });
 });

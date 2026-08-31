@@ -66,6 +66,8 @@ const ALLOWED_ORIGIN = 'https://app.example.com';
 interface ServiceOverrides {
   saveMessage?: jest.Mock;
   streamEvents?: jest.Mock;
+  extractAndSaveMemories?: jest.Mock;
+  storedLanguage?: string;
 }
 
 async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstance> {
@@ -100,7 +102,8 @@ async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstan
 
   const memoryService = {
     getMemories: jest.fn().mockResolvedValue([]),
-    extractAndSaveMemories: jest.fn().mockResolvedValue(undefined),
+    extractAndSaveMemories:
+      overrides.extractAndSaveMemories ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as MemoryService;
 
   const ragService = {
@@ -112,7 +115,11 @@ async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstan
   } as unknown as SuggestionService;
 
   const prefRepo = {
-    get: jest.fn().mockResolvedValue({ taskListName: 'Travel Plans', shoppingTaskListName: 'Shopping' }),
+    get: jest.fn().mockResolvedValue({
+      taskListName: 'Travel Plans',
+      shoppingTaskListName: 'Shopping',
+      language: overrides.storedLanguage,
+    }),
   } as unknown as UserPreferencesRepository;
 
   await app.register(chatRoutes, {
@@ -239,6 +246,34 @@ describe('POST /api/chat — P0 correctness', () => {
       expect(events.some((e) => e.type === 'error')).toBe(true);
     });
 
+    /**
+     * The thrown message is written by a model provider, a database driver or a
+     * tool, for whoever runs the server. It used to go straight onto the wire,
+     * where the Telegram bot read it out to the user verbatim.
+     */
+    it('names the failure with a code and puts no thrown text on the wire', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        throw new Error('ECONNREFUSED 10.0.0.4:5432 — password authentication failed for user "prod"');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+
+      const app = await buildApp({ streamEvents });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const error = parseSse(response.body).find((e) => e.type === 'error');
+      expect(error).toEqual({ type: 'error', code: 'agent_failed' });
+      expect(response.body).not.toContain('ECONNREFUSED');
+      expect(response.body).not.toContain('password authentication');
+    });
+
     it('passes an AbortSignal to graph.streamEvents', async () => {
       const streamEvents = jest.fn().mockImplementation(async function* () {
         yield { event: 'on_chat_model_stream', data: { chunk: { content: 'hi' } } };
@@ -352,6 +387,39 @@ describe('POST /api/chat — P0 correctness', () => {
     it('never allows credentials', async () => {
       const headers = await streamHeaders(ALLOWED_ORIGIN);
       expect(headers['access-control-allow-credentials']).toBeUndefined();
+    });
+  });
+
+  // ── Memory extraction follows the message, not the setting ─────────────────
+
+  describe('memory extraction language', () => {
+    const extractLanguage = async (storedLanguage: string, message: string): Promise<string> => {
+      const extractAndSaveMemories = jest.fn().mockResolvedValue(undefined);
+      const app = await buildApp({ storedLanguage, extractAndSaveMemories });
+
+      await app.inject({ method: 'POST', url: '/api/chat', payload: { userId: 'u1', message } });
+      await app.close();
+
+      expect(extractAndSaveMemories).toHaveBeenCalledTimes(1);
+      return extractAndSaveMemories.mock.calls[0][3] as string;
+    };
+
+    /**
+     * The extraction prompt tells the model "The user writes in X" about the very
+     * message it is reading, so X has to come from that message. Passing the
+     * stored setting made the sentence false for exactly the user the whole
+     * language design exists for: one configured in Hebrew who asks in English.
+     */
+    it('uses the language of the message, not the stored setting', async () => {
+      expect(await extractLanguage('he', 'I live in Tel Aviv and I am vegetarian.')).toBe('en');
+    });
+
+    it('still uses the message when the two agree', async () => {
+      expect(await extractLanguage('he', 'אני גר בתל אביב ואני צמחוני')).toBe('he');
+    });
+
+    it('falls back to the setting for a message with no letters at all', async () => {
+      expect(await extractLanguage('ru', '397 €')).toBe('ru');
     });
   });
 });

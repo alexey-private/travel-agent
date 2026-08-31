@@ -12,6 +12,11 @@ export type AgentEvent =
   | { type: "tool_end"; tool: string; output: unknown; error?: string }
   | { type: "sources"; sources: { title: string; url: string }[] }
   | { type: "suggestions"; suggestions: string[] }
+  // Why the turn ended without an answer. A code, not a sentence: the backend
+  // writes no internal text to the wire, and this end translates it. The union
+  // had no `error` variant at all, so the browser parsed the event and dropped
+  // it, and the bubble simply stopped, empty.
+  | { type: "error"; code?: string }
   | { type: "done" };
 
 export interface Conversation {

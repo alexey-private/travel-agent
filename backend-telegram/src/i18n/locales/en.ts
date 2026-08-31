@@ -33,6 +33,8 @@ export const en = {
   // ── Chat handler ──────────────────────────────────────────────
   'chat.usingTool': '⚙️ Using <b>{tool}</b>…',
   'chat.failed': 'Sorry, something went wrong: {message}',
+  'chat.agentFailed': "Sorry, I couldn't finish that answer. Please try again.",
+  'chat.requestTimedOut': 'That took too long and was stopped. Please try again.',
   'chat.noResponse': '(no response)',
   'chat.nextStep': 'What would you like to do next?',
   'chat.backendUnreachable': 'Cannot reach the backend. Make sure backend-langgraph is running.',

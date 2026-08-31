@@ -130,7 +130,7 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         'X-Request-Id': requestId,
       });
 
-      const sse = (payload: AgentEvent | { type: 'error'; message: string } | { type: 'sources'; sources: Source[] }) =>
+      const sse = (payload: AgentEvent | { type: 'sources'; sources: Source[] }) =>
         raw.write(`data: ${JSON.stringify(payload)}\n\n`);
 
       sse({ type: 'conversation_id', conversationId });
@@ -281,13 +281,16 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         if (err instanceof Error && err.name === 'AbortError') {
           if (timedOut) {
             request.log.warn({ requestId }, 'graph execution timed out');
-            sse({ type: 'error', message: 'Request timed out' });
+            sse({ type: 'error', code: 'request_timed_out' });
             sse({ type: 'done' });
           }
           // else: client disconnected — silent
         } else {
+          // The message stays in the log and off the wire: it is written by a
+          // model provider, a database driver or a tool, for whoever runs the
+          // server, and the bot used to read it out to the user.
           request.log.error({ requestId, err }, 'agent error');
-          sse({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+          sse({ type: 'error', code: 'agent_failed' });
           sse({ type: 'done' });
         }
       } finally {
@@ -300,7 +303,15 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
         (assistantText || lmRounds.length > 0)
           ? conversationService.saveMessage(conversationId, 'assistant', assistantText, agentSteps, lmRounds, internalUserId, agentType)
           : Promise.resolve(),
-        memoryService.extractAndSaveMemories(internalUserId, message, agentType, language),
+        // Memories are extracted from the user's own message and read back in the
+        // memory panel, so their values follow the language that message is written
+        // in. The stored setting is not that language: the agent answers in the
+        // language of the latest message, so a Hebrew-configured user asking one
+        // question in English gets an English answer — and the extraction prompt's
+        // "The user writes in …" would be a statement about the very text it is
+        // reading, and false. Suggestions already follow the reply for the same
+        // reason; this is the other half of it.
+        memoryService.extractAndSaveMemories(internalUserId, message, agentType, detectReplyLocale(message, language)),
       ]);
       request.log.info({ requestId, conversationId }, 'chat request completed');
     },

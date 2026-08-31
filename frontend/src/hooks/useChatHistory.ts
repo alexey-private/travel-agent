@@ -56,8 +56,13 @@ export function messagesReducer(state: Message[], action: MessagesAction): Messa
       return state.map((m) => m.id === action.id ? { ...m, suggestions: action.suggestions } : m);
     case "MARK_DONE":
       return state.map((m) => m.id === action.id ? { ...m, streaming: false } : m);
+    // A failure can arrive after the reply has already started. Replacing the
+    // content would then delete an answer the user was reading — so the notice
+    // goes under whatever arrived, and only stands alone when nothing did.
     case "MARK_ERROR":
-      return state.map((m) => m.id === action.id ? { ...m, content: action.error, streaming: false } : m);
+      return state.map((m) => m.id === action.id
+        ? { ...m, content: m.content ? `${m.content}\n\n${action.error}` : action.error, streaming: false }
+        : m);
     default:
       return state;
   }

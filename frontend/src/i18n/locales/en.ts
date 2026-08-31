@@ -233,6 +233,8 @@ export const en = {
   "errors.rateLimited": "Too many requests. Wait a moment and try again.",
   "errors.textTooLong": "This message is too long to export as a PDF.",
   "errors.textUnbreakableRun": "This message contains a very long unbroken word that cannot be typeset into a PDF.",
+  "errors.agentFailed": "The assistant could not finish that answer. Please try again.",
+  "errors.requestTimedOut": "That took too long and was stopped. Please try again.",
   "errors.transcriptionFailed": "Could not transcribe the recording.",
   "errors.audioTooLarge": "That recording is too long to transcribe.",
   "errors.appleCredentialsRequired": "Enter your Apple ID and an app-specific password.",

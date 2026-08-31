@@ -33,6 +33,8 @@ export const ru: Dictionary = {
   // ── Chat handler ──────────────────────────────────────────────
   'chat.usingTool': '⚙️ Использую <b>{tool}</b>…',
   'chat.failed': 'Что-то пошло не так: {message}',
+  'chat.agentFailed': 'Не удалось закончить ответ. Попробуйте ещё раз.',
+  'chat.requestTimedOut': 'Запрос выполнялся слишком долго и был прерван. Попробуйте ещё раз.',
   'chat.noResponse': '(нет ответа)',
   'chat.nextStep': 'Что хотите сделать дальше?',
   'chat.backendUnreachable': 'Не могу связаться с сервером. Убедитесь, что backend-langgraph запущен.',
