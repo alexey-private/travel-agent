@@ -387,7 +387,7 @@ turned a suite red.
 
 ---
 
-### [ ] S8 — `/api/chat` sends its raw failure to Telegram and nothing to the web
+### [x] S8 — `/api/chat` sends its raw failure to Telegram and nothing to the web
 
 *Severity: low. Pre-existing. Found while fixing S7.*
 
@@ -407,6 +407,32 @@ things follow, and neither looks deliberate:
 Fixing the leak and fixing the silence pull in opposite directions — one wants
 less text on the wire, the other wants the text to arrive somewhere — so this
 needs a decision about what a failed turn should say, not just an edit.
+
+**Resolved 2026-08-31. The wire carries a code, not a sentence.** The two
+directions stop pulling apart once the thing on the wire is not prose:
+`{ type: 'error', code: 'agent_failed' | 'request_timed_out' }`, and each surface
+writes its own sentence for the code. Nothing internal reaches a user, and both
+surfaces have something to show. `AgentErrorCode` is declared next to
+`AgentEvent` in
+[`backend-langgraph/src/types/agent.ts`](../../../backend-langgraph/src/types/agent.ts),
+which also removes the loose `{ type: 'error'; message: string }` the `sse()`
+helper used to accept alongside the union.
+
+- **The detail stays in the log.** `request.log.error({ err })` already had it,
+  and that is where a message written for whoever runs the server belongs. A
+  test throws `ECONNREFUSED … password authentication failed for user "prod"`
+  and asserts the response body contains neither half of it.
+- **The web has an `error` variant now**, and `useStreamChat` marks the bubble
+  with `t(errorKeyFor(code, 'errors.chatRequestFailed'))` — the same
+  code-to-dictionary-key path the export and iCloud failures already use. An
+  unknown code reads as the general failure rather than as a raw key.
+- **The bot writes its own sentence.** `sse-client.ts` gained a `WireEvent` type
+  for what the backend actually sends, distinct from the `AgentEvent` it yields,
+  and derives the phrase key from the code the way the web's `errorKeyFor`
+  already does — `agent_failed` → `chat.agentFailed` — rather than keeping a
+  table that a later code could be forgotten from. `chat.failed` keeps
+  its `{message}` for the bot's *own* thrown errors, which are its to describe.
+- Six dictionary entries, three per surface, in `en`/`he`/`ru`.
 
 ---
 
@@ -799,7 +825,7 @@ more than it returns. Reopen it if the locale ever moves into the URL — a
 `[locale]` route segment gets this split for free from the framework, and the
 arithmetic changes completely.
 
-### [ ] O7 — The markdown renderer is a sixth of the first load, and is deferrable
+### [x] O7 — The markdown renderer is a sixth of the first load, and is deferrable
 
 Measured while settling O6, by the same differential build: `react-markdown` and
 `remark-gfm`, imported at the top of
@@ -814,8 +840,34 @@ constraint to work around. The cost is a frame where a message body is
 unstyled — much easier to hide behind the streaming state than the whole
 interface is.
 
-Not done here because it is a different finding from the one O6 states, and it
+Not done in O6 because it is a different finding from the one O6 states, and it
 should be scheduled rather than smuggled in.
+
+**Resolved 2026-08-31, and the estimate held.** The renderer moved to
+[`MarkdownMessage.tsx`](../../../frontend/src/components/chat/MarkdownMessage.tsx),
+imported through `lazy` behind a `Suspense`. Measured the same way both times —
+`next start`, fetch `/`, sum the gzipped size of every `<script src>` the
+server-rendered HTML asks for — the first load goes from **251,216 to 208,862
+bytes gzipped: 42,354 fewer, 16.9%**. No first-load chunk contains `micromark`
+any more; it sits in a chunk of its own that the document does not request.
+
+The measurement is
+[`frontend/scripts/measure-first-load.sh`](../../../frontend/scripts/measure-first-load.sh),
+committed so the number above can be checked rather than believed: `next build`
+under Turbopack prints no First Load JS table and the build manifests do not name
+the per-route client chunks, so serving the build and reading the document is the
+only honest way to ask.
+
+- **`lazy` rather than `next/dynamic`**, because the fallback wants the message
+  text and `next/dynamic`'s `loading` component is handed no props. The bubble
+  shows the reply unformatted for the frame or two the chunk takes, instead of
+  showing nothing.
+- **The fallback is tested in a file of its own.** The lazy import resolves once
+  per module registry, so the second render in a file never sees the fallback
+  again and an assertion about it would pass or fail on test order.
+- Measuring this needs care: a `next start` left running from a previous
+  measurement answers with the previous build, which is how the first attempt
+  reported the same number twice.
 
 ---
 
@@ -852,7 +904,7 @@ install with `--ignore-scripts` and copy `dist` from the build stage, because
 `translate()` also gained an optional `escape`, applied to interpolated values
 and never to the template — see S3, which is what the bot's `t()` needs from it.
 
-### [ ] R2 — The "no language chosen" state cannot be written
+### [x] R2 — The "no language chosen" state cannot be written
 
 Migration 016 deliberately made the column nullable, but
 [`UserPreferencesRepository.ts:72`](../../../backend-langgraph/src/repositories/UserPreferencesRepository.ts#L72)
@@ -861,7 +913,16 @@ uses `COALESCE($7, existing)`, so `language: null` is indistinguishable from
 latent rather than broken — but the state the migration exists to express is
 reachable only by never having written a row.
 
-### [ ] R3 — `stripEmoji` deletes Arabic presentation forms
+**Resolved 2026-08-31.** `save()` now decides from the patch rather than from
+the value: `CASE WHEN $8 THEN $7 ELSE existing END`, where `$8` is
+`prefs.language !== undefined`. The other five columns keep their `COALESCE` —
+they are `NOT NULL`, so a SQL null there can only mean "not in the patch". An
+explicit `undefined` counts as absent, which is what an optional property
+carries when nobody set it; reading it as "clear the language" would have turned
+every unrelated `save` into one. Two integration tests: an explicit null clears
+it, an unrelated field does not.
+
+### [x] R3 — `stripEmoji` deletes Arabic presentation forms
 
 [`export.ts:413`](../../../backend-langgraph/src/routes/export.ts#L413) strips
 `︀-﻿`, which contains FE70–FEFC — exactly the range
@@ -870,7 +931,19 @@ reachable only by never having written a row.
 (FB1D–FB4F), so there is no live damage; two modules simply contradict each
 other.
 
-### [ ] R4 — Three different ways of writing the same script ranges
+**Resolved 2026-08-31**, and it turned out not to be free of live damage after
+all — just not through Arabic. The strip is now `U+FE00–U+FE0F` plus `U+FEFF`,
+which is what "variation selectors and the byte-order mark" actually means, and
+the carved-up dingbat ranges became one range plus an explicit
+`KEPT_SYMBOLS` set — `★ ☆ ✓ ✗`. The reason the set grew: **✅ and ❌ have no
+glyph in DejaVu**, and in a comparison table each of them is a whole cell, so
+stripping them left a table whose only filled column was the row labels. That is
+the second half of the Hebrew-PDF defect report, and it is fixed by folding them
+onto the ticks DejaVu does have (`SYMBOL_SUBSTITUTES`). A test exports a table of
+`✅`/`❌` and reads `✓`/`✗` back out of the finished PDF; another exports two
+Arabic presentation forms and finds them still there.
+
+### [x] R4 — Three different ways of writing the same script ranges
 
 [`detectTextDir.ts:26`](../../../frontend/src/i18n/detectTextDir.ts#L26) uses
 `\uXXXX` escapes, while
@@ -878,6 +951,23 @@ other.
 and [`bidi.ts:16`](../../../backend-langgraph/src/utils/bidi.ts#L16) embed
 literal glyphs. Literal ranges are unreadable in a diff, fragile under
 re-encoding, and already resisted one edit.
+
+**Resolved 2026-08-31.** The ranges live once, in
+[`shared/i18n/src/scripts.ts`](../../../shared/i18n/src/scripts.ts), written as
+escapes: `HEBREW_RANGE`, `ARABIC_TO_ARABIC_EXT_RANGE`,
+`RTL_PRESENTATION_FORMS_RANGE`, `RTL_RANGE`, `CYRILLIC_RANGE`, `LATIN_RANGE`,
+plus `scriptRe()` and `containsRtl()`. They are exported as regex *class bodies*
+rather than finished patterns because the callers want different combinations:
+one counts Hebrew against Cyrillic against Latin, another wants every
+right-to-left script at once. `scriptRe` returns a fresh regex per call — a
+shared global one carries `lastIndex` and silently skips matches for whoever
+runs second.
+
+All three callers now import from there; `bidi.ts` re-exports `containsRtl`
+because that is where the exporter looks for it. The frontend's range widened
+from Hebrew+Arabic+Syriac to the whole `U+0590–U+08FF` block in the process,
+which changes nothing for the languages served and is right for the ones that
+are not.
 
 ### [x] R5 — `t` is shadowed inside a loop
 
@@ -888,7 +978,7 @@ because nothing inside the loop translates anything.
 **Fixed** alongside S3 — the loop body had to be edited to escape the title
 anyway, and the variable is now `task`.
 
-### [ ] R6 — Memory extraction uses the setting, not the message's language
+### [x] R6 — Memory extraction uses the setting, not the message's language
 
 [`chat.ts:298`](../../../backend-langgraph/src/routes/chat.ts#L298) passes the
 stored language to `extractAndSaveMemories`, whose prompt then asserts "The user
@@ -897,7 +987,16 @@ Hebrew-configured user writing in English. Follow-up suggestions already handle
 this ([`chat.ts:268`](../../../backend-langgraph/src/routes/chat.ts#L268));
 memory does not.
 
-### [ ] R7 — Small things
+**Resolved 2026-08-31.** `extractAndSaveMemories` is handed
+`detectReplyLocale(message, language)` — the message, not the reply and not the
+setting, because the extraction prompt makes its claim about the very text it is
+reading. `detectReplyLocale` keeps its name (it is referenced from four
+documents) and its doc now says what it actually answers: which language a piece
+of the conversation is written in, either side of it. Three route-level tests:
+the setting is overruled by an English message, agreed with by a Hebrew one, and
+fallen back to for a message with no letters at all.
+
+### [x] R7 — Small things
 
 - [`export.ts`](../../../backend-langgraph/src/routes/export.ts) is 430 lines of
   routing plus a markdown renderer in one file; `renderMarkdown` at
@@ -906,6 +1005,25 @@ memory does not.
 - [`frontend/next-env.d.ts`](../../../frontend/next-env.d.ts) flips between
   `.next/dev/types` and `.next/types` depending on whether `dev` or `build` ran
   last, producing a permanent spurious diff.
+
+**Resolved 2026-08-31**, both halves.
+
+- `renderMarkdown`'s paragraph branch reads
+  `else if (clean(line).trim())`. The value was never as dead as it looked — it
+  is the "is there anything left to draw" test, and the *raw* line has to go on
+  to `renderInline`, which needs the `**` markers to find the bold segments and
+  cleans the text itself. So the fix is to say that, not to pass `content`
+  onward: doing so would have silently dropped bold from every paragraph.
+- `next-env.d.ts` is now in `.gitignore` and untracked, which is what Next's own
+  documentation for this version says to do ("Add it to `.gitignore`. If your
+  project already tracks the file, remove it from Git"). `next dev`, `next build`
+  and `next typegen` each regenerate it; nothing in CI reads it before one of
+  them has run. The typecheck recipe in `SKILL.md` says how to get it back in a
+  fresh clone.
+- The 430 lines of `export.ts` are still 430 lines of routing and rendering in
+  one file. Left alone deliberately: the file was being edited for the direction
+  and emoji fixes at the same time, and splitting it in the same change would
+  have buried both behind a move diff.
 
 ---
 

@@ -43,6 +43,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
 | [shared/i18n/](shared/i18n/) | `@travel-agent/i18n` — `Locale` (`en`/`he`/`ru`), `LOCALES`, `isLocale`, `dirOf`, `LOCALE_LABELS`, `LANGUAGE_NAMES`, `PluralForms`, `perLocale()`, `translate()`. The one definition all three packages import; see [Shared i18n Package](#shared-i18n-package) |
 | [shared/i18n/src/perLocale.ts](shared/i18n/src/perLocale.ts) | One `Intl` formatter per locale, built on first use — building one costs ~30× using it, and a list formats every row |
+| [shared/i18n/src/scripts.ts](shared/i18n/src/scripts.ts) | Which characters belong to which writing system — `RTL_RANGE`, `HEBREW_RANGE`, `CYRILLIC_RANGE`, `LATIN_RANGE`, `scriptRe`, `containsRtl`. The one place the ranges are written, and written as escapes |
 | [backend-langgraph/src/i18n/detectReplyLocale.ts](backend-langgraph/src/i18n/detectReplyLocale.ts) | Which language a finished reply is written in — follow-up suggestions follow the reply, not the setting |
 | [backend-langgraph/src/utils/concurrency.ts](backend-langgraph/src/utils/concurrency.ts) | `forEachWithConcurrency` — a fixed pool over a shared cursor, for work that is slow because it is remote; used by the push cron |
 | [backend-langgraph/src/utils/bidi.ts](backend-langgraph/src/utils/bidi.ts) | `toVisual`, `wrapToWidth`, `baseDirFor` — logical→visual reordering for the PDF export; see [PDF Direction](#pdf-direction) |
@@ -62,6 +63,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/db/migrations/](backend-langgraph/src/db/migrations/) | Numbered SQL migrations |
 | [backend-langgraph/src/db/backfill-embeddings.ts](backend-langgraph/src/db/backfill-embeddings.ts) | One-time embedding backfill with retry |
 | [frontend/src/components/ChatWindow.tsx](frontend/src/components/ChatWindow.tsx) | Main chat UI — SSE consumer, message state |
+| [frontend/src/components/chat/MarkdownMessage.tsx](frontend/src/components/chat/MarkdownMessage.tsx) | The markdown renderer, in a chunk of its own — `react-markdown` + `remark-gfm` are 42 KB gzipped and nothing on the critical path parses markdown |
 | [frontend/src/app/settings/page.tsx](frontend/src/app/settings/page.tsx) | Google + iCloud connect/disconnect UI |
 | [frontend/src/i18n/](frontend/src/i18n/) | `LanguageProvider`, `useT`, dictionaries (`en`/`he`/`ru`); `config.ts` holds the language cookie only — see the `add-ui-string` recipe in SKILL.md |
 | [frontend/src/i18n/detectLocale.ts](frontend/src/i18n/detectLocale.ts) | Browser-language detection — `headerLocale` (server, `Accept-Language`) and `browserLocale` (client, `navigator`); default for a visitor with nothing stored |
@@ -93,7 +95,12 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 `shared/i18n` is a fourth npm workspace, `@travel-agent/i18n`. It holds what all
 three packages agreed on and used to copy: the `Locale` union and `LOCALES`,
 `DEFAULT_LOCALE`, `isLocale`, `dirOf`, `LOCALE_LABELS`, `LANGUAGE_NAMES`, the
-`PluralForms` / `Entry` / `TVars` shapes, `perLocale()` and `translate()`.
+`PluralForms` / `Entry` / `TVars` shapes, `perLocale()`, `translate()`, and the
+character ranges that say which writing system a piece of text belongs to
+(`scripts.ts`). Three modules used to answer that last question independently —
+the frontend's direction sniffer, the backend's reply-language sniffer and the
+PDF's "does this need reordering" test — and disagreed on both the ranges and
+the notation, two of them embedding literal glyphs that are invisible in a diff.
 
 `translate()` takes an optional `escape` applied to interpolated values and never
 to the template. The bot passes `escapeHtml` because its templates are HTML and
@@ -140,7 +147,11 @@ Four rules that are easy to break:
 - **The message outranks the setting.** The prompt tells the agent to answer in the
   language of the user's latest message, so a Hebrew-configured user who writes in
   English gets an English answer. Follow-up suggestions must therefore be generated
-  for the language of the *reply* (`detectReplyLocale`), not the stored preference.
+  for the language of the *reply* (`detectReplyLocale`), not the stored preference,
+  and memory extraction for the language of the *message* — its prompt says "The
+  user writes in X" about the very text it is reading, so X cannot come from a
+  setting. Anything else that tells a model what language a piece of text is in
+  asks `detectReplyLocale` about that piece of text, never `prefs.language`.
 - **Voice goes through the backend.** The hint exists because Whisper mis-detects
   short Hebrew clips and returns them transliterated into Latin. A surface that
   calls Whisper itself gets the mis-detection back, which is exactly what the bot
@@ -193,12 +204,22 @@ A CalDAV or provider message is written for whoever runs the server — it can n
 accounts, collection URLs and raw upstream responses — so it goes to `req.log.error`
 and the caller gets a fixed sentence plus the `code`.
 
-`/api/chat` is the one place that still passes a raw `err.message` outward, over
-its SSE `error` event. It reaches Telegram users verbatim (the bot renders it
-through `chat.failed`) and reaches web users not at all — the frontend's
-`AgentEvent` union has no `error` variant, so the browser parses the event and
-drops it. Both halves of that are open, not intended; see S8 in the security
-audit findings.
+`/api/chat`'s SSE `error` event carries a **code and no prose**:
+`{ type: 'error', code: 'agent_failed' | 'request_timed_out' }`. It used to carry
+`err.message`, which the Telegram bot read out to the user verbatim and the
+browser dropped on the floor for want of an `error` variant in its union. A code
+answers both: nothing internal reaches a user, and each surface writes its own
+sentence. The thrown message stays in `request.log.error`, which is where a
+sentence written for whoever runs the server belongs.
+
+Both surfaces derive the dictionary key from the code by the same rule rather
+than keeping a table of them — `errorKeyFor` on the web (`agent_failed` →
+`errors.agentFailed`), `backendErrorKey` in the bot (→ `chat.agentFailed`) — so
+adding an `AgentErrorCode` means adding one dictionary entry per surface and
+nothing else. A table would be a third place to remember, and forgetting it is
+silent: the new failure would read as the general one. An unknown code degrades
+to the general failure rather than to a raw key, which is also what lets the
+backend ship a code before the bot knows it.
 
 ---
 
@@ -261,9 +282,30 @@ Three rules that are easy to break:
   Reordering a paragraph and letting pdfkit wrap the result slices reversed text
   at an arbitrary point and scrambles every line, so `wrapToWidth` decides the
   breaks and `toVisual` runs on each line separately.
+- **The renderer must not reorder it a second time.** fontkit reverses a glyph
+  run whose script is right-to-left, and pdfkit lays text out one
+  space-delimited word at a time, so a document whose text `write()` has already
+  put in visual order comes out with every word spelled backwards — which is
+  what a real Hebrew export did. `paintedAsGiven` registers the faces for an
+  `rtl` document behind a `Proxy` that passes `direction: 'ltr'` to
+  `font.layout`. A `Proxy` and not a derived object: `Reflect.get` with the face
+  as receiver keeps fontkit's memoised tables on the *shared* face, which is the
+  whole point of parsing them once.
 - **Left-to-right must stay byte-identical.** `write()` is a bare pass-through for
-  `ltr`. English and Russian exports are verified to rasterise pixel-for-pixel the
-  same as before the feature existed — treat any diff there as a bug.
+  `ltr`, and an `ltr` document registers the faces untouched. English and Russian
+  exports are verified to rasterise pixel-for-pixel the same as before the
+  feature existed — treat any diff there as a bug.
+- **Test what the page says, not what pdfkit was asked to draw.** Every export
+  test watched the calls `doc.text` received, which is why the double flip was
+  invisible: the string handed over was correct.
+  [exportRendered.test.ts](backend-langgraph/tests/unit/routes/exportRendered.test.ts)
+  reads the finished PDF back with `pdf-parse` instead. That needs
+  `NODE_OPTIONS=--experimental-vm-modules`, which is why the package's jest
+  scripts carry it.
+- **What the fonts cannot draw is substituted, not deleted.** ✅ and ❌ have no
+  glyph in DejaVu and are frequently a whole table cell on their own, so
+  stripping them left a comparison table of blank cells. `SYMBOL_SUBSTITUTES`
+  folds them onto `✓`/`✗`, which `KEPT_SYMBOLS` then protects from the strip.
 - **Markers are written logically.** `• text`, `1. text` — the algorithm moves
   them to the right edge on its own. Repositioning them by hand double-flips them.
 

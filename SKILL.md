@@ -74,6 +74,12 @@ Must pass. Also run `npm run typecheck --workspace=backend-telegram` if you touc
 `npm run build:shared` (or any package's `build` / `test:all`, which do it for
 you) before trusting a bare `npx tsc`.
 
+`npx tsc -p frontend/tsconfig.json --noEmit` needs `frontend/next-env.d.ts`,
+which is generated and not tracked — Next writes it on `next dev`, `next build`
+and `next typegen`, and wrote it differently for each, which is why it is
+ignored rather than committed. In a fresh clone run
+`npx next typegen` in `frontend/` first, or just `npm run build --workspace=frontend`.
+
 ---
 
 ## SKILL: run-tests
