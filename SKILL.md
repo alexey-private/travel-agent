@@ -378,12 +378,17 @@ layout bug tomorrow.
 2. Sweep for what slipped through:
 
 ```bash
-grep -rnoE '\b(ml|mr|pl|pr)-(auto|[0-9.]+)\b|\b(left|right)-(auto|full|[0-9.]+)\b|\btext-(left|right)\b|\bspace-x-[0-9.]+\b|\brounded-t[lr]-[a-z0-9]+\b|\bborder-(l|r)-[a-z0-9]+\b' \
+grep -rnoE '\b(ml|mr|pl|pr)-(auto|[0-9.]+)\b|\b(left|right)-(auto|full|[0-9.]+)\b|\btext-(left|right)\b|\bspace-x-[0-9.]+\b|\brounded-(t|b)?[lr](-[a-z0-9]+)?\b|\bborder-(l|r)(-[a-z0-9]+)?\b' \
   frontend/src --include='*.tsx'
 ```
 
-Expected: no output. (Write the pattern with the trailing hyphen — a looser
-`rounded-(l|r)` also matches `rounded-lg` and buries the real hits.)
+Expected: no output. Two traps pull the pattern in opposite directions, and it
+has to survive both. Make the value optional — `border-l` and `rounded-l` are
+complete classes on their own, and a pattern demanding a trailing `-value`
+reads right past them; that is exactly how the memory panel kept a physical
+`border-l` through an earlier sweep that reported clean. But anchor the end
+with `\b` and keep the value `[a-z0-9]+`, or `rounded-(l|r)` swallows
+`rounded-lg` and `border-r` swallows `border-red-500`, and the real hits drown.
 
 3. Two things logical properties do **not** cover:
    - **`translate-x-*`** has no logical form. A panel that slides off-screen
