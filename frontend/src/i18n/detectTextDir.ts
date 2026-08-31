@@ -22,10 +22,12 @@
  * directions.
  */
 
-/** Hebrew, Arabic and Syriac, plus the Arabic and Hebrew presentation forms. */
-const RTL_LETTERS = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\uFB1D-\uFDFF\uFE70-\uFEFC]/g;
+import { scriptRe, RTL_RANGE, LATIN_RANGE, CYRILLIC_RANGE } from "@travel-agent/i18n";
+
+/** Every right-to-left script, from the one module that defines the ranges. */
+const RTL_LETTERS = scriptRe(RTL_RANGE, "g");
 /** Latin and Cyrillic — the left-to-right scripts this app actually serves. */
-const LTR_LETTERS = /[A-Za-z\u0400-\u04FF]/g;
+const LTR_LETTERS = scriptRe(LATIN_RANGE + CYRILLIC_RANGE, "g");
 
 /** How far Latin must outnumber Hebrew before it wins. */
 const LTR_MARGIN = 3;

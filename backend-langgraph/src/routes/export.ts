@@ -46,13 +46,59 @@ const FONT = {
 };
 
 /**
+ * The same face, with fontkit's own reordering switched off.
+ *
+ * fontkit reverses a glyph run whose script is right-to-left: `layout('שלום')`
+ * comes back in visual order. pdfkit lays text out one space-delimited word at
+ * a time and concatenates the runs in string order, so what reaches the page is
+ * every word's letters reversed while the words keep the order they were given
+ * in. On top of the reordering `write()` has already done that is a *second*
+ * flip — the letters land back in logical order and a Hebrew reader sees every
+ * word spelled backwards, which is exactly what a real export came out as.
+ *
+ * It is also not the bidirectional algorithm: fontkit reverses the whole run,
+ * so a Latin word or a price inside a Hebrew line is reversed with it.
+ *
+ * A right-to-left document therefore hands pdfkit a string that is already in
+ * visual order and must be painted exactly as given. `direction: 'ltr'` is how
+ * fontkit is told that — it decides the reversal off `glyphRun.direction`,
+ * which the caller may set.
+ *
+ * A `Proxy` rather than a derived object because `Reflect.get` with the face as
+ * the receiver keeps `this` pointing at the shared face: fontkit memoises its
+ * tables and glyph caches on the instance, and a per-document copy of those is
+ * the cost the shared faces exist to avoid.
+ */
+function paintedAsGiven(font: Font): Font {
+  return new Proxy(font, {
+    get(target, prop) {
+      if (prop === 'layout') {
+        return (
+          string: string,
+          features?: string[] | Record<string, boolean>,
+          script?: string,
+          language?: string,
+        ) => target.layout(string, features, script, language, 'ltr');
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
  * pdfkit accepts a parsed fontkit face wherever it accepts a path or a buffer —
  * `PDFFontFactory.open` takes any `src` carrying a `layout` method — but its
  * published types stop at `string | Buffer | Uint8Array | ArrayBuffer`.
+ *
+ * The direction is a property of the document, so the faces are registered for
+ * one: left-to-right documents get the faces untouched, which is what keeps
+ * English and Russian exports byte-for-byte what they were.
  */
-function registerFonts(doc: PDFKit.PDFDocument): void {
+function registerFonts(doc: PDFKit.PDFDocument, baseDir: BaseDir): void {
   for (const [name, font] of Object.entries(FONT)) {
-    doc.registerFont(name, font as unknown as Buffer);
+    const face = baseDir === 'rtl' ? paintedAsGiven(font) : font;
+    doc.registerFont(name, face as unknown as Buffer);
   }
 }
 
@@ -133,12 +179,12 @@ function requestedLocale(language: string | undefined): Locale | undefined {
 
 async function buildPdfBuffer(text: string, language?: Locale): Promise<Buffer> {
   const doc = new PDFDocument({ margin: 50, size: 'A4' });
-  registerFonts(doc);
 
   // The document has one direction, taken from the language the user is reading
   // the app in. Without one, the text itself decides — an export triggered before
   // any language was stored still has to come out readable.
   const baseDir = baseDirFor(language, text);
+  registerFonts(doc, baseDir);
 
   const chunks: Buffer[] = [];
   doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -330,10 +376,12 @@ function renderMarkdown(doc: PDFKit.PDFDocument, text: string, baseDir: BaseDir)
     } else if (line.trim() === '' || line.startsWith('---')) {
       doc.moveDown(0.5);
 
-    // Normal paragraph text
-    } else {
-      const content = clean(line);
-      if (content.trim()) renderInline(doc, line, 11, baseDir);
+    // Normal paragraph text. The cleaned form decides only whether there is
+    // anything left to draw — a line of nothing but emoji cleans to nothing —
+    // while the raw line is what gets rendered, because `renderInline` needs the
+    // `**` markers to find the bold segments and cleans the text itself.
+    } else if (clean(line).trim()) {
+      renderInline(doc, line, 11, baseDir);
     }
 
     i++;
@@ -491,15 +539,43 @@ function renderInline(
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Strip emoji characters (outside BMP + common symbol ranges). */
+/**
+ * The symbols that are a whole cell on their own, folded onto glyphs DejaVu has.
+ *
+ * ✅ and ❌ are not decoration in a comparison table — they *are* the answer, and
+ * the bundled faces have no glyph for either, so stripping them left a table of
+ * blank cells that read as "no data" rather than "yes" and "no". A real export
+ * came out that way. The dingbats they fold onto (✓ U+2713, ✗ U+2717) are in
+ * every DejaVu face, and are kept below.
+ */
+const SYMBOL_SUBSTITUTES: Record<string, string> = {
+  '✅': '✓', '☑': '✓', '✔': '✓',
+  '❌': '✗', '❎': '✗', '✖': '✗',
+  '⭕': '○',
+};
+
+/**
+ * Ranges whose characters DejaVu either cannot draw or draws as a shape nobody
+ * asked for: the pictographic planes, the dingbats, the arrows-and-symbols
+ * supplement, the variation selectors and the zero-width no-break space.
+ *
+ * U+FE00-U+FE0F and not U+FE00-U+FEFF: the wider range swallowed U+FE70-U+FEFC,
+ * the Arabic presentation forms — which the shared script ranges list among
+ * the right-to-left scripts. Nothing broke, because Hebrew's presentation forms
+ * live at U+FB1D-U+FB4F, but the two modules contradicted each other.
+ */
+const UNDRAWABLE = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{FEFF}]/gu;
+
+/** What survives `UNDRAWABLE`: symbols DejaVu draws and that carry meaning here. */
+const KEPT_SYMBOLS = new Set(['★', '☆', '✓', '✗']);
+
+/** Replace what the bundled fonts cannot draw, and drop the rest. */
 function stripEmoji(text: string): string {
-  return text
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    // Keep ★ U+2605 / ☆ U+2606 — used for star ratings and rendered fine by DejaVuSans.
-    .replace(/[\u{2600}-\u{2604}\u{2607}-\u{27BF}]/gu, '')
-    .replace(/[\u{2B00}-\u{2BFF}]/gu,   '')
-    .replace(/[\u{FE00}-\u{FEFF}]/gu,   '')
-    .trim();
+  let out = text;
+  for (const [from, to] of Object.entries(SYMBOL_SUBSTITUTES)) {
+    out = out.split(from).join(to);
+  }
+  return out.replace(UNDRAWABLE, (ch) => (KEPT_SYMBOLS.has(ch) ? ch : '')).trim();
 }
 
 /** Strip all inline markdown markers (bold, italic, code, links, strikethrough). */

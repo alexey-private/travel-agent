@@ -12,12 +12,12 @@
     "seed": "tsx src/db/seed.ts",
     "seed:shopping": "tsx src/db/seed-shopping.ts",
     "lint": "eslint src",
-    "test": "jest --testPathPatterns='tests/unit'",
-    "test:integration": "jest --testPathPatterns='tests/integration'",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathPatterns='tests/unit'",
+    "test:integration": "NODE_OPTIONS=--experimental-vm-modules jest --testPathPatterns='tests/integration'",
     "pretest:all": "tsc -p ../shared/i18n/tsconfig.json",
-    "test:all": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage --testPathPatterns='tests/unit'"
+    "test:all": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --testPathPatterns='tests/unit'"
   },
   "dependencies": {
     "@duffel/api": "^4.28.0",

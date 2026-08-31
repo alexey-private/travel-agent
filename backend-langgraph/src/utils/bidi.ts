@@ -1,23 +1,17 @@
 import bidiFactory from 'bidi-js';
-import { Locale } from '@travel-agent/i18n';
+import { Locale, containsRtl } from '@travel-agent/i18n';
 
 export type BaseDir = 'ltr' | 'rtl';
 
 const bidi = bidiFactory();
 
 /**
- * The right-to-left blocks: Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan,
- * Mandaic, and the two Arabic presentation-form ranges.
- *
- * Wider than the one language we support on purpose — this only decides whether
- * to run the reordering pass, and running it on Arabic gets the word order right
- * even though the letters will not be shaped.
+ * Which scripts count as right-to-left is a fact about languages, not about
+ * PDFs, so it lives in `@travel-agent/i18n` alongside the ranges the frontend
+ * and the reply-language sniffer use. Re-exported here because this module is
+ * where the exporter looks for it.
  */
-const RTL_CHARS = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/;
-
-export function containsRtl(text: string): boolean {
-  return RTL_CHARS.test(text);
-}
+export { containsRtl };
 
 /**
  * Rewrites a string from logical order (the order it was typed) into visual
