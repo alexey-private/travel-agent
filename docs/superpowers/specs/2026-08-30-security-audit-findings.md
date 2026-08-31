@@ -712,7 +712,7 @@ the counts against each other, so uniform double counting is invisible — and d
 not, because the composition of a reply changes as it streams and the inflated
 totals no longer sum to the same ratio.
 
-### [ ] O6 — All three dictionaries ship to every client
+### [x] O6 — All three dictionaries ship to every client
 
 [`dictionaries.ts:2-4`](../../../frontend/src/i18n/dictionaries.ts#L2-L4)
 statically imports `en` + `he` + `ru` (48 KB) plus
@@ -720,6 +720,87 @@ statically imports `en` + `he` + `ru` (48 KB) plus
 (13 KB); a visitor uses one third of it. A dynamic import per locale collides
 with the synchronous access `LanguageProvider` needs during SSR, so this is a
 trade-off rather than an obvious win.
+
+**Measured, and deliberately not changed.** The 48 KB and 13 KB above are
+uncompressed source bytes, which is not what a visitor downloads. Every number
+below is a differential production build — stub the data out, rebuild, compare
+the gzipped total of every client chunk — so it is the real delta, not an
+estimate from file sizes:
+
+| | gzipped |
+|---|---|
+| every client chunk | 274.2 KB |
+| what a first paint of `/` actually fetches (10 chunks) | 250.0 KB |
+| all i18n data — three dictionaries and three starter sets | 11.7 KB |
+| &nbsp;&nbsp;all three dictionaries | 7.6 KB |
+| &nbsp;&nbsp;&nbsp;&nbsp;of which `he` + `ru` | 4.1 KB |
+| &nbsp;&nbsp;all three starter sets | 4.1 KB |
+| &nbsp;&nbsp;&nbsp;&nbsp;of which `he` + `ru` | 3.0 KB |
+| **the two thirds this finding is about** | **7.1 KB** |
+
+Each row is its own build. The two halves sum to 11 707 bytes against 11 707
+measured together, which is the check that they were not simply subtracted from
+one another.
+
+So the prize is 7.1 KB of a 250 KB first load — 2.8%, where two thirds of the
+61 KB quoted above reads like forty. Hebrew and Russian are the reason: UTF-8
+spends two bytes on every letter and gzip takes almost all of them back. There
+is a second reason the two extra dictionaries are so cheap: all three carry the
+same ASCII keys, and gzip charges for those once. Dropping `he` and `ru`
+saves 4.1 KB, while the remaining English dictionary still costs 3.5 KB on its
+own — the first dictionary pays for the key set, the other two pay only for
+their values.
+
+That alone would not settle it. What settles it is where the bytes would have to
+go instead. The chunk carrying them is served
+`Cache-Control: public, max-age=31536000, immutable`, so a visitor pays for it
+once per deploy; the document is served `no-store, must-revalidate`, so it is
+paid for on every single navigation. Only two mechanisms can split a dictionary
+the client needs *synchronously* at hydration:
+
+- **Pass the chosen dictionary from the server as a prop.** It is serialised
+  into the flight payload inside the document. The trade is structural rather
+  than numerical: three dictionaries leave the immutable chunk once, and one
+  comes back on every page load, so break-even is three page views per deploy
+  whatever the dictionaries weigh. The measured bytes only say how much is at
+  stake — 7.6 KB out, and at least 3.5 KB back each time, since a dictionary
+  alone in a 2 KB document has less to compress against than it had among
+  250 KB of JavaScript. Anyone who uses the app rather than glancing at it comes
+  out behind.
+- **`import()` the dictionary in the provider.** The first client render is then
+  async, and hydration has to either block or paint the wrong text and correct
+  it — the same jump O5 exists to remove, on every string on the screen instead
+  of one bubble.
+
+The starter sets look like the exception, because nothing renders them before
+mount: `/` returns a loading div until `useUserId` reads localStorage, so
+`getRandomSuggestions` has no SSR constraint and could be imported lazily
+without a hydration problem at all. It buys 4.1 KB — 1.6% — in exchange for a
+second round trip on a cold cache and an empty row where the first thing an
+empty chat offers is supposed to be. Not worth it either.
+
+The finding is real; it is simply small, and every way of collecting it costs
+more than it returns. Reopen it if the locale ever moves into the URL — a
+`[locale]` route segment gets this split for free from the framework, and the
+arithmetic changes completely.
+
+### [ ] O7 — The markdown renderer is a sixth of the first load, and is deferrable
+
+Measured while settling O6, by the same differential build: `react-markdown` and
+`remark-gfm`, imported at the top of
+[`MessageBubble.tsx:4-5`](../../../frontend/src/components/chat/MessageBubble.tsx#L4-L5),
+are **42.0 KB gzipped** — 16.8% of the 250 KB first load, and six times
+everything O6 could have saved.
+
+Unlike the dictionaries, nothing needs them synchronously. `/` renders a loading
+div until `useUserId` resolves, so no markdown is parsed until after mount;
+`next/dynamic` would move all 42 KB off the critical path with no hydration
+constraint to work around. The cost is a frame where a message body is
+unstyled — much easier to hide behind the streaming state than the whole
+interface is.
+
+Not done here because it is a different finding from the one O6 states, and it
+should be scheduled rather than smuggled in.
 
 ---
 
