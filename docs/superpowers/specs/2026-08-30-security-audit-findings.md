@@ -467,11 +467,11 @@ constructions instead.
 
 Two shapes, because the packages are not the same problem:
 
-- **Frontend — a lazy cache.** [`perLocale`](../../../frontend/src/i18n/perLocale.ts)
-  memoises one value per locale and builds on first use. Nine formatters across
-  four modules go through it (`dateUtils` ×4, `fileUtils` ×3, `translate`,
-  `starterSuggestions`), and building them at import would move the cost onto a
-  page that renders in one language and pays for three.
+- **Frontend — a lazy cache.** `perLocale` memoises one value per locale and
+  builds on first use. Nine formatters across four modules go through it
+  (`dateUtils` ×4, `fileUtils` ×3, `translate`, `starterSuggestions`), and
+  building them at import would move the cost onto a page that renders in one
+  language and pays for three.
 - **Both backends — a `Record<Locale, …>` built at import.**
   [`t.ts`](../../../backend-telegram/src/i18n/t.ts) needs one `PluralRules` per
   locale and [`notifications.ts`](../../../backend-langgraph/src/i18n/notifications.ts)
@@ -487,6 +487,21 @@ The record in `t.ts` is a small behaviour change at the edge: a locale from
 outside the `Locale` type used to get that language's real plural rules and now
 gets the default's, matching the dictionary lookup directly above it, which has
 always answered such a caller in English. A test pins it.
+
+**Amended by the R1 merge (2026-08-31).** The premise of the second bullet — that
+the three packages cannot import each other — stopped being true when
+[`perLocale`](../../../shared/i18n/src/perLocale.ts) moved into
+`@travel-agent/i18n` alongside `translate()`, which needs it. `t.ts` no longer
+holds a record of its own: it delegates to the shared resolver and therefore to
+the shared lazy cache, so the bot now builds a `PluralRules` on first use of a
+locale rather than three at import. The count per locale is unchanged and never
+per message, which is what this finding was about; the test in
+[`i18n.test.ts`](../../../backend-telegram/tests/i18n.test.ts) was rewritten to
+assert the lazy shape (none at import, one per locale spoken to).
+`notifications.ts` keeps its eager record — it formats times, not dictionary
+entries, and never went through `translate()`. The edge-case behaviour above is
+unchanged: the dictionary lookup, not the rules record, is what answers a
+caller from outside `Locale` in English.
 
 Eleven new tests — three for `perLocale`, one construction count for each of
 the six call sites, one more for the Russian plural rules in the notifications,
@@ -806,17 +821,36 @@ should be scheduled rather than smuggled in.
 
 ## Refactoring
 
-### [ ] R1 — i18n is triplicated across the three packages
+### [x] R1 — i18n is triplicated across the three packages
 
 `Locale`, `LOCALES`, `DEFAULT_LOCALE`, `isLocale`, `LOCALE_LABELS`,
-`PluralForms`, `TVars` and the `translate`/`t` function exist in three identical
-copies: [`frontend/src/i18n/config.ts`](../../../frontend/src/i18n/config.ts),
-[`backend-telegram/src/i18n/config.ts`](../../../backend-telegram/src/i18n/config.ts),
-[`backend-langgraph/src/i18n/locale.ts`](../../../backend-langgraph/src/i18n/locale.ts) —
-each carrying a comment that adding a locale means editing all four places. A
-shared workspace package would collapse it. Caveat: the dependency must be
-declared in every consuming `package.json` (otherwise the hoisting trap
-recurs) and all three Dockerfiles must copy it.
+`PluralForms`, `TVars` and the `translate`/`t` function existed in three
+identical copies: `frontend/src/i18n/config.ts`,
+`backend-telegram/src/i18n/config.ts`,
+`backend-langgraph/src/i18n/locale.ts` — each carrying a comment that adding a
+locale means editing all four places.
+
+**Fixed** in `3a234f9` (before this branch was merged), extended by the merge
+itself. The three copies are now one workspace package,
+[`shared/i18n`](../../../shared/i18n/) = `@travel-agent/i18n`, holding the
+locale union and constants, `isLocale`, `dirOf`, the label and language-name
+maps, the `PluralForms` / `Entry` / `TVars` shapes, `translate()` and —
+added by the merge, because `translate()` needs it — `perLocale()`. The
+dictionaries stay with their surfaces: each has its own key set. Adding a locale
+is two edits (`shared/i18n/src/locale.ts` and the CHECK-constraint migration)
+rather than four, and the compiler then demands a dictionary file per package.
+
+Both caveats were honoured: the dependency is declared in all three consuming
+`package.json` files, and all three Dockerfiles copy the package. Two further
+things the finding did not anticipate, written up in `AGENTS.md`: consumers
+import the built `dist` rather than the source (a consumer's `rootDir: src`
+rejects a `.ts` reached through `paths` with TS6059), so a root `postinstall`
+plus `prebuild`/`pretest` hooks compile it; and the Docker *runtime* stages must
+install with `--ignore-scripts` and copy `dist` from the build stage, because
+`--omit=dev` leaves no TypeScript for that `postinstall` to run.
+
+`translate()` also gained an optional `escape`, applied to interpolated values
+and never to the template — see S3, which is what the bot's `t()` needs from it.
 
 ### [ ] R2 — The "no language chosen" state cannot be written
 

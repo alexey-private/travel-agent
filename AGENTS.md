@@ -507,6 +507,19 @@ If a column exists in production but has no migration file — it will be missin
    against the broken code too, a standards violation, or a spec requirement missed.
    Run it before reporting the task as done, act on every real finding, and state the
    outcome of both axes (Standards / Spec) in the report.
-3. **Memory** — update if the task revealed a non-obvious invariant or recurring pattern.
-4. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
-5. **SKILL.md** — update if the task introduced a new recurring workflow.
+3. **Say where the work landed** — a worktree job ends with its branch pushed, and a
+   push is housekeeping, not delivery: the Stop hook pushes the branch so the session
+   can be deleted, and it does not merge. Report the landing state in as many words:
+   ```bash
+   git merge-base --is-ancestor HEAD github/main   # exit 0 = in main
+   git log --oneline github/main..HEAD             # what is not
+   ```
+   Either "in `main`" or "N commits on `<branch>`, NOT in `main` — not deployed".
+   Never let "pushed" be the last word, and record *where it landed* in any memory
+   file or spec checkbox that marks the work done. This is not hypothetical: the
+   entire 2026-08-30 security audit sat pushed-but-unmerged for a day while being
+   reported as finished. `git branch -r --no-merged github/main` finds candidates,
+   but over-reports — compare content, not commit SHAs, before raising one.
+4. **Memory** — update if the task revealed a non-obvious invariant or recurring pattern.
+5. **AGENTS.md** — update if a new key file was added, the DB schema changed, or a new tool/agent was introduced.
+6. **SKILL.md** — update if the task introduced a new recurring workflow.
