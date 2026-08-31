@@ -1,7 +1,7 @@
 import { API_URL } from "./config";
 import { ApiError } from "./apiError";
 import { type Attachment, type AgentEvent, type Conversation, type UserMemory, type ChatMessage } from "@/types/agent";
-import type { Locale } from "@/i18n/config";
+import type { Locale } from "@travel-agent/i18n";
 import { errorKeyOf } from "./errorCode";
 
 export type { Attachment, AgentEvent, Conversation, UserMemory, ChatMessage } from "@/types/agent";

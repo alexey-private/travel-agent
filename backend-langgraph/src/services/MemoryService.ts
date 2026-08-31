@@ -4,7 +4,7 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
 import { createModel } from '../llm/createModel';
-import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '../i18n/locale';
+import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '@travel-agent/i18n';
 
 const TRAVEL_EXTRACT_PROMPT_BODY = `You are a memory extraction assistant.
 Given a message from the user, extract key personal facts and persistent preferences as a JSON object.

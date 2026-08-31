@@ -8,7 +8,7 @@
  */
 
 import { ALL_SUGGESTIONS, getRandomSuggestions } from "@/data/starterSuggestions";
-import { LOCALES } from "@/i18n/config";
+import { LOCALES } from "@travel-agent/i18n";
 
 const HEBREW = /[֐-׿]/;
 const CYRILLIC = /[Ѐ-ӿ]/;

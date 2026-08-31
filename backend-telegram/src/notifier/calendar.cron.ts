@@ -3,7 +3,7 @@ import type { Api } from 'grammy';
 import { BACKEND_URL } from '../config';
 import { fetchLocale } from '../i18n/language';
 import { t } from '../i18n/t';
-import type { Locale } from '../i18n/config';
+import type { Locale } from '@travel-agent/i18n';
 
 interface CalendarEvent {
   id: string;

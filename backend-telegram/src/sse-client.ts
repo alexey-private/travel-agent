@@ -1,5 +1,5 @@
 import { BACKEND_URL } from './config';
-import { DEFAULT_LOCALE, type Locale } from './i18n/config';
+import { DEFAULT_LOCALE, type Locale } from '@travel-agent/i18n';
 import { t } from './i18n/t';
 
 export type AgentEvent =

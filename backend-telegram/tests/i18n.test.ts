@@ -1,4 +1,4 @@
-import { LOCALES, DEFAULT_LOCALE, isLocale, LOCALE_LABELS } from '../src/i18n/config';
+import { LOCALES, DEFAULT_LOCALE, isLocale, LOCALE_LABELS } from '@travel-agent/i18n';
 import { DICTIONARIES } from '../src/i18n/dictionaries';
 import { t } from '../src/i18n/t';
 

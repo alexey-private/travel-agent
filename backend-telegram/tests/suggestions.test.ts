@@ -1,5 +1,5 @@
 import { STARTER_POOLS } from '../src/data/suggestions';
-import { LOCALES } from '../src/i18n/config';
+import { LOCALES } from '@travel-agent/i18n';
 
 describe('starter pools', () => {
   it('covers every locale and both agents with ten entries each', () => {

@@ -1,37 +1,15 @@
-import { DEFAULT_LOCALE, type Locale } from './config';
+import { DEFAULT_LOCALE, translate, type Locale, type TVars } from '@travel-agent/i18n';
 import { DICTIONARIES, type Dictionary, type TKey } from './dictionaries';
-import type { PluralForms, TVars } from './types';
-
-const PLACEHOLDER = /\{(\w+)\}/g;
-
-function isPluralForms(entry: unknown): entry is PluralForms {
-  return typeof entry === 'object' && entry !== null && 'other' in entry;
-}
 
 /**
- * Resolves one dictionary key into a display string.
+ * Resolves one bot dictionary key into a display string.
  *
- * Plural selection goes through Intl.PluralRules rather than a hand-rolled
- * rule, because Russian needs one/few/many while Hebrew and English need only
- * one/other — and `other` is the fallback whenever an entry lacks the form the
- * locale asked for.
+ * The resolver itself (placeholders, Intl.PluralRules) lives in
+ * `@travel-agent/i18n`; this binds it to the bot's dictionaries so call sites
+ * pass a locale and a key and nothing else. An unknown locale falls back to the
+ * English dictionary rather than throwing on an undefined lookup.
  */
 export function t(locale: Locale, key: TKey, vars?: TVars): string {
   const dict: Dictionary = DICTIONARIES[locale] ?? DICTIONARIES[DEFAULT_LOCALE];
-  const entry: unknown = dict[key];
-  if (entry === undefined) return String(key);
-
-  let template: string;
-  if (isPluralForms(entry)) {
-    const count = Number(vars?.count ?? 0);
-    const form = new Intl.PluralRules(locale).select(count) as keyof PluralForms;
-    template = entry[form] ?? entry.other;
-  } else {
-    template = String(entry);
-  }
-
-  if (!vars) return template;
-  return template.replace(PLACEHOLDER, (match, name: string) =>
-    name in vars ? String(vars[name]) : match,
-  );
+  return translate(dict, locale, key, vars);
 }

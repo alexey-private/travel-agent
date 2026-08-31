@@ -4,16 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "prebuild": "tsc -p ../shared/i18n/tsconfig.json",
     "build": "tsc",
     "start": "node dist/index.js",
+    "pretypecheck": "tsc -p ../shared/i18n/tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "jest --testPathPatterns='tests/(?!integration)' --forceExit",
     "test:integration": "jest --testPathPatterns='tests/integration' --forceExit",
+    "pretest:all": "tsc -p ../shared/i18n/tsconfig.json",
     "test:all": "jest --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --forceExit"
   },
   "dependencies": {
+    "@travel-agent/i18n": "*",
     "@types/node-cron": "^3.0.11",
     "dotenv": "^17.4.2",
     "grammy": "^1.45.1",

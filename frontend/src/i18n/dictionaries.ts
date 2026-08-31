@@ -1,4 +1,4 @@
-import type { Locale } from "./config";
+import type { Locale } from "@travel-agent/i18n";
 import { en } from "./locales/en";
 import { he } from "./locales/he";
 import { ru } from "./locales/ru";

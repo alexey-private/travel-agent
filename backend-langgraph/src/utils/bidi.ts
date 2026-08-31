@@ -1,5 +1,5 @@
 import bidiFactory from 'bidi-js';
-import { Locale } from '../i18n/locale';
+import { Locale } from '@travel-agent/i18n';
 
 export type BaseDir = 'ltr' | 'rtl';
 

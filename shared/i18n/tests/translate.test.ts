@@ -1,0 +1,54 @@
+import { translate } from '../src/translate';
+import type { PluralForms } from '../src/types';
+
+const dict = {
+  'chat.send': 'Send',
+  'chat.attached': '{count} file attached',
+  'memory.itemsCount': { one: '{count} item', other: '{count} items' } as PluralForms,
+  'memory.itemsCountRu': {
+    one: '{count} запись',
+    few: '{count} записи',
+    many: '{count} записей',
+    other: '{count} записи',
+  } as PluralForms,
+};
+
+const key = (k: string) => k as keyof typeof dict;
+
+describe('translate', () => {
+  it('returns a plain string as-is', () => {
+    expect(translate(dict, 'en', 'chat.send')).toBe('Send');
+  });
+
+  it('interpolates named variables', () => {
+    expect(translate(dict, 'en', 'chat.attached', { count: 3 })).toBe('3 file attached');
+  });
+
+  it('leaves an unknown placeholder untouched', () => {
+    expect(translate(dict, 'en', 'chat.attached')).toBe('{count} file attached');
+    expect(translate(dict, 'en', 'chat.attached', { other: 'x' })).toBe('{count} file attached');
+  });
+
+  it('selects the English singular and plural', () => {
+    expect(translate(dict, 'en', 'memory.itemsCount', { count: 1 })).toBe('1 item');
+    expect(translate(dict, 'en', 'memory.itemsCount', { count: 5 })).toBe('5 items');
+  });
+
+  it('selects Russian few and many forms', () => {
+    expect(translate(dict, 'ru', 'memory.itemsCountRu', { count: 1 })).toBe('1 запись');
+    expect(translate(dict, 'ru', 'memory.itemsCountRu', { count: 3 })).toBe('3 записи');
+    expect(translate(dict, 'ru', 'memory.itemsCountRu', { count: 7 })).toBe('7 записей');
+  });
+
+  it('falls back to `other` when a locale asks for a form the entry lacks', () => {
+    expect(translate(dict, 'ru', 'memory.itemsCount', { count: 3 })).toBe('3 items');
+  });
+
+  it('treats a missing count as zero', () => {
+    expect(translate(dict, 'en', 'memory.itemsCount')).toBe('{count} items');
+  });
+
+  it('returns the key itself when it is missing from the dictionary', () => {
+    expect(translate(dict, 'en', key('nope.missing'))).toBe('nope.missing');
+  });
+});

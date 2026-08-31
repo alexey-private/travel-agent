@@ -41,7 +41,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/graph/buildGraph.ts](backend-langgraph/src/graph/buildGraph.ts) | Shared graph builder (model → tools → loop) |
 | [backend-langgraph/src/graph/history.ts](backend-langgraph/src/graph/history.ts) | Converts DB history to LangChain messages |
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
-| [backend-langgraph/src/i18n/locale.ts](backend-langgraph/src/i18n/locale.ts) | `Locale` type (`en`/`he`/`ru`), `isLocale`, `dirOf`, `LANGUAGE_NAMES` |
+| [shared/i18n/](shared/i18n/) | `@travel-agent/i18n` — `Locale` (`en`/`he`/`ru`), `LOCALES`, `isLocale`, `dirOf`, `LOCALE_LABELS`, `LANGUAGE_NAMES`, `PluralForms`, `translate()`. The one definition all three packages import; see [Shared i18n Package](#shared-i18n-package) |
 | [backend-langgraph/src/i18n/detectReplyLocale.ts](backend-langgraph/src/i18n/detectReplyLocale.ts) | Which language a finished reply is written in — follow-up suggestions follow the reply, not the setting |
 | [backend-langgraph/src/utils/bidi.ts](backend-langgraph/src/utils/bidi.ts) | `toVisual`, `wrapToWidth`, `baseDirFor` — logical→visual reordering for the PDF export; see [PDF Direction](#pdf-direction) |
 | [backend-langgraph/src/tools/BaseTool.ts](backend-langgraph/src/tools/BaseTool.ts) | Base class all tools extend |
@@ -56,7 +56,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/db/backfill-embeddings.ts](backend-langgraph/src/db/backfill-embeddings.ts) | One-time embedding backfill with retry |
 | [frontend/src/components/ChatWindow.tsx](frontend/src/components/ChatWindow.tsx) | Main chat UI — SSE consumer, message state |
 | [frontend/src/app/settings/page.tsx](frontend/src/app/settings/page.tsx) | Google + iCloud connect/disconnect UI |
-| [frontend/src/i18n/](frontend/src/i18n/) | `LanguageProvider`, `useT`, dictionaries (`en`/`he`/`ru`), `translate()` — see the `add-ui-string` recipe in SKILL.md |
+| [frontend/src/i18n/](frontend/src/i18n/) | `LanguageProvider`, `useT`, dictionaries (`en`/`he`/`ru`); `config.ts` holds the language cookie only — see the `add-ui-string` recipe in SKILL.md |
 | [frontend/src/i18n/detectLocale.ts](frontend/src/i18n/detectLocale.ts) | Browser-language detection — `headerLocale` (server, `Accept-Language`) and `browserLocale` (client, `navigator`); default for a visitor with nothing stored |
 | [frontend/src/i18n/direction.ts](frontend/src/i18n/direction.ts) | `MIRROR_UNDER_RTL` — the one class that flips a direction-carrying icon; see the `rtl-check` recipe in SKILL.md |
 | [frontend/src/i18n/detectTextDir.ts](frontend/src/i18n/detectTextDir.ts) | Which way a finished chat message reads — a reply follows its own language, not the interface locale, and `dir="auto"` cannot do it (leading emoji are strong LTR) |
@@ -76,6 +76,36 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 |-------|------------|-------|
 | `travel` | `agentType: 'travel'` | web_search, weather, flights, hotels, currency, country_info, visa_requirements, car_rental, tours, spa, manage_calendar, manage_tasks, search_conversations |
 | `shopping` | `agentType: 'shopping'` | web_search, currency, manage_calendar, manage_tasks, search_conversations, + shopping-specific tools |
+
+---
+
+## Shared i18n Package
+
+`shared/i18n` is a fourth npm workspace, `@travel-agent/i18n`. It holds what all
+three packages agreed on and used to copy: the `Locale` union and `LOCALES`,
+`DEFAULT_LOCALE`, `isLocale`, `dirOf`, `LOCALE_LABELS`, `LANGUAGE_NAMES`, the
+`PluralForms` / `Entry` / `TVars` shapes, and `translate()`.
+
+**What stays in the packages.** The dictionaries themselves (each surface has its
+own key set), the language cookie (`frontend/src/i18n/config.ts`), the grammY
+session cache (`backend-telegram/src/i18n/language.ts`), the bot's `t()` wrapper,
+`detectLocale` / `detectTextDir` / `detectReplyLocale`, `MIRROR_UNDER_RTL`, and
+the notification copy. The shared package knows about languages, not about
+surfaces — nothing in it may import from a consumer.
+
+- **Adding a locale is now two edits, not four:** `shared/i18n/src/locale.ts` and
+  a migration widening the CHECK constraint on
+  `user_service_preferences.language`. Each package then needs its own new
+  dictionary file, which the compiler demands.
+- **Consumers import the built output, not the source.** The root `postinstall`
+  compiles it, so a plain `npm ci` is enough; `prebuild` / `pretest:all` hooks in
+  the three packages recompile it so an edit to `shared/i18n/src` can never be
+  tested through a stale `dist`.
+- **The Docker runtime stages install with `--ignore-scripts`** and copy
+  `shared/i18n/dist` from the build stage — `--omit=dev` leaves no TypeScript for
+  the `postinstall` to run. The base stage copies `shared/` whole, because
+  `npm ci` needs its sources. The frontend needs neither: Next bundles the
+  package into the server chunks.
 
 ---
 

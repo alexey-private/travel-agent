@@ -3,17 +3,15 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   DEFAULT_LOCALE,
-  LANG_COOKIE,
-  LANG_COOKIE_MAX_AGE,
-  LANG_STORAGE_KEY,
   dirOf,
   isLocale,
+  translate,
   type Locale,
-} from "./config";
+  type TVars,
+} from "@travel-agent/i18n";
+import { LANG_COOKIE, LANG_COOKIE_MAX_AGE, LANG_STORAGE_KEY } from "./config";
 import { browserLocale } from "./detectLocale";
 import { DICTIONARIES, type TKey } from "./dictionaries";
-import { translate } from "./translate";
-import type { TVars } from "./types";
 import { API_URL } from "@/lib/config";
 import { getOrCreateUserId } from "@/lib/api";
 

@@ -3,17 +3,20 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
+    "shared/i18n",
     "backend-langgraph",
     "backend-telegram",
     "frontend"
   ],
   "scripts": {
+    "build:shared": "npm run build --workspace=@travel-agent/i18n",
+    "postinstall": "npm run build:shared",
     "dev:backend-lg": "npm run dev --workspace=backend-langgraph",
     "dev:telegram": "npm run dev --workspace=backend-telegram",
     "dev:frontend": "npm run dev --workspace=frontend",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace=backend-langgraph && npm run build --workspace=backend-telegram && npm run build --workspace=frontend",
     "test": "npm run test --workspaces --if-present",
-    "test:all": "npm run test:all --workspace=backend-langgraph && npm run test:all --workspace=backend-telegram && npm run test --workspace=frontend"
+    "test:all": "npm run test:all --workspace=@travel-agent/i18n && npm run test:all --workspace=backend-langgraph && npm run test:all --workspace=backend-telegram && npm run test --workspace=frontend"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0"

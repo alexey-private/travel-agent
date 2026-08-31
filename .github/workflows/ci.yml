@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  # The locale set, the dictionary-entry shape and the string resolver every
+  # other package builds on. `npm ci` compiles it (root postinstall), so the
+  # jobs below get it without a step of their own.
+  shared-i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace=@travel-agent/i18n
+      - run: npm run test:all --workspace=@travel-agent/i18n
+
   backend-langgraph:
     runs-on: ubuntu-latest
     services:

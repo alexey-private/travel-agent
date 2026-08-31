@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LanguageSwitcher from "@/components/shared/LanguageSwitcher";
 import { DICTIONARIES } from "@/i18n/dictionaries";
-import type { Locale } from "@/i18n/config";
+import type { Locale } from "@travel-agent/i18n";
 import { renderWithI18n } from "../helpers/renderWithI18n";
 
 jest.mock("@/lib/api", () => ({ getOrCreateUserId: () => "session-test" }));

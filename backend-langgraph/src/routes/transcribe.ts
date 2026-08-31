@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { env } from '../config/env';
-import { isLocale } from '../i18n/locale';
+import { isLocale } from '@travel-agent/i18n';
 
 interface TranscribeBody {
   audio: string;   // base64-encoded audio

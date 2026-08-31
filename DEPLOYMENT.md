@@ -166,9 +166,13 @@ Connect each of the 3 app services to the same GitHub repo/branch (`main`).
 In each service's settings, set **Watch Paths** so an unrelated change
 doesn't trigger a pointless rebuild:
 
-- `travel-agent`: `backend-langgraph/**`, `Dockerfile.backend-langgraph`
-- `backend-telegram`: `backend-telegram/**`, `Dockerfile.backend-telegram`
-- `frontend`: `frontend/**`, `Dockerfile.frontend`
+- `travel-agent`: `backend-langgraph/**`, `shared/**`, `Dockerfile.backend-langgraph`
+- `backend-telegram`: `backend-telegram/**`, `shared/**`, `Dockerfile.backend-telegram`
+- `frontend`: `frontend/**`, `shared/**`, `Dockerfile.frontend`
+
+`shared/**` is on all three lists on purpose: `shared/i18n` is compiled into
+every service, so a change there that redeployed only one of them would leave
+the other two running the old locale set.
 
 Note that a change to `package.json` / `package-lock.json` at the repo root
 matches none of these, so a dependency change alone will not trigger a

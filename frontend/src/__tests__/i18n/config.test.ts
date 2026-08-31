@@ -1,32 +1,14 @@
-import { LOCALES, DEFAULT_LOCALE, isLocale, dirOf, LOCALE_LABELS, LANG_COOKIE } from "@/i18n/config";
+import { LANG_COOKIE, LANG_STORAGE_KEY, LANG_COOKIE_MAX_AGE } from "@/i18n/config";
 
+// The locale set itself (LOCALES, isLocale, dirOf, LOCALE_LABELS) is owned and
+// tested by @travel-agent/i18n — see shared/i18n/tests/locale.test.ts.
 describe("i18n config", () => {
-  it("exposes exactly the three supported locales", () => {
-    expect(LOCALES).toEqual(["en", "he", "ru"]);
-  });
-
-  it("defaults to English", () => {
-    expect(DEFAULT_LOCALE).toBe("en");
-  });
-
-  it("recognises supported locales and rejects everything else", () => {
-    expect(isLocale("he")).toBe(true);
-    expect(isLocale("de")).toBe(false);
-    expect(isLocale(undefined)).toBe(false);
-    expect(isLocale(null)).toBe(false);
-  });
-
-  it("marks Hebrew as right-to-left", () => {
-    expect(dirOf("he")).toBe("rtl");
-    expect(dirOf("en")).toBe("ltr");
-    expect(dirOf("ru")).toBe("ltr");
-  });
-
-  it("labels each locale in its own script", () => {
-    expect(LOCALE_LABELS).toEqual({ en: "EN", he: "עברית", ru: "RU" });
-  });
-
-  it("names the cookie", () => {
+  it("names the cookie and its localStorage mirror the same", () => {
     expect(LANG_COOKIE).toBe("lang");
+    expect(LANG_STORAGE_KEY).toBe("lang");
+  });
+
+  it("keeps the cookie for a year", () => {
+    expect(LANG_COOKIE_MAX_AGE).toBe(60 * 60 * 24 * 365);
   });
 });

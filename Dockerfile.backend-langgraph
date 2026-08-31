@@ -7,22 +7,29 @@ WORKDIR /app
 # All workspace package.json files must be present for `npm ci` to resolve
 # the workspace graph declared in the root package.json, even though only
 # backend-langgraph is built/run from this image.
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json tsconfig.base.json ./
 COPY backend-langgraph/package.json ./backend-langgraph/package.json
 COPY backend-telegram/package.json ./backend-telegram/package.json
 COPY frontend/package.json ./frontend/package.json
+# The shared i18n package is copied whole, not just its package.json: the root
+# `postinstall` compiles it, so its sources must be here before `npm ci` runs.
+COPY shared ./shared
 
 FROM base AS deps
 RUN npm ci
 
 FROM deps AS build
-COPY tsconfig.base.json ./
 COPY backend-langgraph ./backend-langgraph
 RUN npm run build --workspace=backend-langgraph
 
 FROM base AS runtime
 ENV NODE_ENV=production
-RUN npm ci --omit=dev
+# --ignore-scripts skips the root `postinstall`, which would try to compile the
+# shared package with a TypeScript that --omit=dev just left out. Its build
+# output is copied from the build stage instead. No production dependency of
+# this service declares an install script.
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=build /app/shared/i18n/dist ./shared/i18n/dist
 COPY --from=build /app/backend-langgraph/dist ./backend-langgraph/dist
 WORKDIR /app/backend-langgraph
 

@@ -1,0 +1,24 @@
+{
+  "name": "@travel-agent/i18n",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Locale primitives shared by backend-langgraph, backend-telegram and the frontend.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "jest",
+    "test:all": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.2.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.9.3"
+  }
+}

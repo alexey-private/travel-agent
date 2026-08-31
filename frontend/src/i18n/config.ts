@@ -1,30 +1,10 @@
 /**
- * Supported UI languages.
+ * How the browser remembers the chosen language.
  *
- * These three values are mirrored in `backend-langgraph/src/i18n/locale.ts` and
- * `backend-telegram/src/i18n/config.ts`, and enforced by the CHECK constraint on
- * `user_service_preferences.language`. Adding a locale means touching all four.
+ * The locale set itself — `Locale`, `LOCALES`, `isLocale`, `dirOf`,
+ * `LOCALE_LABELS` — lives in `@travel-agent/i18n`, shared with the backend and
+ * the Telegram bot. Only the storage keys below are the frontend's own.
  */
-export type Locale = "en" | "he" | "ru";
-
-export const LOCALES: readonly Locale[] = ["en", "he", "ru"] as const;
-
-export const DEFAULT_LOCALE: Locale = "en";
-
-export function isLocale(value: unknown): value is Locale {
-  return typeof value === "string" && (LOCALES as readonly string[]).includes(value);
-}
-
-export function dirOf(locale: Locale): "ltr" | "rtl" {
-  return locale === "he" ? "rtl" : "ltr";
-}
-
-/** Shown in the language switcher — each label is written in its own script. */
-export const LOCALE_LABELS: Record<Locale, string> = {
-  en: "EN",
-  he: "עברית",
-  ru: "RU",
-};
 
 /** Read by the server component in app/layout.tsx to render <html dir> correctly. */
 export const LANG_COOKIE = "lang";

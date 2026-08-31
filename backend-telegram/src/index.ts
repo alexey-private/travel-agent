@@ -36,7 +36,7 @@ import { registerHistoryCommand } from './commands/history';
 import { registerLangCommand } from './commands/lang';
 import { registerChatHandler, handleChatMessage } from './chat.handler';
 import { startCalendarCron } from './notifier/calendar.cron';
-import { LOCALES, DEFAULT_LOCALE } from './i18n/config';
+import { LOCALES, DEFAULT_LOCALE } from '@travel-agent/i18n';
 import { t } from './i18n/t';
 import type { TKey } from './i18n/dictionaries';
 

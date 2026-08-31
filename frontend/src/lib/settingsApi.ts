@@ -1,7 +1,7 @@
 import { API_URL } from "./config";
 import { ApiError } from "./apiError";
 import { errorKeyOf } from "./errorCode";
-import type { Locale } from "@/i18n/config";
+import type { Locale } from "@travel-agent/i18n";
 
 export interface UserPreferences {
   calendarProvider: "google" | "apple";

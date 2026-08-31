@@ -1,5 +1,5 @@
 import { InlineKeyboard, type Bot } from 'grammy';
-import { LOCALES, LOCALE_LABELS, isLocale } from '../i18n/config';
+import { LOCALES, LOCALE_LABELS, isLocale } from '@travel-agent/i18n';
 import { getLocale, setLocale, tFor } from '../i18n/language';
 import type { BotContext } from '../types';
 

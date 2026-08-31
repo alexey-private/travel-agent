@@ -1,6 +1,6 @@
 "use client";
 
-import { LOCALES, LOCALE_LABELS, isLocale } from "@/i18n/config";
+import { LOCALES, LOCALE_LABELS, isLocale } from "@travel-agent/i18n";
 import { useLocale, useT } from "@/i18n/useT";
 
 /**

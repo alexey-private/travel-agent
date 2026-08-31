@@ -1,4 +1,4 @@
-import { Locale } from './locale';
+import { Locale } from '@travel-agent/i18n';
 
 /**
  * Which of the supported languages a finished agent reply is written in.

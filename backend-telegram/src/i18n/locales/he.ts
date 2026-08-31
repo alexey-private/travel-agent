@@ -1,5 +1,5 @@
 import type { Dictionary } from '../dictionaries';
-import type { PluralForms } from '../types';
+import type { PluralForms } from '@travel-agent/i18n';
 
 /**
  * Hebrew dictionary.

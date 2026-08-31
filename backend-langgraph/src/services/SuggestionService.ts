@@ -1,7 +1,7 @@
 import { HumanMessage } from '@langchain/core/messages';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { createModel } from '../llm/createModel';
-import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '../i18n/locale';
+import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '@travel-agent/i18n';
 
 export class SuggestionService {
   private readonly model: BaseChatModel;

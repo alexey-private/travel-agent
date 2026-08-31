@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/i18n/LanguageProvider";
-import { DEFAULT_LOCALE, LANG_COOKIE, dirOf, isLocale } from "@/i18n/config";
+import { DEFAULT_LOCALE, dirOf, isLocale } from "@travel-agent/i18n";
+import { LANG_COOKIE } from "@/i18n/config";
 import { acceptLanguageLocale } from "@/i18n/detectLocale";
 
 export const metadata: Metadata = {

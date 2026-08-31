@@ -1,5 +1,5 @@
 import { BaseRepository } from './BaseRepository';
-import { Locale, isLocale } from '../i18n/locale';
+import { Locale, isLocale } from '@travel-agent/i18n';
 
 interface UserPreferencesRow {
   calendar_provider: string;

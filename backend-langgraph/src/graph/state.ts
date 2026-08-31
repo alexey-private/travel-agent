@@ -1,7 +1,7 @@
 import { Annotation, messagesStateReducer } from '@langchain/langgraph';
 import { BaseMessage } from '@langchain/core/messages';
 import { UserMemory } from '../types/memory';
-import { Locale, DEFAULT_LOCALE } from '../i18n/locale';
+import { Locale, DEFAULT_LOCALE } from '@travel-agent/i18n';
 
 /**
  * Shared state for both Travel and Shopping LangGraph agents.

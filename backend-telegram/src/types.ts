@@ -1,5 +1,5 @@
 import type { Context, SessionFlavor } from 'grammy';
-import type { Locale } from './i18n/config';
+import type { Locale } from '@travel-agent/i18n';
 
 export interface SessionData {
   sessionId: string | null;

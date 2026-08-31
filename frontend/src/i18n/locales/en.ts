@@ -1,4 +1,4 @@
-import type { PluralForms } from "../types";
+import type { PluralForms } from "@travel-agent/i18n";
 
 /**
  * English dictionary — the source of truth for the `Dictionary` type.

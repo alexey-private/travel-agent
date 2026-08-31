@@ -10,9 +10,9 @@ import {
   MAX_FILE_BYTES,
   formatBytes,
 } from "@/lib/fileUtils";
-import type { Locale } from "@/i18n/config";
+import type { Locale } from "@travel-agent/i18n";
 import type { TKey } from "@/i18n/dictionaries";
-import type { TVars } from "@/i18n/types";
+import type { TVars } from "@travel-agent/i18n";
 
 export interface PendingTextFile {
   name: string;

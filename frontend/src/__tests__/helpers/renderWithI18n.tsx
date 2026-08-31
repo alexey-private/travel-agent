@@ -1,7 +1,8 @@
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { LanguageProvider } from "@/i18n/LanguageProvider";
-import { LANG_COOKIE, type Locale } from "@/i18n/config";
+import type { Locale } from "@travel-agent/i18n";
+import { LANG_COOKIE } from "@/i18n/config";
 
 /**
  * Renders a component inside the language provider.

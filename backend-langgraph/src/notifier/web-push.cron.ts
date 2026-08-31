@@ -3,7 +3,7 @@ import webpush from 'web-push';
 import type { Pool } from 'pg';
 import type { CalendarProvider } from '../tools/providers/CalendarProvider';
 import type { TasksProvider } from '../tools/providers/TasksProvider';
-import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locale';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@travel-agent/i18n';
 import { notificationTitle, notificationOverflow, formatEventTime } from '../i18n/notifications';
 
 interface PushSubscriptionRow {

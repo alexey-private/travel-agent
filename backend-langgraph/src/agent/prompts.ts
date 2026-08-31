@@ -1,5 +1,5 @@
 import { UserMemory } from '../types/memory';
-import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '../i18n/locale';
+import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '@travel-agent/i18n';
 
 /**
  * The block that makes the agent speak the user's language.

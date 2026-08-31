@@ -3,7 +3,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import PDFDocument from 'pdfkit';
 import { DriveProvider } from '../tools/providers/DriveProvider';
 import { toVisual, wrapToWidth, baseDirFor, type BaseDir } from '../utils/bidi';
-import { isLocale, type Locale } from '../i18n/locale';
+import { isLocale, type Locale } from '@travel-agent/i18n';
 
 // Fonts bundled with the backend — DejaVuSans covers Latin + Cyrillic + Greek etc.
 const FONTS_DIR = path.resolve(__dirname, '../assets/fonts');

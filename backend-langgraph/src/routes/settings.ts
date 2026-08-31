@@ -4,7 +4,7 @@ import { ICloudTokenRepository } from '../repositories/ICloudTokenRepository';
 import { UserPreferencesRepository, UserPreferences } from '../repositories/UserPreferencesRepository';
 import { GoogleTokenRepository } from '../repositories/GoogleTokenRepository';
 import { UserService } from '../services/UserService';
-import { isLocale } from '../i18n/locale';
+import { isLocale, LOCALES } from '@travel-agent/i18n';
 
 interface SettingsRouteOptions {
   icloudTokenRepo: ICloudTokenRepository;
@@ -55,7 +55,8 @@ export async function settingsRoutes(
     }
 
     if (language !== undefined && !isLocale(language)) {
-      return reply.code(400).send({ error: 'language must be one of "en", "he", "ru"', code: 'invalid_language' });
+      const allowed = LOCALES.map((l) => `"${l}"`).join(', ');
+      return reply.code(400).send({ error: `language must be one of ${allowed}`, code: 'invalid_language' });
     }
 
     await prefRepo.save(userId, {

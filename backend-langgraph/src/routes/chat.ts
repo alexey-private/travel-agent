@@ -10,7 +10,7 @@ import { historyToMessages } from '../graph/history';
 import { AgentEvent } from '../types/agent';
 import { LMRound, LMToolCall, LMToolResult } from '../types/lm';
 import { UserPreferencesRepository } from '../repositories/UserPreferencesRepository';
-import { Locale, DEFAULT_LOCALE, isLocale } from '../i18n/locale';
+import { Locale, DEFAULT_LOCALE, isLocale } from '@travel-agent/i18n';
 import { detectReplyLocale } from '../i18n/detectReplyLocale';
 import { env } from '../config/env';
 

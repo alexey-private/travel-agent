@@ -1,4 +1,4 @@
-import type { Locale } from "@/i18n/config";
+import type { Locale } from "@travel-agent/i18n";
 
 /**
  * Formats a message timestamp the way a chat list does: time today, "yesterday"

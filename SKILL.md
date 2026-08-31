@@ -69,6 +69,11 @@ npx tsc -p backend-langgraph/tsconfig.json --noEmit
 
 Must pass. Also run `npm run typecheck --workspace=backend-telegram` if you touched the bot.
 
+`tsc` reads `@travel-agent/i18n` from `shared/i18n/dist`, which the root
+`postinstall` builds. After editing `shared/i18n/src` run
+`npm run build:shared` (or any package's `build` / `test:all`, which do it for
+you) before trusting a bare `npx tsc`.
+
 ---
 
 ## SKILL: run-tests
@@ -241,6 +246,30 @@ the locale as a field on its request object.
 **Not translated:** `console.*` output, the `[My current location: …]` prefix and
 the `/calendar` and `/tasks` dispatch prompts — those are messages to the LLM, and
 the agent's own `## Language` block makes it answer in the user's language anyway.
+
+---
+
+## SKILL: add-locale
+
+**When:** A fourth language is added.
+
+1. Widen the union in `shared/i18n/src/locale.ts` — `Locale`, `LOCALES`,
+   `LOCALE_LABELS` (the label is written in its own script) and `LANGUAGE_NAMES`
+   (English, for the system prompt). This is the only definition; nothing else
+   declares the set.
+2. Ship a migration widening the CHECK constraint on
+   `user_service_preferences.language` — see the `add-migration` recipe. A value
+   the column rejects is a language nobody can save.
+3. Add the dictionary file to every surface that has one:
+   `frontend/src/i18n/locales/`, `backend-telegram/src/i18n/locales/`, plus the
+   three phrases in `backend-langgraph/src/i18n/notifications.ts` and a pool in
+   `backend-telegram/src/data/suggestions.ts`. `Record<Locale, …>` turns each
+   omission into a compile error, so let `tsc` enumerate them for you.
+4. Teach the two detectors: `FIRST_PERSON_RE` in `MemoryService` (a language it
+   cannot read is one whose users accumulate no memory) and `detectReplyLocale`
+   (script counting — a language sharing an alphabet with another needs more
+   than a script test).
+5. `npm run build:shared`, then typecheck and test all four packages.
 
 ---
 

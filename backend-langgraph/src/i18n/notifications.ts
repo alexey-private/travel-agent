@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, type Locale } from './locale';
+import { DEFAULT_LOCALE, type Locale } from '@travel-agent/i18n';
 
 /**
  * The only user-facing copy in this package that reaches a person directly —

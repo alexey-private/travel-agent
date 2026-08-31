@@ -1,6 +1,6 @@
 import { DICTIONARIES } from "@/i18n/dictionaries";
-import { LOCALES } from "@/i18n/config";
-import type { Entry, PluralForms } from "@/i18n/types";
+import { LOCALES } from "@travel-agent/i18n";
+import type { Entry, PluralForms } from "@travel-agent/i18n";
 
 const HEBREW = /[֐-׿]/;
 const CYRILLIC = /[Ѐ-ӿ]/;

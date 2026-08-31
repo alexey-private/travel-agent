@@ -11,7 +11,7 @@
 import type { Pool } from 'pg';
 import type { CalendarProvider } from '@/tools/providers/CalendarProvider';
 import type { TasksProvider } from '@/tools/providers/TasksProvider';
-import type { Locale } from '@/i18n/locale';
+import type { Locale } from '@travel-agent/i18n';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 

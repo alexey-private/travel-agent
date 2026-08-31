@@ -3,8 +3,8 @@
 import { useState, useRef, useCallback } from "react";
 import { API_URL } from "@/lib/config";
 import type { TKey } from "@/i18n/dictionaries";
-import type { TVars } from "@/i18n/types";
-import type { Locale } from "@/i18n/config";
+import type { TVars } from "@travel-agent/i18n";
+import type { Locale } from "@travel-agent/i18n";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
 

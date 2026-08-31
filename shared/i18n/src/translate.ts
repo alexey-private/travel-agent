@@ -1,11 +1,10 @@
-import type { Locale } from "./config";
-import type { Dictionary, TKey } from "./dictionaries";
-import type { PluralForms, TVars } from "./types";
+import type { Locale } from './locale';
+import type { Dict, PluralForms, TVars } from './types';
 
 const PLACEHOLDER = /\{(\w+)\}/g;
 
 function isPluralForms(entry: unknown): entry is PluralForms {
-  return typeof entry === "object" && entry !== null && "other" in entry;
+  return typeof entry === 'object' && entry !== null && 'other' in entry;
 }
 
 /**
@@ -15,8 +14,18 @@ function isPluralForms(entry: unknown): entry is PluralForms {
  * rule, because Russian needs one/few/many while Hebrew and English need only
  * one/other — and `other` is the fallback whenever an entry lacks the form the
  * locale asked for.
+ *
+ * The dictionary is a parameter rather than a lookup inside this function: each
+ * package owns its own dictionaries and its own key union, and stays free to
+ * keep them out of a bundle that does not need them. `D` is inferred from the
+ * call, so `key` is still checked against that package's real key set.
  */
-export function translate(dict: Dictionary, locale: Locale, key: TKey, vars?: TVars): string {
+export function translate<D extends Dict>(
+  dict: D,
+  locale: Locale,
+  key: keyof D & string,
+  vars?: TVars,
+): string {
   const entry: unknown = dict[key];
 
   if (entry === undefined) return String(key);

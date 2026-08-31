@@ -1,8 +1,7 @@
 import { BACKEND_URL } from '../config';
-import { DEFAULT_LOCALE, isLocale, type Locale } from './config';
+import { DEFAULT_LOCALE, isLocale, type Locale, type TVars } from '@travel-agent/i18n';
 import { t } from './t';
 import type { TKey } from './dictionaries';
-import type { TVars } from './types';
 import type { BotContext } from '../types';
 
 function settingsUrl(userId: string): string {

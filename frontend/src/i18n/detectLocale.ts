@@ -1,4 +1,4 @@
-import { isLocale, type Locale } from "./config";
+import { isLocale, type Locale } from "@travel-agent/i18n";
 
 /**
  * Deriving a first-time visitor's language from the browser.

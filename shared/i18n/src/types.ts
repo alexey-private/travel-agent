@@ -15,3 +15,9 @@ export interface PluralForms {
 export type Entry = string | PluralForms;
 
 export type TVars = Record<string, string | number>;
+
+/**
+ * The shape `translate` can read. Each package keeps its own dictionaries and
+ * infers its own key union from them; this is only the lower bound they satisfy.
+ */
+export type Dict = Record<string, Entry>;
