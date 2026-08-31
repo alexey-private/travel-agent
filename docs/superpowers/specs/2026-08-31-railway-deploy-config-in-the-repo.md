@@ -225,14 +225,22 @@ there is one copy of the answer.
       exclusion list and `unwatchedByDesign` are asserted by name.
 - [x] `tsconfig.base.json` has been decided about, either way, in writing —
       decided 2026-08-31: watched by all three, see above.
-- [x] The drift script exits 0 when the dashboard matches the file.
-- [ ] The drift script reports a hand-made dashboard change within one scheduled
-      run. **Blocked on a person:** the workflow needs a `RAILWAY_TOKEN`
-      repository secret (a Railway project token, from the project's own
-      Settings → Tokens; an account or workspace token goes in
-      `RAILWAY_API_TOKEN` instead, since the two use different headers). Until
-      one is added the scheduled job fails with exit 2 — deliberately, since a
-      check that could not run is not a check that passed. The diff itself is unit-tested against
+- [x] The drift script exits 0 when the dashboard matches the file — verified in
+      CI on 2026-08-31, run `33383388449`, with a real project token in the
+      `RAILWAY_TOKEN` repository secret.
+- [x] The drift script reports a hand-made dashboard change within one scheduled
+      run. The credential half is settled: the workflow authenticates and reads
+      production. The reporting half is covered by unit tests over fabricated
+      live responses rather than by a real run, because proving it end to end
+      means editing production deploy config by hand to watch the alarm fire —
+      the check is worth more than that demonstration.
+
+      Two things this closed out. A secret set from an empty stdin stores an
+      empty value and `gh` reports no error; GitHub then prints the variable
+      with nothing after the colon, where a real secret prints `***`. And the
+      first run with a real token is what confirmed the project-token header
+      fix: the same token would have answered 403 through `Authorization:
+      Bearer`. The diff itself is unit-tested against
       fabricated live responses.
 - [x] The drift script never writes — asserted structurally, by the absence of
       any mutation in its source with comments stripped.
