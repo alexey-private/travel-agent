@@ -77,7 +77,11 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-telegram/src/transcribe.ts](backend-telegram/src/transcribe.ts) | A voice note goes to the backend's `/api/transcribe`, not to Whisper — that is where the language hint and the only copy of the OpenAI key live |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Railway deploy: per-service env vars, Dockerfile paths, migration/networking notes |
 | [Dockerfile.backend-langgraph](Dockerfile.backend-langgraph), [Dockerfile.backend-telegram](Dockerfile.backend-telegram), [Dockerfile.frontend](Dockerfile.frontend) | Multi-stage builds, root-context (npm workspaces) |
+| [deploy/railway-services.json](deploy/railway-services.json) | The Railway watch paths this repo expects — the one copy, read by both checks below; see [Deploy Config](#deploy-config) |
+| [deploy/coverage.mjs](deploy/coverage.mjs) | Does every `COPY` in a Dockerfile sit behind that service's watch patterns? Credential-free, so it runs in ordinary CI |
+| [deploy/check-drift.mjs](deploy/check-drift.mjs) | The same file against the live Railway API — read-only, on a schedule |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | tsc + tests (real pgvector service container) on push/PR to main |
+| [.github/workflows/railway-drift.yml](.github/workflows/railway-drift.yml) | Weekly read-only drift check against Railway; needs the `RAILWAY_TOKEN` secret |
 
 ---
 
@@ -446,6 +450,44 @@ keeps an unrelated page in the user's browser from making one.
 - **`Access-Control-Allow-Credentials` is never sent.** Nothing here
   authenticates by cookie, and that header is what would turn a mistake in the
   list into a way to read a signed-in user's stream.
+
+---
+
+## Deploy Config
+
+Watch paths, builder and Dockerfile path live in Railway, not in this
+repository. On 2026-08-31 `shared/**` was missing from all three services for
+the whole day the shared package existed, and nothing here could have said so;
+the day's push happened to touch all three packages, which is the only reason
+it did no damage.
+
+[deploy/railway-services.json](deploy/railway-services.json) is now the one
+written copy, and two checks keep it honest —
+[coverage.mjs](deploy/coverage.mjs) against the Dockerfiles (no token, ordinary
+CI) and [check-drift.mjs](deploy/check-drift.mjs) against the live API (token,
+weekly, read-only). The reasoning, and why Railway's own config-as-code was
+rejected, is in
+[the spec](docs/superpowers/specs/2026-08-31-railway-deploy-config-in-the-repo.md).
+
+- **A new top-level directory that becomes a build input for more than one
+  service needs an entry here.** That is the whole rule. `COPY newdir ./newdir`
+  in a Dockerfile turns `npm run test:deploy` red until some watch pattern of
+  that service covers it, so the reminder arrives in the commit that needs it.
+- **What counts as a build input is a named exclusion list, not a shape.**
+  `package.json` and `package-lock.json` are scaffolding for `npm ci`;
+  everything else copied is an input. "A single file is scaffolding" was the
+  tempting rule and it is wrong — `tsconfig.base.json` rides the same `COPY`
+  line as those two and is a real input, since three of the four workspaces
+  `extends` it. A fourth root-level file added to that line is therefore
+  covered by default and someone has to argue it out.
+- **The root manifests stay unwatched on purpose.** A dependency bump alone
+  rebuilds nothing; the lock file changes constantly and usually for one
+  workspace, and its effect is visible in that workspace's own diff. The test
+  asserts that as intended behaviour rather than letting it fail.
+- **The drift script never writes.** It reports a difference and leaves fixing
+  it to a person — a script that repaired the dashboard would turn a wrong
+  expectation file into a wrong deployment. A test asserts the absence of any
+  mutation in its source, because exercising the happy path cannot.
 
 ---
 

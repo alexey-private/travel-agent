@@ -7,6 +7,19 @@ on:
     branches: [main]
 
 jobs:
+  # Does every build input of an image sit behind that service's Railway watch
+  # patterns? Reads the Dockerfiles and deploy/railway-services.json — no
+  # network, no token, no install — so it goes red in the same commit that adds
+  # an uncovered build input, before anything is deployed.
+  deploy-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run test:deploy
+
   # The locale set, the dictionary-entry shape and the string resolver every
   # other package builds on. `npm ci` compiles it (root postinstall), so the
   # jobs below get it without a step of their own.

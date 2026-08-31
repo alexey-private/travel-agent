@@ -115,6 +115,49 @@ Unit tests use shared mocks in `tests/helpers/`. Integration tests (`chat.test.t
 
 ---
 
+## SKILL: add-build-input
+
+**When:** A Dockerfile gains a `COPY` line — a new top-level directory, or a new
+root-level file on the `COPY package.json package-lock.json tsconfig.base.json ./`
+line. Also when a service is added to or renamed in Railway.
+
+Railway's watch paths decide which pushes rebuild which service, and they live in
+the dashboard. A build input nobody watches is a service that silently keeps
+running the old code while every health check stays green — which is exactly what
+happened to `shared/**` on 2026-08-31.
+
+```bash
+# 1. Is the new input covered? (no token, no network, ~50 ms)
+npm run test:deploy
+
+# 2. If it goes red, add the pattern to BOTH places:
+#    - deploy/railway-services.json   (the repo's copy)
+#    - the Railway dashboard          (the one that actually deploys)
+#      Settings -> Build -> Watch Paths. Leading slash: /newdir/**
+
+# 3. Confirm the dashboard agrees with the file
+npm run check:railway-drift
+```
+
+**The two are not interchangeable.** Step 1 checks the repo against itself and
+runs in CI on every push; step 3 needs a Railway token and runs weekly. Editing
+only the JSON leaves production unchanged; editing only the dashboard leaves the
+next drift run red.
+
+`npm run check:railway-drift` is **read-only** — it prints the difference and
+never repairs it, so an expectation file that is wrong cannot write itself into
+production. Exit 0 agree, 1 drift, 2 could-not-check (a missing token is 2).
+
+Two rules the checker encodes, worth knowing before arguing with it:
+
+- `package.json` and `package-lock.json` are excluded **by name**, not because
+  they are single files. `tsconfig.base.json` rides the same `COPY` line and is
+  a real build input, so a fourth root-level file there is covered by default.
+- A directory counts as covered only if a pattern reaches files **inside** it —
+  `/shared/*` misses `shared/i18n/src/locale.ts`. Write `/shared/**`.
+
+---
+
 ## SKILL: test-timezone-dependent-code
 
 **When:** A change reads the local calendar or clock — `getDate()`, `getHours()`,

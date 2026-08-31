@@ -1,0 +1,41 @@
+{
+  "_comment": "The Railway deploy config this repository expects. Two things read it: deploy/coverage.test.mjs (credential-free, runs in CI) checks it against the COPY lines of each Dockerfile, and deploy/check-drift.mjs (needs a token, runs on a schedule) checks it against the live Railway API. See docs/superpowers/specs/2026-08-31-railway-deploy-config-in-the-repo.md.",
+
+  "projectId": "2f74ec36-d058-42fd-87b0-b4bc397dddcc",
+  "environment": "production",
+  "environmentId": "5bffd001-7eae-4723-bf10-0d6da29bf008",
+
+  "services": {
+    "frontend": {
+      "dockerfile": "Dockerfile.frontend",
+      "watchPatterns": [
+        "/frontend/**",
+        "/shared/**",
+        "/Dockerfile.frontend",
+        "/tsconfig.base.json"
+      ]
+    },
+    "backend-telegram": {
+      "dockerfile": "Dockerfile.backend-telegram",
+      "watchPatterns": [
+        "/backend-telegram/**",
+        "/shared/**",
+        "/Dockerfile.backend-telegram",
+        "/tsconfig.base.json"
+      ]
+    },
+    "travel-agent": {
+      "dockerfile": "Dockerfile.backend-langgraph",
+      "watchPatterns": [
+        "/backend-langgraph/**",
+        "/shared/**",
+        "/Dockerfile.backend-langgraph",
+        "/tsconfig.base.json"
+      ]
+    }
+  },
+
+  "unmanagedServices": ["pgvector"],
+
+  "unwatchedByDesign": ["/package.json", "/package-lock.json"]
+}
