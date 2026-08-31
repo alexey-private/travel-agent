@@ -83,6 +83,27 @@ describe('UserPreferencesRepository — language (integration)', () => {
     expect(prefs.language).toBe('ru');
   });
 
+  /**
+   * The state migration 016 exists to express has to be writable, not merely
+   * reachable by never having written a row. Under `COALESCE($n, existing)` an
+   * explicit null was indistinguishable from an omitted key, so a language could
+   * be set and never unset.
+   */
+  itDb('clears the language when save() passes an explicit null', async () => {
+    await repo.save('session-clear', { language: 'he' });
+    await repo.save('session-clear', { language: null });
+    const prefs = await repo.get('session-clear');
+    expect(prefs.language).toBeNull();
+  });
+
+  itDb('does not clear the language when an unrelated field is saved', async () => {
+    await repo.save('session-unrelated', { language: 'he' });
+    await repo.save('session-unrelated', { calendarName: 'Renamed' });
+    const prefs = await repo.get('session-unrelated');
+    expect(prefs.language).toBe('he');
+    expect(prefs.calendarName).toBe('Renamed');
+  });
+
   itDb('rejects an unsupported language at the database level', async () => {
     await expect(
       getTestPool().query(`INSERT INTO user_service_preferences (user_id, language) VALUES ($1, $2)`, [

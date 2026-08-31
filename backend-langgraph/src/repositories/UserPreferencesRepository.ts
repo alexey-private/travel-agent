@@ -48,7 +48,23 @@ export class UserPreferencesRepository extends BaseRepository {
     };
   }
 
+  /**
+   * Write the fields the patch carries, and leave the rest alone.
+   *
+   * `COALESCE($n, existing)` says both of those things at once for the five
+   * `NOT NULL` columns, where a SQL `NULL` can only mean "not in the patch".
+   * `language` is different: migration 016 made it nullable precisely so that
+   * "never chose one" would be a state the column can hold, and under COALESCE
+   * that state was reachable only by never having written a row at all —
+   * `save(id, { language: null })` was indistinguishable from `save(id, {})`.
+   *
+   * So the patch says whether the key is present, and the statement believes it.
+   * An explicit `undefined` counts as absent: it is what an optional property
+   * carries when nobody set it, and reading it as "clear the language" would
+   * turn every unrelated `save` into one.
+   */
   async save(userId: string, prefs: Partial<UserPreferences>): Promise<void> {
+    const setsLanguage = prefs.language !== undefined;
     await this.execute(
       `INSERT INTO user_service_preferences
          (user_id, calendar_provider, calendar_name, shopping_calendar_name,
@@ -69,7 +85,7 @@ export class UserPreferencesRepository extends BaseRepository {
              shopping_calendar_name  = COALESCE($4, user_service_preferences.shopping_calendar_name),
              task_list_name          = COALESCE($5, user_service_preferences.task_list_name),
              shopping_task_list_name = COALESCE($6, user_service_preferences.shopping_task_list_name),
-             language                = COALESCE($7, user_service_preferences.language),
+             language                = CASE WHEN $8 THEN $7 ELSE user_service_preferences.language END,
              updated_at              = NOW()`,
       [
         userId,
@@ -79,6 +95,7 @@ export class UserPreferencesRepository extends BaseRepository {
         prefs.taskListName ?? null,
         prefs.shoppingTaskListName ?? null,
         prefs.language ?? null,
+        setsLanguage,
       ],
     );
   }
