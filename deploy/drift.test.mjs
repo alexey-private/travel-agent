@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { REPO_ROOT, loadConfig } from './coverage.mjs';
-import { diffWatchPatterns, fetchLiveWatchPatterns, formatDifferences } from './drift.mjs';
+import {
+  authHeaderFor,
+  diffWatchPatterns,
+  fetchLiveWatchPatterns,
+  formatDifferences,
+} from './drift.mjs';
 
 const config = loadConfig();
 
@@ -106,7 +111,7 @@ test('only the instance in the configured environment is read', async () => {
   });
 
   const live = await fetchLiveWatchPatterns({
-    token: 'test',
+    credential: { token: 'test', kind: 'account' },
     projectId: config.projectId,
     environmentId: config.environmentId,
     fetchImpl,
@@ -120,9 +125,47 @@ test('an API error is raised rather than read as an empty dashboard', async () =
   // and a 403 for a stale token would look like a catastrophic drift.
   const failing = async () => ({ ok: false, status: 403, statusText: 'Forbidden' });
   await assert.rejects(
-    () => fetchLiveWatchPatterns({ token: 'x', projectId: 'p', environmentId: 'e', fetchImpl: failing }),
+    () =>
+      fetchLiveWatchPatterns({
+        credential: { token: 'x', kind: 'account' },
+        projectId: 'p',
+        environmentId: 'e',
+        fetchImpl: failing,
+      }),
     /403/,
   );
+});
+
+test('each credential kind travels in the header Railway expects for it', async () => {
+  // A project token sent as a Bearer is answered 403, which reads as a wrong
+  // project rather than a wrong header. The two are told apart by which
+  // variable they arrived in, because the tokens themselves look alike.
+  assert.deepEqual(authHeaderFor({ token: 'p', kind: 'project' }), {
+    'Project-Access-Token': 'p',
+  });
+  assert.deepEqual(authHeaderFor({ token: 'a', kind: 'account' }), {
+    Authorization: 'Bearer a',
+  });
+
+  const seen = [];
+  const record = async (_url, init) => {
+    seen.push(init.headers);
+    return { ok: true, json: async () => ({ data: { project: { services: { edges: [] } } } }) };
+  };
+
+  for (const kind of ['project', 'account']) {
+    await fetchLiveWatchPatterns({
+      credential: { token: 't', kind },
+      projectId: 'p',
+      environmentId: 'e',
+      fetchImpl: record,
+    });
+  }
+
+  assert.equal(seen[0]['Project-Access-Token'], 't');
+  assert.equal(seen[0].Authorization, undefined);
+  assert.equal(seen[1].Authorization, 'Bearer t');
+  assert.equal(seen[1]['Project-Access-Token'], undefined);
 });
 
 test('the drift check never writes', () => {

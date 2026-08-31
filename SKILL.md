@@ -146,7 +146,10 @@ next drift run red.
 
 `npm run check:railway-drift` is **read-only** — it prints the difference and
 never repairs it, so an expectation file that is wrong cannot write itself into
-production. Exit 0 agree, 1 drift, 2 could-not-check (a missing token is 2).
+production. Exit 0 agree, 1 drift, 2 could-not-check — a missing token is 2, and
+so is an expired one (`railway login` refreshes the local credential; in CI the
+secret is `RAILWAY_TOKEN` for a project token, `RAILWAY_API_TOKEN` for an
+account or workspace token).
 
 Two rules the checker encodes, worth knowing before arguing with it:
 

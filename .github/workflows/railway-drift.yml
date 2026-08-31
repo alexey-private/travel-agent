@@ -5,9 +5,14 @@
 # a difference and never repairs one, because a script that quietly wrote
 # production config would turn a wrong file into a wrong deployment.
 #
-# Needs a Railway project token in the repository secret RAILWAY_TOKEN. Without
-# it the job fails rather than passing: a check that could not run is not a
-# check that passed, which is the whole lesson of the incident behind it.
+# Needs a Railway **project** token in the repository secret RAILWAY_TOKEN —
+# created in the project's own Settings -> Tokens, scoped to one environment.
+# An account or workspace token works too, but it authenticates through a
+# different header, so it goes in RAILWAY_API_TOKEN instead.
+#
+# Without either, the job fails rather than passing: a check that could not run
+# is not a check that passed, which is the whole lesson of the incident behind
+# it.
 #
 # Deliberately not a required check on pull requests — a PR cannot change
 # Railway, so blocking merges on the state of a dashboard would couple the two
@@ -28,6 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

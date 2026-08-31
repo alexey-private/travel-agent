@@ -228,9 +228,11 @@ there is one copy of the answer.
 - [x] The drift script exits 0 when the dashboard matches the file.
 - [ ] The drift script reports a hand-made dashboard change within one scheduled
       run. **Blocked on a person:** the workflow needs a `RAILWAY_TOKEN`
-      repository secret (a Railway project token). Until it is added the
-      scheduled job fails with exit 2 — deliberately, since a check that could
-      not run is not a check that passed. The diff itself is unit-tested against
+      repository secret (a Railway project token, from the project's own
+      Settings → Tokens; an account or workspace token goes in
+      `RAILWAY_API_TOKEN` instead, since the two use different headers). Until
+      one is added the scheduled job fails with exit 2 — deliberately, since a
+      check that could not run is not a check that passed. The diff itself is unit-tested against
       fabricated live responses.
 - [x] The drift script never writes — asserted structurally, by the absence of
       any mutation in its source with comments stripped.
@@ -246,7 +248,7 @@ there is one copy of the answer.
 | `deploy/coverage.mjs` | Dockerfile `COPY` lines vs. watch patterns. Pure, no network. |
 | `deploy/drift.mjs` | The live query and the diff, kept separate so the diff is testable without a token. |
 | `deploy/check-drift.mjs` | The CLI. Exit 0 agree, 1 drift, 2 could-not-check. |
-| `deploy/*.test.mjs` | 22 tests on `node:test` — no jest, no new workspace, no dependency. |
+| `deploy/*.test.mjs` | 23 tests on `node:test` — no jest, no new workspace, no dependency. |
 | `.github/workflows/ci.yml` | New `deploy-config` job: checkout, node, `npm run test:deploy`. No install. |
 | `.github/workflows/railway-drift.yml` | Weekly + push to `main` + manual. |
 
@@ -263,7 +265,17 @@ the pipeline.
 **A missing token fails the job rather than skipping it.** The alternative —
 warn and exit 0 — reproduces the exact shape of the original incident: a check
 that is not running, and nobody knowing. Exit 2 is distinct from exit 1 so the
-two states stay legible in the log.
+two states stay legible in the log, and an *expired* credential lands there too
+rather than being read as drift.
+
+**The two Railway credential kinds are told apart by which variable they arrive
+in.** The spec asked for a project token, and a project token does not
+authenticate the way the CLI's own credential does: it travels in
+`Project-Access-Token`, not `Authorization: Bearer`. The tokens look alike, so
+nothing in the value distinguishes them — `RAILWAY_TOKEN` is the project one and
+`RAILWAY_API_TOKEN` the account or workspace one, following the Railway CLI's
+own naming. The first implementation sent everything as a Bearer, which would
+have answered 403 for exactly the credential the spec named.
 
 ## Estimate
 

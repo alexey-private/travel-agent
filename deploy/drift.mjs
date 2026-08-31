@@ -22,17 +22,33 @@ const QUERY = `query($id: String!) {
 }`;
 
 /**
+ * The header a Railway credential authenticates with.
+ *
+ * The two kinds are not interchangeable and the difference is invisible in the
+ * token itself: a **project** token — scoped to one environment of one project,
+ * which is what CI should hold — travels in `Project-Access-Token`, while an
+ * **account** or workspace token travels in `Authorization: Bearer`. Sending a
+ * project token as a Bearer gets a 403, which reads as "wrong project" rather
+ * than "wrong header" and costs an hour.
+ */
+export function authHeaderFor({ token, kind }) {
+  return kind === 'project'
+    ? { 'Project-Access-Token': token }
+    : { Authorization: `Bearer ${token}` };
+}
+
+/**
  * Live watch patterns per service name, for one environment.
  *
  * A service has one instance per environment, so the environment id filters
  * them; without it a project with a staging environment would report whichever
  * instance came back first.
  */
-export async function fetchLiveWatchPatterns({ token, projectId, environmentId, fetchImpl = fetch }) {
+export async function fetchLiveWatchPatterns({ credential, projectId, environmentId, fetchImpl = fetch }) {
   const response = await fetchImpl(API, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaderFor(credential),
       'Content-Type': 'application/json',
       'User-Agent': USER_AGENT,
     },

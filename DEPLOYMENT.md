@@ -265,9 +265,12 @@ Two checks keep that file honest, split by whether they need a credential:
   new build input goes red in the commit that introduces it, before anything
   deploys.
 - `npm run check:railway-drift` compares the file against the live Railway API
-  and exits non-zero on a difference. It needs a project token in
-  `RAILWAY_TOKEN` (falling back to `~/.railway/config.json` locally) and runs
-  weekly from
+  and exits non-zero on a difference. It needs a **project** token in
+  `RAILWAY_TOKEN` — project Settings → Tokens, scoped to one environment — or
+  an account/workspace token in `RAILWAY_API_TOKEN`; the two authenticate
+  through different headers, which is why they are separate variables. Locally
+  it falls back to the credential `railway login` leaves in
+  `~/.railway/config.json`, which expires within hours. It runs weekly from
   [.github/workflows/railway-drift.yml](.github/workflows/railway-drift.yml).
   It is read-only: it reports a difference and never repairs one, because a
   script that writes production config turns a wrong file into a wrong

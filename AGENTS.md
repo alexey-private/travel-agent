@@ -81,7 +81,7 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [deploy/coverage.mjs](deploy/coverage.mjs) | Does every `COPY` in a Dockerfile sit behind that service's watch patterns? Credential-free, so it runs in ordinary CI |
 | [deploy/check-drift.mjs](deploy/check-drift.mjs) | The same file against the live Railway API — read-only, on a schedule |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | tsc + tests (real pgvector service container) on push/PR to main |
-| [.github/workflows/railway-drift.yml](.github/workflows/railway-drift.yml) | Weekly read-only drift check against Railway; needs the `RAILWAY_TOKEN` secret |
+| [.github/workflows/railway-drift.yml](.github/workflows/railway-drift.yml) | Weekly read-only drift check against Railway; needs a `RAILWAY_TOKEN` (project token) or `RAILWAY_API_TOKEN` (account) secret — the two use different headers |
 
 ---
 
@@ -488,6 +488,13 @@ rejected, is in
   it to a person — a script that repaired the dashboard would turn a wrong
   expectation file into a wrong deployment. A test asserts the absence of any
   mutation in its source, because exercising the happy path cannot.
+- **Which variable a Railway token arrives in decides its header.** A project
+  token (`RAILWAY_TOKEN`, scoped to one environment, what CI should hold) goes
+  in `Project-Access-Token`; an account or workspace token
+  (`RAILWAY_API_TOKEN`), and the credential `railway login` leaves behind, go in
+  `Authorization: Bearer`. The tokens look alike, so nothing in the value can
+  tell them apart, and sending one as the other answers 403 — which reads as
+  "wrong project" rather than "wrong header".
 
 ---
 
