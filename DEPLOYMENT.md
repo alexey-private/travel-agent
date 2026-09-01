@@ -75,7 +75,10 @@ once the container is up.
 | `ANTHROPIC_API_KEY` | your key |
 | `TAVILY_API_KEY` | required |
 | `OPENWEATHER_API_KEY` | required |
-| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`) — without it the endpoint returns `503`. This is the only copy: the web mic button and Telegram voice notes both go through this route, so the bot needs no key of its own |
+| `OPENAI_API_KEY` | **load-bearing twice over — do not prune it as "the Whisper key".** (a) Voice message transcription (`/api/transcribe`): without it the endpoint returns `503`. This is the only copy — the web mic button and Telegram voice notes both go through this route, so the bot needs no key of its own. (b) It is the standby the automatic provider fallback answers from. Removing it does not fail loudly: chat keeps working, and the next Anthropic outage takes it down exactly as 2026-08-31 did |
+| `LLM_FALLBACK_ENABLED` | optional — `true` by default. `false` is the kill switch: the active provider's error propagates unchanged, as before the feature existed. Set it only to rule the fallback out while diagnosing something else |
+| `LLM_FALLBACK_COOLDOWN_MS` | optional — `300000` (5 min) by default. How long the standby keeps answering before the primary is probed again; `0` retries the primary on every request |
+| `ANTHROPIC_REASONING_MODEL` / `ANTHROPIC_FAST_MODEL` / `OPENAI_REASONING_MODEL` / `OPENAI_FAST_MODEL` | optional — per-provider model ids, each defaulting to that provider's built-in. Pin the standby's ids here, not through `REASONING_MODEL` / `FAST_MODEL`, which mean "the model the *active* provider uses" and are read for that provider only |
 | `VOYAGE_API_KEY` | optional (random-vector fallback if unset) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |

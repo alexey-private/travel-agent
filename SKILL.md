@@ -153,6 +153,48 @@ boundary. Worked example:
 
 ---
 
+## SKILL: force-provider-failure
+
+**When:** Anything touching
+[providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts) or one of its
+three call sites. Every unit test mocks `@langchain/anthropic` and
+`@langchain/openai`, so none of them exercises a real socket, a real stream or a
+real 401 — this is the only way to see the feature work.
+
+`env.ts` loads `./.env` then `../.env` and `dotenv` never overrides a variable
+already in the environment — so the file has to sit at the **repo root** under
+the name `.env`, and in a worktree there is none to clash with.
+
+```bash
+# 1. Postgres up (skip if 5432 already answers), then an env with a dead key.
+sed -e 's/^ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=sk-ant-invalid/' \
+    -e 's/^PORT=.*/PORT=3010/' \
+    -e 's/^LLM_FALLBACK_COOLDOWN_MS=.*/LLM_FALLBACK_COOLDOWN_MS=120000/' \
+    /path/to/real/.env > .env
+# 2. Run it. A valid OPENAI_API_KEY must survive the copy — it is the standby.
+cd backend-langgraph && npx tsx src/index.ts 2>&1 | tee /tmp/backend.log
+```
+
+Then, against `http://127.0.0.1:3010/api/chat` with
+`{"userId":"...","message":"...","agentType":"travel"}`:
+
+| Send | Expect in the log |
+|---|---|
+| one message | a streamed answer + suggestions, and **one** error-level `[llm-fallback] reasonNode: anthropic failed, answering with openai` carrying the original error |
+| a second, inside the cooldown | `anthropic is in cooldown` and **no** `AuthenticationError` — the primary was not attempted |
+| `timeout --signal=KILL 8 curl -sN …` mid-answer | **nothing at all** — no `[llm-fallback]`, no `agent error` |
+
+**Size the cooldown against the answer latency, not against your patience.** A
+full answer takes ~20 s of tool calls, so at `LLM_FALLBACK_COOLDOWN_MS=20000`
+consecutive requests land *outside* the window and every one re-probes Anthropic
+— correct behaviour, and indistinguishable at a glance from a breaker that does
+not work.
+
+**Shred the file afterwards** (`shred -u .env`): it is a copy of real
+credentials sitting in a worktree.
+
+---
+
 ## SKILL: backfill-embeddings
 
 **When:** After adding `conversation_embeddings` support or suspecting missing embeddings.
