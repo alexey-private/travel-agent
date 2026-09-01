@@ -1,0 +1,42 @@
+# Has anyone changed the Railway deploy config by hand?
+#
+# The committed deploy/railway-services.json is only a claim until something
+# compares it to Railway. This is that comparison. It is read-only — it reports
+# a difference and never repairs one, because a script that quietly wrote
+# production config would turn a wrong file into a wrong deployment.
+#
+# Needs a Railway **project** token in the repository secret RAILWAY_TOKEN —
+# created in the project's own Settings -> Tokens, scoped to one environment.
+# An account or workspace token works too, but it authenticates through a
+# different header, so it goes in RAILWAY_API_TOKEN instead.
+#
+# Without either, the job fails rather than passing: a check that could not run
+# is not a check that passed, which is the whole lesson of the incident behind
+# it.
+#
+# Deliberately not a required check on pull requests — a PR cannot change
+# Railway, so blocking merges on the state of a dashboard would couple the two
+# for no gain.
+
+name: Railway drift
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC.
+    - cron: '0 6 * * 1'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  watch-paths:
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check:railway-drift
