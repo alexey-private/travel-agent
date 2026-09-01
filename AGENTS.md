@@ -41,6 +41,9 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/graph/buildGraph.ts](backend-langgraph/src/graph/buildGraph.ts) | Shared graph builder (model → tools → loop) |
 | [backend-langgraph/src/graph/history.ts](backend-langgraph/src/graph/history.ts) | Converts DB history to LangChain messages |
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
+| [backend-langgraph/src/llm/createModel.ts](backend-langgraph/src/llm/createModel.ts) | `createModel(size, opts, provider)` and `modelId(provider, size)` — which model id a *given* provider uses, not the active one |
+| [backend-langgraph/src/llm/providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts) | `withProviderFallback`, `standbyProvider`, `isAbort`, the cooldown breaker — the whole fallback policy, in one module; see [LLM Provider Fallback](#llm-provider-fallback) |
+| [backend-langgraph/src/llm/modelPair.ts](backend-langgraph/src/llm/modelPair.ts) | One recipe, two models: the primary built now, the standby on first use — so it cannot drift, and a process that never fails builds no second model |
 | [shared/i18n/](shared/i18n/) | `@travel-agent/i18n` — `Locale` (`en`/`he`/`ru`), `LOCALES`, `isLocale`, `dirOf`, `LOCALE_LABELS`, `LANGUAGE_NAMES`, `PluralForms`, `perLocale()`, `translate()`. The one definition all three packages import; see [Shared i18n Package](#shared-i18n-package) |
 | [shared/i18n/src/perLocale.ts](shared/i18n/src/perLocale.ts) | One `Intl` formatter per locale, built on first use — building one costs ~30× using it, and a list formats every row |
 | [shared/i18n/src/scripts.ts](shared/i18n/src/scripts.ts) | Which characters belong to which writing system — `RTL_RANGE`, `HEBREW_RANGE`, `CYRILLIC_RANGE`, `LATIN_RANGE`, `scriptRe`, `containsRtl`. The one place the ranges are written, and written as escapes |
@@ -540,7 +543,17 @@ push_subscriptions   — user_id UUID FK → users.id, endpoint, p256dh, auth
 ```bash
 DATABASE_URL          # PostgreSQL connection string (required)
 ANTHROPIC_API_KEY     # or OPENAI_API_KEY
+OPENAI_API_KEY        # Whisper (/api/transcribe) AND the fallback standby — see
+                      # LLM Provider Fallback below before removing it
 LLM_PROVIDER          # 'anthropic' (default) | 'openai'
+REASONING_MODEL       # the model the ACTIVE provider uses for the reasoning loop
+FAST_MODEL            # the model the ACTIVE provider uses for the short calls
+ANTHROPIC_REASONING_MODEL   # per-provider ids; these win over the two above and
+ANTHROPIC_FAST_MODEL        # are what a standby provider reads. Each defaults to
+OPENAI_REASONING_MODEL      # that provider's built-in id
+OPENAI_FAST_MODEL
+LLM_FALLBACK_ENABLED       # 'true' (default) | 'false' — the kill switch
+LLM_FALLBACK_COOLDOWN_MS   # 300000 (default); 0 probes the primary every request
 TAVILY_API_KEY        # Web search (required)
 OPENWEATHER_API_KEY   # Weather tool (required)
 VOYAGE_API_KEY        # Embeddings (optional — random fallback in dev)
@@ -551,6 +564,81 @@ ENCRYPTION_KEY        # >=32 chars; iCloud credential encryption. Required when 
 ALLOWED_ORIGIN        # Browser origins allowed to read this API, comma-separated.
                       # Required when NODE_ENV=production
 ```
+
+---
+
+## LLM Provider Fallback
+
+On 2026-08-31 the Anthropic balance ran out and `/api/chat` answered
+`code: 'agent_failed'` for ~45 minutes; the repair was an env edit **plus** a
+container restart. [providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts)
+is what removes the human from that loop: when the active provider errors, the
+same call is retried on the other one.
+
+The whole policy lives in that one module. The three call sites —
+[reasonNode.ts](backend-langgraph/src/graph/nodes/reasonNode.ts),
+[SuggestionService.ts](backend-langgraph/src/services/SuggestionService.ts),
+[MemoryService.ts](backend-langgraph/src/services/MemoryService.ts) — each hand
+it a `(provider) => Promise<T>` attempt and carry none of the decisions.
+`Runnable.withFallbacks()` cannot do this job: the JS implementation takes
+`{ fallbacks }` and no error predicate, so it diverts on aborts too — the one
+error that must not divert.
+
+**What diverts:** any error from the primary provider, with the original error
+attached to the log line. Distinguishing "the balance ran out" from "our tool
+schema is malformed" is not attempted, and answering the second one on the
+standby instead of surfacing it is the trade-off this design knowingly accepts.
+
+**What deliberately does not:**
+
+- **An abort.** The user has already left; a second full LLM call would be spent
+  inside a budget that has expired. `isAbort` is the one place that answers this,
+  and [chat.ts](backend-langgraph/src/routes/chat.ts) asks it too rather than
+  testing `err.name === 'AbortError'` — that check does not recognise LangChain's
+  `ModelAbortError`, which is what the signal firing *inside* a model call
+  produces, i.e. the most common shape of a real disconnect.
+- **A failure after the first token.** `reasonNode` streams and the frontend
+  *appends*, so retrying would paste a second answer onto a truncated one. The
+  per-attempt `handleLLMNewToken` spy is the veto, and it lives in the
+  per-invocation closure: the model is a singleton shared by concurrent requests,
+  so a flag anywhere outside would let one user's stream veto another's retry.
+- **Anything at all when there is no standby key.** Replacing a clear Anthropic
+  error with a confusing OpenAI one helps nobody.
+
+None of the three trips the breaker — nothing is wrong with the provider in any
+of them.
+
+**Why the breaker exists.** It is the circuit-breaker pattern, under that name.
+A hung provider's connect-and-fail time is spent inside the same 60 s budget
+`/api/chat` gives the entire request, so paying it on every message during an
+outage is how a fallback still produces timeouts. After a
+trip, the primary is skipped for `LLM_FALLBACK_COOLDOWN_MS` (default 5 min) and
+then probed again — recovery needs no human. It is module state: one process, one
+breaker. A scaled-out deployment has each instance probe on its own, which is
+duplicated work rather than a wrong answer.
+
+**`mergeConfigs`, never `ensureConfig`.** This is the one thing here that fails
+silently and invisibly. LangGraph calls the node with a real config carrying its
+callback manager; `mergeConfigs` copies that manager and *adds* our handler, so
+`streamEvents`' own handler survives. `ensureConfig` — and passing
+`{ callbacks: [spy] }` straight to `.invoke()` — assigns `callbacks` wholesale,
+which detaches the run from `streamEvents`: **text stops reaching the browser**
+while every existing test stays green, because they watch what `invoke` was
+handed, not what the user sees.
+
+**A standby is built on first use, never alongside the primary.**
+[modelPair.ts](backend-langgraph/src/llm/modelPair.ts) holds that, from one
+recipe, so the standby cannot drift from the primary in max tokens, streaming, or
+the tools it is bound to. A process whose provider never fails constructs no
+second model and reads no second key.
+
+**Model ids are per-provider.** `modelId(provider, size)` in
+[createModel.ts](backend-langgraph/src/llm/createModel.ts) is a function of the
+pair and deliberately not of the *active* provider — reading `REASONING_MODEL`
+for a standby is how a fallback ends up asking OpenAI for `claude-sonnet-4-6`.
+Defaulting happens there and nowhere else;
+[env.ts](backend-langgraph/src/config/env.ts) deliberately no longer defaults
+them.
 
 ---
 
