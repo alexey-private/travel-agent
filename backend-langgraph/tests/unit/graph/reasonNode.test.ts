@@ -9,6 +9,8 @@
  *   - Falls back to the standby provider when the primary one fails, and
  *     deliberately does not when the answer has already started streaming or
  *     the request was aborted
+ *   - Builds the system message for the provider about to answer: Anthropic's
+ *     cache_control block never reaches the standby
  */
 
 import { createReasonNode } from '@/graph/nodes/reasonNode';
@@ -83,6 +85,22 @@ function fireNewToken(config: RunnableConfig): void {
     ? (callbacks as TokenHandler[])
     : ((callbacks as CallbackManager).handlers as unknown as TokenHandler[]);
   for (const handler of handlers) handler.handleLLMNewToken?.('tok');
+}
+
+/** The system message a provider's invoke spy was handed. */
+function sysMessageOf(invokeSpy: jest.Mock, call = 0): SystemMessage {
+  return invokeSpy.mock.calls[call][0][0] as SystemMessage;
+}
+
+function sysTextOf(invokeSpy: jest.Mock, call = 0): string {
+  const content = sysMessageOf(invokeSpy, call).content;
+  return typeof content === 'string' ? content : (content[0] as { text: string }).text;
+}
+
+/** Every key appearing on the system content's blocks; empty for plain-string content. */
+function sysContentKeys(invokeSpy: jest.Mock, call = 0): string[] {
+  const content = sysMessageOf(invokeSpy, call).content;
+  return typeof content === 'string' ? [] : content.flatMap(block => Object.keys(block as object));
 }
 
 function abortError(): Error {
@@ -217,7 +235,9 @@ describe('createReasonNode', () => {
       expect(result).toEqual({ messages: [standbyResponse] });
     });
 
-    it('hands the standby the same messages the primary was given', async () => {
+    it('hands the standby the same conversation and the same prompt text', async () => {
+      // The same conversation, deliberately not the same system message — see the
+      // cache_control cases below.
       mockInvoke.mockRejectedValueOnce(new Error('down'));
       const node = createReasonNode(buildPrompt, mockTools);
       const userMsg = new HumanMessage('Find flights to Paris');
@@ -227,6 +247,47 @@ describe('createReasonNode', () => {
       const [standbyMessages] = mockOpenAIInvoke.mock.calls[0];
       expect(standbyMessages).toHaveLength(2);
       expect(standbyMessages[1]).toBe(userMsg);
+      expect(sysTextOf(mockOpenAIInvoke)).toBe(sysTextOf(mockInvoke));
+    });
+
+    it("keeps Anthropic's prompt-caching block on the primary's system message", async () => {
+      // The block is what the feature is for; stripping it everywhere would fix
+      // the standby by paying for the primary's prompt on every turn.
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState());
+
+      expect(sysMessageOf(mockInvoke).content).toEqual([
+        { type: 'text', text: 'prompt', cache_control: { type: 'ephemeral' } },
+      ]);
+    });
+
+    it("never sends Anthropic's cache_control to the standby", async () => {
+      // @langchain/openai sends SystemMessage as role "developer" for gpt-5.x, and
+      // OpenAI rejects an unknown key on a developer-role content block:
+      // 400 Unknown parameter: 'messages[0].content[0].cache_control'. Under
+      // role "system" — what gpt-4o gets — the same block passes, so this is
+      // invisible until the standby's model id leaves the gpt-4 family.
+      mockInvoke.mockRejectedValueOnce(new Error('down'));
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState());
+
+      expect(JSON.stringify(sysMessageOf(mockOpenAIInvoke).content)).not.toContain('cache_control');
+    });
+
+    it('gives the standby a system message carrying no vendor keys at all', async () => {
+      // Named keys only would make this "delete the one extension we were bitten
+      // by"; the rule is that a non-Anthropic attempt gets the portable shape.
+      mockInvoke.mockRejectedValueOnce(new Error('down'));
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState());
+
+      const extraneous = sysContentKeys(mockOpenAIInvoke).filter(
+        key => key !== 'type' && key !== 'text',
+      );
+      expect(extraneous).toEqual([]);
     });
 
     it('binds the standby to the very tools array the primary was bound to', async () => {

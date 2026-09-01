@@ -626,6 +626,23 @@ which detaches the run from `streamEvents`: **text stops reaching the browser**
 while every existing test stays green, because they watch what `invoke` was
 handed, not what the user sees.
 
+**The system prompt is built for the provider about to answer it.**
+`cache_control: { type: 'ephemeral' }` is an Anthropic extension, and it used to
+ride along to the standby on the evidence that `ChatOpenAI` tolerated the unknown
+key. It tolerates it only under `role: "system"`. `@langchain/openai` maps
+`SystemMessage` to `role: "developer"` for gpt-5.x and to `role: "system"` for
+gpt-4o, and a developer-role content block is validated strictly:
+`400 Unknown parameter: 'messages[0].content[0].cache_control'`. So the
+ride-along pinned the standby to the gpt-4 family, silently — nothing failed
+until Anthropic was already down. `reasonNode` now builds the message per
+attempt: Anthropic gets the cached block, anyone else gets the same text with no
+vendor keys on it, chosen by an allowlist (`=== 'anthropic'`) so a third provider
+defaults to the portable shape. It is the only place in `src/` that writes
+`cache_control`; the two `'fast'` call sites send plain strings. A green unit
+suite proves nothing here — every fallback test mocks both provider SDKs, which
+is how the pin shipped. Use the `force-provider-failure` recipe in SKILL.md with
+a gpt-5.x id in `OPENAI_REASONING_MODEL`.
+
 **A standby is built on first use, never alongside the primary.**
 [modelPair.ts](backend-langgraph/src/llm/modelPair.ts) holds that, from one
 recipe, so the standby cannot drift from the primary in max tokens, streaming, or

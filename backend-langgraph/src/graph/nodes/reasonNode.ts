@@ -2,7 +2,7 @@ import { SystemMessage, ContentBlock } from '@langchain/core/messages';
 import { mergeConfigs, type RunnableConfig } from '@langchain/core/runnables';
 import { StructuredToolInterface } from '@langchain/core/tools';
 import { AgentStateType } from '../state';
-import { createModel } from '../../llm/createModel';
+import { createModel, type Provider } from '../../llm/createModel';
 import { createModelPair } from '../../llm/modelPair';
 import { withProviderFallback } from '../../llm/providerFallback';
 
@@ -23,6 +23,9 @@ import { withProviderFallback } from '../../llm/providerFallback';
  * it are that an abort never diverts, and that an answer which has already put a
  * token on the wire never diverts either: the frontend appends text, so a second
  * attempt would paste a whole answer onto the tail of a truncated one.
+ *
+ * The prompt itself is built per attempt, because its shape belongs to the
+ * provider answering it — see systemMessageFor below.
  */
 export function createReasonNode(
   buildSystemPrompt: (state: AgentStateType) => string,
@@ -38,10 +41,28 @@ export function createReasonNode(
   );
 
   return async (state: AgentStateType, config?: RunnableConfig) => {
-    // cache_control is an Anthropic extension forwarded as-is; ContentBlock only
-    // requires `type: string` and allows arbitrary extra keys, so no cast is needed.
-    const sysContent: ContentBlock[] = [{ type: 'text', text: buildSystemPrompt(state), cache_control: { type: 'ephemeral' } }];
-    const messages = [new SystemMessage({ content: sysContent }), ...state.messages];
+    // One prompt, two shapes. cache_control is an Anthropic extension, and it used
+    // to ride along to the standby on the evidence that ChatOpenAI tolerated the
+    // unknown key. It tolerates it only under role "system" — which is what
+    // @langchain/openai uses for gpt-4o and not for gpt-5.x, where a developer-role
+    // content block is validated strictly:
+    //   400 Unknown parameter: 'messages[0].content[0].cache_control'
+    // So the ride-along silently pinned the standby to the gpt-4 family, and
+    // nothing failed until Anthropic was already down. Anthropic gets the cached
+    // block; anyone else gets the same text with no vendor keys on it. An
+    // allowlist and not `!== 'openai'`: a third provider must default to the
+    // portable shape rather than inherit another vendor's extension.
+    //
+    // ContentBlock requires only `type: string` and allows extra keys, so the
+    // cache_control block needs no cast.
+    const systemPrompt = buildSystemPrompt(state);
+    const systemMessageFor = (provider: Provider) => {
+      if (provider !== 'anthropic') return new SystemMessage(systemPrompt);
+      const content: ContentBlock[] = [
+        { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+      ];
+      return new SystemMessage({ content });
+    };
 
     // Per invocation, not per node: the model is a singleton shared by concurrent
     // requests, so a flag anywhere outside this closure would let one user's
@@ -60,7 +81,7 @@ export function createReasonNode(
         const cfg = mergeConfigs(config, {
           callbacks: [{ handleLLMNewToken: () => { streamed = true; } }],
         });
-        return modelFor(provider).invoke(messages, cfg);
+        return modelFor(provider).invoke([systemMessageFor(provider), ...state.messages], cfg);
       },
       {
         context: 'reasonNode',

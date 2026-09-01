@@ -461,6 +461,11 @@ The Anthropic-only `cache_control: { type: 'ephemeral' }` rides along to OpenAI
 unchanged: verified tolerated by `ChatOpenAI` on 2026-08-31, and a per-provider
 prompt path is a second prompt to keep in sync for no benefit.
 
+> **Wrong, and corrected in Task 7 (2026-09-01).** The verification was real and
+> the conclusion still false: `ChatOpenAI` tolerates the key under `role: "system"`,
+> which is what it uses for gpt-4o and not for gpt-5.x. The ride-along pinned the
+> standby to the gpt-4 family. See spec R12.
+
 - [x] **Step 1: Extend the test file**
 
 Give `ChatOpenAI` a real mock with its own `bindTools` → `invoke` spy, so a test
@@ -666,6 +671,66 @@ to the fallback, and answered by the classifier T2 already built.
 
 ---
 
+### Task 7: The system prompt is built for the provider that answers (R12)
+
+**Why it is a task and not a footnote.** T3 forwarded one system message to both
+providers on the strength of a live check against `gpt-4o`. On 2026-09-01 the
+OpenAI model ids were moved to `gpt-5.5` / `gpt-5.4-mini` — an env-only change by
+design — and the forced-failure run answered `code: 'agent_failed'`:
+
+```
+[llm-fallback] reasonNode: anthropic failed, answering with openai   AuthenticationError: 401
+[llm-fallback] reasonNode: openai failed too — no provider left
+    BadRequestError: 400 Unknown parameter: 'messages[0].content[0].cache_control'.
+```
+
+The ids were reverted in production the same hour. Until this task lands,
+`OPENAI_REASONING_MODEL` cannot leave the gpt-4 family, which makes R9's "settable
+from the environment" true only on paper.
+
+**The change** — [reasonNode.ts](../../../backend-langgraph/src/graph/nodes/reasonNode.ts),
+the only place in `src/` that writes `cache_control`. `buildSystemPrompt(state)` stays
+one call per invocation; only the *message* becomes a function of the attempt's
+provider, built inside the attempt where the provider is known:
+
+```ts
+const systemPrompt = buildSystemPrompt(state);
+const systemMessageFor = (provider: Provider) =>
+  provider === 'anthropic'
+    ? new SystemMessage({ content: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }] })
+    : new SystemMessage(systemPrompt);
+```
+
+An allowlist (`=== 'anthropic'`), not a denylist (`!== 'openai'`): a third provider
+added later must default to the portable shape, not inherit another vendor's
+extension.
+
+The two `'fast'` call sites need nothing — neither writes a content block.
+
+**Tests** — [reasonNode.test.ts](../../../backend-langgraph/tests/unit/graph/reasonNode.test.ts),
+written first and confirmed failing:
+
+```
+- the primary still receives the cache_control block          (no regression on the paid-for feature)
+- the standby receives the same prompt text with no cache_control anywhere in it
+- the standby's system content carries no vendor keys at all  (deep, not just the first block)
+- state.messages still reach the standby unchanged            (existing case, kept)
+```
+
+The third is what stops the fix from being "delete the key I happen to know
+about". `'hands the standby the same messages the primary was given'` needs its
+name and its assertion updated: the conversation is the same, the system message
+deliberately is not.
+
+**Verification.** `tsc`, the full suite, `/code-review`, and then the acceptance
+criterion this was missing — the `force-provider-failure` recipe in SKILL.md with
+`OPENAI_REASONING_MODEL=gpt-5.5` in the worktree `.env`. A green unit suite proves
+nothing here: every fallback test mocks both provider SDKs, which is exactly why
+the bug shipped.
+
+
+---
+
 ## Acceptance
 
 The spec's nine criteria, restated as the exit condition for this plan:
@@ -679,3 +744,4 @@ The spec's nine criteria, restated as the exit condition for this plan:
 - [x] `LLM_FALLBACK_ENABLED=false` restores today's behaviour exactly (T2)
 - [x] A standby is never constructed with the active provider's model id (T1)
 - [x] `tsc` clean and the full suite green, at or above T0's baseline (every task)
+- [ ] A gpt-5.x standby answers a forced failure — the prompt carries no `cache_control` (T7)
