@@ -96,6 +96,21 @@ actually gets used deserves ids that can be updated without a deploy.
 primary's error propagates unchanged. Attempting a call that cannot be authenticated
 would only replace a clear Anthropic error with a confusing OpenAI one.
 
+**R12. The prompt is shaped for the provider about to answer it.**
+`cache_control: { type: 'ephemeral' }` is an Anthropic extension, and it used to ride
+along to the standby unchanged — a deliberate decision, on the evidence that
+`ChatOpenAI` tolerated the unknown key. It tolerates it only under `role: "system"`.
+`@langchain/openai` maps `SystemMessage` to `role: "developer"` for gpt-5.x and to
+`role: "system"` for gpt-4o, and OpenAI validates developer-role content blocks
+strictly: `400 Unknown parameter: 'messages[0].content[0].cache_control'`. The
+ride-along therefore pinned the standby to the pre-gpt-5 families — silently, since
+nothing fails until Anthropic is already down, which is the one moment the fallback
+exists for. The system message is built per attempt from the provider that is about to
+answer: Anthropic gets the cached block, anyone else gets the same text with no vendor
+keys on it. Verified on 2026-09-01 by a matrix over {gpt-4o, gpt-5.5} × {system,
+developer} × {with, without `cache_control`}: **both** models pass under `system` and
+**both** 400 under `developer`, so the model id was never the variable.
+
 **R11. There is an off switch.** A kill switch that disables the whole mechanism, and a
 cooldown of `0` that means "retry the primary every request".
 
@@ -229,6 +244,9 @@ impossible to turn off.
 8. A standby model is never constructed with the active provider's model id.
 9. `npx tsc -p backend-langgraph/tsconfig.json --noEmit` clean, and the full
    backend-langgraph suite green.
+10. With `OPENAI_REASONING_MODEL` pointed at a gpt-5.x id and the primary forced to
+   fail, a chat message still answers — i.e. criterion 1 holds for a standby model
+   outside the gpt-4 family.
 
 ---
 
