@@ -1,4 +1,7 @@
 import { SuggestionService } from '@/services/SuggestionService';
+import { __resetFallbackStateForTests } from '@/llm/providerFallback';
+import { env } from '@/config/env';
+import { ChatOpenAI } from '@langchain/openai';
 
 jest.mock('@/config/env', () => ({
   env: {
@@ -13,19 +16,36 @@ jest.mock('@/config/env', () => ({
 }));
 
 const mockInvoke = jest.fn();
+// The standby gets a spy of its own, so a test can prove *which* provider
+// answered rather than merely that something did.
+const mockOpenAIInvoke = jest.fn();
 jest.mock('@langchain/anthropic', () => ({
   ChatAnthropic: jest.fn().mockImplementation(() => ({ invoke: mockInvoke })),
 }));
 jest.mock('@langchain/openai', () => ({
-  ChatOpenAI: jest.fn().mockImplementation(() => ({ invoke: mockInvoke })),
+  ChatOpenAI: jest.fn().mockImplementation(() => ({ invoke: mockOpenAIInvoke })),
 }));
+
+const MockChatOpenAI = ChatOpenAI as unknown as jest.Mock;
 
 describe('SuggestionService', () => {
   let service: SuggestionService;
 
   beforeEach(() => {
+    __resetFallbackStateForTests();
     mockInvoke.mockReset();
+    // Unavailable unless a test says otherwise: a test that reaches the standby
+    // without meaning to then reads as "both providers down" — the documented
+    // degraded path — rather than as an undefined response.
+    mockOpenAIInvoke.mockReset().mockRejectedValue(new Error('standby not configured'));
+    MockChatOpenAI.mockClear();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     service = new SuggestionService();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('getSuggestions', () => {
@@ -86,12 +106,19 @@ describe('SuggestionService', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns empty array when model invoke throws', async () => {
+    it('returns empty array when model invoke throws and there is no standby', async () => {
+      // Deployments with no OPENAI_API_KEY have no standby at all, and this is
+      // the case that keeps proving what it always proved: one provider, one
+      // failure, no suggestions. Without removing the key the fallback would
+      // answer here, and the test would quietly become a second copy of
+      // 'still degrades to no suggestions when both providers fail'.
+      jest.replaceProperty(env as { OPENAI_API_KEY?: string }, 'OPENAI_API_KEY', '');
       mockInvoke.mockRejectedValue(new Error('LLM unavailable'));
 
       const result = await service.getSuggestions('Question', 'Answer');
 
       expect(result).toEqual([]);
+      expect(mockOpenAIInvoke).not.toHaveBeenCalled();
     });
 
     it('uses shopping persona when agentType is shopping', async () => {
@@ -137,6 +164,67 @@ describe('SuggestionService', () => {
 
       const promptContent = mockInvoke.mock.calls[0][0][0].content as string;
       expect(promptContent).toContain('English');
+    });
+  });
+
+  /**
+   * Suggestions already swallowed every error into `return []`, so during the
+   * 2026-08-31 outage they were down and silent. The fallback has to be visible
+   * from the outside — which provider answered, and a loud line when neither did.
+   */
+  describe('provider fallback', () => {
+    it('answers from the standby provider when the primary one fails', async () => {
+      mockInvoke.mockRejectedValue(new Error('credit balance is too low'));
+      mockOpenAIInvoke.mockResolvedValue({ content: '["From OpenAI?", "Q2?", "Q3?"]' });
+
+      const result = await service.getSuggestions('Question', 'Answer');
+
+      expect(result).toEqual(['From OpenAI?', 'Q2?', 'Q3?']);
+      expect(mockOpenAIInvoke).toHaveBeenCalledTimes(1);
+    });
+
+    it('hands the standby the same prompt the primary was given', async () => {
+      mockInvoke.mockRejectedValue(new Error('overloaded'));
+      mockOpenAIInvoke.mockResolvedValue({ content: '["a","b","c"]' });
+
+      await service.getSuggestions('Find flights', 'Here are flights.', 'shopping', 'he');
+
+      const primaryPrompt = mockInvoke.mock.calls[0][0][0].content as string;
+      const standbyPrompt = mockOpenAIInvoke.mock.calls[0][0][0].content as string;
+      expect(standbyPrompt).toBe(primaryPrompt);
+      expect(standbyPrompt).toContain('shopping assistant');
+      expect(standbyPrompt).toContain('Hebrew');
+    });
+
+    it('never constructs the standby while the primary is answering', async () => {
+      mockInvoke.mockResolvedValue({ content: '["Q1?", "Q2?", "Q3?"]' });
+
+      await service.getSuggestions('Question', 'Answer');
+      await service.getSuggestions('Another', 'Answer');
+
+      expect(MockChatOpenAI).not.toHaveBeenCalled();
+    });
+
+    it('constructs the standby once and reuses it across further failures', async () => {
+      mockInvoke.mockRejectedValue(new Error('down'));
+      mockOpenAIInvoke.mockResolvedValue({ content: '["a","b","c"]' });
+
+      await service.getSuggestions('Q1', 'A1');
+      await service.getSuggestions('Q2', 'A2');
+
+      expect(MockChatOpenAI).toHaveBeenCalledTimes(1);
+      expect(mockOpenAIInvoke).toHaveBeenCalledTimes(2);
+    });
+
+    it('still degrades to no suggestions when both providers fail', async () => {
+      mockInvoke.mockRejectedValue(new Error('anthropic down'));
+      mockOpenAIInvoke.mockRejectedValue(new Error('openai down too'));
+
+      const result = await service.getSuggestions('Question', 'Answer');
+
+      // Today's behaviour exactly — but no longer silent.
+      expect(result).toEqual([]);
+      expect(console.error).toHaveBeenCalled();
     });
   });
 });
