@@ -6,10 +6,16 @@
  *   - Passes [SystemMessage(prompt), ...state.messages] to the bound model
  *   - Returns { messages: [response] }
  *   - Creates the model once in the closure (not per-invocation)
+ *   - Falls back to the standby provider when the primary one fails, and
+ *     deliberately does not when the answer has already started streaming or
+ *     the request was aborted
  */
 
 import { createReasonNode } from '@/graph/nodes/reasonNode';
+import { __resetFallbackStateForTests } from '@/llm/providerFallback';
 import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { getCallbackManagerForConfig, type RunnableConfig } from '@langchain/core/runnables';
+import type { CallbackManager } from '@langchain/core/callbacks/manager';
 import type { DynamicStructuredTool } from '@langchain/core/tools';
 import type { AgentStateType } from '@/graph/state';
 
@@ -29,13 +35,21 @@ jest.mock('@/config/env', () => ({
 
 const mockInvoke = jest.fn();
 const mockBindTools = jest.fn();
+// The standby gets spies of its own, so a test can prove *which* provider answered
+// rather than merely that something did.
+const mockOpenAIInvoke = jest.fn();
+const mockOpenAIBindTools = jest.fn();
 
 jest.mock('@langchain/anthropic', () => ({
   ChatAnthropic: jest.fn().mockImplementation(() => ({
     bindTools: mockBindTools,
   })),
 }));
-jest.mock('@langchain/openai', () => ({ ChatOpenAI: jest.fn() }));
+jest.mock('@langchain/openai', () => ({
+  ChatOpenAI: jest.fn().mockImplementation(() => ({
+    bindTools: mockOpenAIBindTools,
+  })),
+}));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,15 +67,49 @@ function makeState(overrides: Partial<AgentStateType> = {}): AgentStateType {
   };
 }
 
+type TokenHandler = { handleLLMNewToken?: (token: string) => void };
+
+/**
+ * Fires a streamed token through the very config the node built, which is the
+ * only honest way to test the "already streaming" veto: a stubbed flag would
+ * prove the veto works while saying nothing about whether the callback that
+ * sets it ever reaches the model.
+ */
+function fireNewToken(config: RunnableConfig): void {
+  const callbacks = config.callbacks;
+  // An array when the node is called bare, a CallbackManager when LangGraph
+  // calls it — mergeConfigs merges into either, and both shapes are tested.
+  const handlers = Array.isArray(callbacks)
+    ? (callbacks as TokenHandler[])
+    : ((callbacks as CallbackManager).handlers as unknown as TokenHandler[]);
+  for (const handler of handlers) handler.handleLLMNewToken?.('tok');
+}
+
+function abortError(): Error {
+  const err = new Error('Aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('createReasonNode', () => {
   const mockTools = [] as unknown as DynamicStructuredTool[];
   const mockResponse = new AIMessage('Here is your itinerary.');
+  const standbyResponse = new AIMessage('Here is your itinerary, from the standby.');
 
   beforeEach(() => {
+    __resetFallbackStateForTests();
     mockInvoke.mockReset().mockResolvedValue(mockResponse);
     mockBindTools.mockReset().mockReturnValue({ invoke: mockInvoke });
+    mockOpenAIInvoke.mockReset().mockResolvedValue(standbyResponse);
+    mockOpenAIBindTools.mockReset().mockReturnValue({ invoke: mockOpenAIInvoke });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('calls buildSystemPrompt with the current state on every invoke', async () => {
@@ -152,5 +200,158 @@ describe('createReasonNode', () => {
     createReasonNode(buildPrompt, mockTools);
 
     expect(mockBindTools).toHaveBeenCalledWith(mockTools);
+  });
+
+  // ── Provider fallback ───────────────────────────────────────────────────────
+
+  describe('provider fallback', () => {
+    const buildPrompt = () => 'prompt';
+
+    it('answers from the standby provider when the primary one fails', async () => {
+      mockInvoke.mockRejectedValueOnce(new Error('credit balance is too low'));
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      const result = await node(makeState());
+
+      expect(mockOpenAIInvoke).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ messages: [standbyResponse] });
+    });
+
+    it('hands the standby the same messages the primary was given', async () => {
+      mockInvoke.mockRejectedValueOnce(new Error('down'));
+      const node = createReasonNode(buildPrompt, mockTools);
+      const userMsg = new HumanMessage('Find flights to Paris');
+
+      await node(makeState({ messages: [userMsg] }));
+
+      const [standbyMessages] = mockOpenAIInvoke.mock.calls[0];
+      expect(standbyMessages).toHaveLength(2);
+      expect(standbyMessages[1]).toBe(userMsg);
+    });
+
+    it('binds the standby to the very tools array the primary was bound to', async () => {
+      mockInvoke.mockRejectedValueOnce(new Error('down'));
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState());
+
+      // toBe, not toEqual: R5 is about the same array, and every empty array is
+      // deep-equal to every other one.
+      expect(mockOpenAIBindTools.mock.calls[0][0]).toBe(mockTools);
+    });
+
+    it('never constructs the standby while the primary is answering', async () => {
+      const { ChatOpenAI } = jest.requireMock('@langchain/openai') as { ChatOpenAI: jest.Mock };
+      ChatOpenAI.mockClear();
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState());
+      await node(makeState());
+
+      expect(ChatOpenAI).not.toHaveBeenCalled();
+    });
+
+    it('constructs the standby once and reuses it across further failures', async () => {
+      const { ChatOpenAI } = jest.requireMock('@langchain/openai') as { ChatOpenAI: jest.Mock };
+      ChatOpenAI.mockClear();
+      mockInvoke.mockRejectedValue(new Error('down'));
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState());
+      await node(makeState());
+
+      expect(ChatOpenAI).toHaveBeenCalledTimes(1);
+      expect(mockOpenAIInvoke).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not divert an attempt that had already streamed a token', async () => {
+      // The frontend appends text, so a second full answer would be pasted onto
+      // the tail of the truncated one.
+      mockInvoke.mockImplementation(async (_messages, config: RunnableConfig) => {
+        fireNewToken(config);
+        throw new Error('socket died mid-stream');
+      });
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await expect(node(makeState())).rejects.toThrow('socket died mid-stream');
+      expect(mockOpenAIInvoke).not.toHaveBeenCalled();
+    });
+
+    it("does not let one request's stream veto a later request's retry", async () => {
+      // The model is a singleton shared by concurrent requests, so `streamed`
+      // has to be declared per invocation. Hoist it into the node's closure and
+      // the first request's token permanently vetoes everyone else's fallback.
+      mockInvoke.mockImplementationOnce(async (_messages, config: RunnableConfig) => {
+        fireNewToken(config);
+        throw new Error('socket died mid-stream');
+      });
+      const node = createReasonNode(buildPrompt, mockTools);
+      await expect(node(makeState())).rejects.toThrow('socket died mid-stream');
+
+      mockInvoke.mockRejectedValueOnce(new Error('down'));
+      const result = await node(makeState());
+
+      expect(result).toEqual({ messages: [standbyResponse] });
+    });
+
+    it('does not divert an aborted attempt', async () => {
+      mockInvoke.mockRejectedValueOnce(abortError());
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await expect(node(makeState())).rejects.toThrow('Aborted');
+      expect(mockOpenAIInvoke).not.toHaveBeenCalled();
+    });
+
+    it("reads the request's abort signal off the config it was called with", async () => {
+      // The socket can throw anything on its way down; what makes it an abort is
+      // the signal, which only reaches the engine if the node passes it on.
+      const controller = new AbortController();
+      controller.abort();
+      mockInvoke.mockRejectedValueOnce(new Error('socket hang up'));
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await expect(node(makeState(), { signal: controller.signal })).rejects.toThrow('socket hang up');
+      expect(mockOpenAIInvoke).not.toHaveBeenCalled();
+    });
+
+    it('adds its token spy to the callbacks LangGraph supplied, not over them', async () => {
+      // ensureConfig would replace `callbacks` wholesale, detaching the run from
+      // streamEvents — green tests, and no text reaching the browser.
+      const parentHandler = { handleLLMNewToken: jest.fn() };
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      await node(makeState(), { callbacks: [parentHandler], runName: 'reason' });
+
+      const [, cfg] = mockInvoke.mock.calls[0];
+      expect(cfg.callbacks).toContain(parentHandler);
+      expect(cfg.callbacks).toHaveLength(2);
+      expect(cfg.runName).toBe('reason');
+    });
+
+    it('does the same when the callbacks arrive as a CallbackManager', async () => {
+      // The branch above is not the one production takes. LangGraph builds the
+      // node's config with `patchConfig(config, { callbacks: runManager.getChild() })`,
+      // and getChild returns a CallbackManager, never an array — mergeConfigs has
+      // a separate branch for it (copy() + addHandler). A regression confined to
+      // that branch would leave the array test green and the browser silent.
+      const parent = await getCallbackManagerForConfig({
+        callbacks: [{ handleLLMNewToken: jest.fn() }],
+      });
+      const parentHandler = parent.handlers[0];
+
+      mockInvoke.mockImplementation(async (_messages, config: RunnableConfig) => {
+        fireNewToken(config);
+        throw new Error('socket died mid-stream');
+      });
+      const node = createReasonNode(buildPrompt, mockTools);
+
+      // The veto fired, so the spy reached the model through the manager.
+      await expect(node(makeState(), { callbacks: parent })).rejects.toThrow('socket died mid-stream');
+      expect(mockOpenAIInvoke).not.toHaveBeenCalled();
+
+      const [, cfg] = mockInvoke.mock.calls[0];
+      expect(Array.isArray(cfg.callbacks)).toBe(false);
+      expect((cfg.callbacks as CallbackManager).handlers).toContain(parentHandler);
+    });
   });
 });
