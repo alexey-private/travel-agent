@@ -190,8 +190,19 @@ consecutive requests land *outside* the window and every one re-probes Anthropic
 — correct behaviour, and indistinguishable at a glance from a breaker that does
 not work.
 
+**Point the standby at a gpt-5.x id, and prove it landed.** Add
+`OPENAI_REASONING_MODEL=gpt-5.5` (or whatever is current) to the copied `.env`.
+Anthropic's `cache_control` block used to ride along to the standby and is
+rejected only under the `developer` role that `@langchain/openai` uses for
+gpt-5.x — so a run left on the `gpt-4o` default passes while the interesting
+half of the behaviour goes untested. **Then run it once more with a deliberately
+nonexistent id**: the request must fail with `404 The model '<id>' does not
+exist`, naming it. Without that negative control, a green run cannot be told
+apart from one that silently used the built-in default.
+
 **Shred the file afterwards** (`shred -u .env`): it is a copy of real
-credentials sitting in a worktree.
+credentials sitting in a worktree. The run also writes rows to the local dev
+database under whatever `userId` was posted — delete them.
 
 ---
 

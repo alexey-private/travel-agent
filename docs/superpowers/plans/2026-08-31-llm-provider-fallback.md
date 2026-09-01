@@ -728,6 +728,35 @@ criterion this was missing — the `force-provider-failure` recipe in SKILL.md w
 nothing here: every fallback test mocks both provider SDKs, which is exactly why
 the bug shipped.
 
+- [x] **Done 2026-09-01.** `tsc` clean; 52 suites / 521 tests green (two new cases
+      confirmed failing first). The live check ran the `force-provider-failure`
+      recipe against a local backend on port 3010 with an invalid
+      `ANTHROPIC_API_KEY` and `OPENAI_REASONING_MODEL=gpt-5.5` /
+      `OPENAI_FAST_MODEL=gpt-5.4-mini`: the message answered — 36 streamed text
+      chunks, a real `get_weather` call, three suggestions — with
+      `[llm-fallback] reasonNode: anthropic failed, answering with openai
+      AuthenticationError: 401`, the breaker holding on the loop's second pass
+      (`anthropic is in cooldown`), and **zero** occurrences of `cache_control`
+      or `agent_failed` in the log. Before this task the same setup produced
+      `{"type":"error","code":"agent_failed"}`.
+
+      **Negative control**, because a standby that silently fell back to `gpt-4o`
+      would produce exactly the same green run: with the id changed to a
+      nonexistent one, the request failed with
+      `404 The model 'gpt-5.5-negative-control-nonexistent' does not exist`,
+      naming the id. So `OPENAI_REASONING_MODEL` really was in play. The `.env`
+      was `shred -u`'d afterwards and the two local dev rows deleted.
+
+      `/code-review` — both axes ran. **Standards:** no hard violations; the one
+      judgement call was real and is fixed — `'gives the standby a system message
+      carrying no vendor keys at all'` scanned block keys over content that is a
+      plain string, so it passed whatever the node did. It now pins the shape
+      first, which is what makes the scan a guard rather than a tautology.
+      **Spec:** no scope creep, no misimplementation, R3/R5/R9 unregressed, and
+      the two `'fast'` call sites independently confirmed to build no content
+      blocks. Its one finding was this checklist entry being absent — which is
+      what this entry is.
+
 
 ---
 
@@ -744,4 +773,4 @@ The spec's nine criteria, restated as the exit condition for this plan:
 - [x] `LLM_FALLBACK_ENABLED=false` restores today's behaviour exactly (T2)
 - [x] A standby is never constructed with the active provider's model id (T1)
 - [x] `tsc` clean and the full suite green, at or above T0's baseline (every task)
-- [ ] A gpt-5.x standby answers a forced failure — the prompt carries no `cache_control` (T7)
+- [x] A gpt-5.x standby answers a forced failure — the prompt carries no `cache_control` (T7)

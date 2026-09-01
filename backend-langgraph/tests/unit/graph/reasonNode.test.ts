@@ -284,6 +284,12 @@ describe('createReasonNode', () => {
 
       await node(makeState());
 
+      // Pin the shape, not just its keys. A vendor key can only hide in a content
+      // block, so a scan that runs over plain-string content passes whatever the
+      // node does — a tautology wearing this test's name. The scan below still
+      // earns its place: it is what covers a deliberate future move to blocks.
+      expect(typeof sysMessageOf(mockOpenAIInvoke).content).toBe('string');
+
       const extraneous = sysContentKeys(mockOpenAIInvoke).filter(
         key => key !== 'type' && key !== 'text',
       );
