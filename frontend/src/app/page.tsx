@@ -118,7 +118,7 @@ export default function Home() {
         {/* Mobile backdrop for sidebar */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/40 z-30 md:hidden"
+            className="fixed inset-0 bg-black/40 z-30 md:hidden cursor-pointer"
             onClick={() => setSidebarOpen(false)}
           />
         )}
@@ -157,7 +157,7 @@ export default function Home() {
         {/* Mobile backdrop for memory panel */}
         {memoryOpen && (
           <div
-            className="fixed inset-0 bg-black/40 z-30 lg:hidden"
+            className="fixed inset-0 bg-black/40 z-30 lg:hidden cursor-pointer"
             onClick={() => setMemoryOpen(false)}
           />
         )}
