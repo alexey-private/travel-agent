@@ -14,9 +14,10 @@
  * plugin's decision can be lost or contradicted.
  */
 
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyBaseLogger } from 'fastify';
 import cors from '@fastify/cors';
 import { allowedOrigins } from '@/security/cors';
+import { ModelAbortError } from '@langchain/core/errors';
 import { chatRoutes } from '@/routes/chat';
 import type { UserService } from '@/services/UserService';
 import type { ConversationService } from '@/services/ConversationService';
@@ -68,6 +69,33 @@ interface ServiceOverrides {
   streamEvents?: jest.Mock;
   extractAndSaveMemories?: jest.Mock;
   storedLanguage?: string;
+  logger?: SpyLogger;
+}
+
+/**
+ * A logger whose `error` and `warn` are spies, so a test can ask what the
+ * server recorded and not only what it put on the wire. The distinction is the
+ * whole point of the abort handling: a client that leaves mid-answer must
+ * produce neither.
+ *
+ * `child()` returns the same object, so `request.log` writes to the same spies
+ * the test holds.
+ */
+type SpyLogger = { error: jest.Mock; warn: jest.Mock } & Record<string, unknown>;
+
+function spyLogger(): SpyLogger {
+  const logger = {
+    error: jest.fn(),
+    warn: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+    trace: jest.fn(),
+    fatal: jest.fn(),
+    silent: jest.fn(),
+    level: 'info',
+  } as unknown as SpyLogger;
+  logger.child = () => logger;
+  return logger;
 }
 
 async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstance> {
@@ -77,7 +105,9 @@ async function buildApp(overrides: ServiceOverrides = {}): Promise<FastifyInstan
   mockTravelStreamEvents.mockImplementation(streamEvents);
   mockShoppingStreamEvents.mockImplementation(streamEvents);
 
-  const app = Fastify({ logger: false });
+  const app = overrides.logger
+    ? Fastify({ loggerInstance: overrides.logger as unknown as FastifyBaseLogger })
+    : Fastify({ logger: false });
 
   // Registered the way index.ts does it, so the stream's headers are produced by
   // the same allowlist a deploy uses rather than by the test.
@@ -292,6 +322,116 @@ describe('POST /api/chat — P0 correctness', () => {
       const [, options] = streamEvents.mock.calls[0];
       expect(options).toHaveProperty('signal');
       expect(options.signal).toBeInstanceOf(AbortSignal);
+    });
+  });
+
+  // ── T5: the abort is recognised however it surfaces ──────────────────────
+
+  /**
+   * `err.name === 'AbortError'` was the whole test, and it does not recognise
+   * the `ModelAbortError` LangChain throws when the signal fires inside a model
+   * call — which is what a real client disconnect produces most of the time.
+   * The result was the loudest possible reaction to the quietest possible
+   * event: an error-level log line naming an agent failure, plus an SSE error
+   * written to a socket that had already gone.
+   *
+   * `isAbort` is the same question asked once, in
+   * [providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts), where
+   * the fallback engine already has to answer it — a second copy here would be
+   * a second place for the next abort shape to be missed.
+   */
+  describe('T5: a client disconnect is recognised however the abort surfaces', () => {
+    it('stays silent when the abort surfaces as a ModelAbortError', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        throw new ModelAbortError('Aborted');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+      const logger = spyLogger();
+
+      const app = await buildApp({ streamEvents, logger });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      const events = parseSse(response.body);
+      expect(events.some((e) => e.type === 'error')).toBe(false);
+      // Nobody is left to read it, and nothing went wrong.
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('still records a real failure at error level', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* () {
+        throw new Error('Upstream API failed');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+      const logger = spyLogger();
+
+      const app = await buildApp({ streamEvents, logger });
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { userId: 'u1', message: 'Hello' },
+      });
+
+      await app.close();
+
+      // The counterpart to the test above: widening what counts as an abort
+      // must not have swallowed the failures that do deserve a line.
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    /**
+     * The other half of the same `if`, and the half nobody was watching: a
+     * timeout aborts the very same controller a disconnect does, so the only
+     * thing separating "say nothing" from "tell the user the request expired"
+     * is the `timedOut` flag. The branch had no test before this one — which
+     * meant the change above could have silenced the timeout too and every
+     * suite would still have been green.
+     */
+    it('still tells the user when the graph runs out of its 60 s budget', async () => {
+      const streamEvents = jest.fn().mockImplementation(async function* (
+        _input: unknown,
+        options: { signal: AbortSignal },
+      ) {
+        // Hang until the route's own timer gives up, then fail the way a model
+        // call aborted mid-flight does.
+        await new Promise<void>((resolve) => options.signal.addEventListener('abort', () => resolve()));
+        throw new ModelAbortError('Aborted');
+        // eslint-disable-next-line no-unreachable
+        yield;
+      });
+      const logger = spyLogger();
+
+      const app = await buildApp({ streamEvents, logger });
+
+      jest.useFakeTimers();
+      try {
+        const pending = app.inject({
+          method: 'POST',
+          url: '/api/chat',
+          payload: { userId: 'u1', message: 'Hello' },
+        });
+
+        await jest.advanceTimersByTimeAsync(61_000);
+        const response = await pending;
+
+        const events = parseSse(response.body);
+        expect(events).toContainEqual({ type: 'error', code: 'request_timed_out' });
+        // Expected slowness, not a failure — so a warning, and no error line.
+        expect(logger.warn).toHaveBeenCalled();
+        expect(logger.error).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+        await app.close();
+      }
     });
   });
 
