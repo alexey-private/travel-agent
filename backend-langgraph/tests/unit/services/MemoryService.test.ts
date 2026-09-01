@@ -1,6 +1,9 @@
 import { Pool } from 'pg';
 import { MemoryService, FIRST_PERSON_RE } from '@/services/MemoryService';
 import { MemoryRepository } from '@/repositories/MemoryRepository';
+import { __resetFallbackStateForTests } from '@/llm/providerFallback';
+import { env } from '@/config/env';
+import { ChatOpenAI } from '@langchain/openai';
 
 jest.mock('@/config/env', () => ({
   env: {
@@ -18,14 +21,18 @@ jest.mock('@/repositories/MemoryRepository');
 // Mock the LangChain model at the module level.
 // MemoryService instantiates ChatAnthropic/ChatOpenAI inline, so we mock invoke() on the prototype.
 const mockInvoke = jest.fn();
+// The standby gets a spy of its own, so a test can prove *which* provider
+// answered rather than merely that something did.
+const mockOpenAIInvoke = jest.fn();
 jest.mock('@langchain/anthropic', () => ({
   ChatAnthropic: jest.fn().mockImplementation(() => ({ invoke: mockInvoke })),
 }));
 jest.mock('@langchain/openai', () => ({
-  ChatOpenAI: jest.fn().mockImplementation(() => ({ invoke: mockInvoke })),
+  ChatOpenAI: jest.fn().mockImplementation(() => ({ invoke: mockOpenAIInvoke })),
 }));
 
 const MockMemoryRepository = MemoryRepository as jest.MockedClass<typeof MemoryRepository>;
+const MockChatOpenAI = ChatOpenAI as unknown as jest.Mock;
 
 describe('MemoryService', () => {
   let service: MemoryService;
@@ -33,10 +40,22 @@ describe('MemoryService', () => {
 
   beforeEach(() => {
     MockMemoryRepository.mockClear();
+    __resetFallbackStateForTests();
     mockInvoke.mockReset();
+    // Unavailable unless a test says otherwise: a test that reaches the standby
+    // without meaning to then reads as "both providers down" — the documented
+    // degraded path — rather than as an undefined response.
+    mockOpenAIInvoke.mockReset().mockRejectedValue(new Error('standby not configured'));
+    MockChatOpenAI.mockClear();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     service = new MemoryService(null as unknown as Pool);
     mockRepo = MockMemoryRepository.mock.instances[0] as jest.Mocked<MemoryRepository>;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('getMemories', () => {
@@ -151,13 +170,21 @@ describe('MemoryService', () => {
       expect(mockRepo.upsertMemory).not.toHaveBeenCalled();
     });
 
-    it('does not throw when the LLM call rejects', async () => {
+    it('does not throw when the LLM call rejects and there is no standby', async () => {
+      // Deployments with no OPENAI_API_KEY have no standby at all, and this is
+      // the case that keeps proving what it always proved: one provider, one
+      // failure, extraction skipped. Without removing the key the fallback would
+      // answer here, and the test would quietly become a second copy of
+      // 'still skips extraction quietly when both providers fail'.
+      jest.replaceProperty(env as { OPENAI_API_KEY?: string }, 'OPENAI_API_KEY', '');
       mockRepo.getMemories.mockResolvedValue([]);
       mockInvoke.mockRejectedValue(new Error('API error'));
 
       await expect(
         service.extractAndSaveMemories('user-1', 'Book a flight.'),
       ).resolves.toBeUndefined();
+
+      expect(mockOpenAIInvoke).not.toHaveBeenCalled();
     });
 
     it('uses the shopping prompt when agentType is shopping', async () => {
@@ -186,6 +213,76 @@ describe('MemoryService', () => {
       const system = mockInvoke.mock.calls[0][0][0].content as string;
       expect(system).toContain('Hebrew');
       expect(system).toMatch(/keys .*English/i);
+    });
+  });
+
+  /**
+   * Extraction already swallowed every error into a console.warn, so during the
+   * 2026-08-31 outage it was down and all but silent. The fallback has to be
+   * visible from the outside — which provider answered, and a loud line when
+   * neither did.
+   */
+  describe('provider fallback', () => {
+    beforeEach(() => {
+      mockRepo.getMemories.mockResolvedValue([]);
+      mockRepo.upsertMemory.mockResolvedValue(undefined);
+    });
+
+    it('answers from the standby provider when the primary one fails', async () => {
+      mockInvoke.mockRejectedValue(new Error('credit balance is too low'));
+      mockOpenAIInvoke.mockResolvedValue({ content: '{"home_city": "Paris"}' });
+
+      await service.extractAndSaveMemories('user-1', 'I live in Paris.');
+
+      expect(mockOpenAIInvoke).toHaveBeenCalledTimes(1);
+      expect(mockRepo.upsertMemory).toHaveBeenCalledWith('user-1', 'home_city', 'Paris', 'travel');
+    });
+
+    it('hands the standby the same messages the primary was given', async () => {
+      mockInvoke.mockRejectedValue(new Error('overloaded'));
+      mockOpenAIInvoke.mockResolvedValue({ content: '{}' });
+
+      await service.extractAndSaveMemories('user-1', 'I love Nike shoes.', 'shopping', 'he');
+
+      const [primaryMessages] = mockInvoke.mock.calls[0];
+      const [standbyMessages] = mockOpenAIInvoke.mock.calls[0];
+      // Identity: the same array object, not a second one built for the retry.
+      expect(standbyMessages).toBe(primaryMessages);
+      expect(standbyMessages[0].content as string).toContain('shopping preferences');
+      expect(standbyMessages[0].content as string).toContain('Hebrew');
+    });
+
+    it('never constructs the standby while the primary is answering', async () => {
+      mockInvoke.mockResolvedValue({ content: '{}' });
+
+      await service.extractAndSaveMemories('user-1', 'I live in Paris.');
+      await service.extractAndSaveMemories('user-1', 'I prefer aisle seats.');
+
+      expect(MockChatOpenAI).not.toHaveBeenCalled();
+    });
+
+    it('constructs the standby once and reuses it across further failures', async () => {
+      mockInvoke.mockRejectedValue(new Error('down'));
+      mockOpenAIInvoke.mockResolvedValue({ content: '{}' });
+
+      await service.extractAndSaveMemories('user-1', 'I live in Paris.');
+      await service.extractAndSaveMemories('user-1', 'I prefer aisle seats.');
+
+      expect(MockChatOpenAI).toHaveBeenCalledTimes(1);
+      expect(mockOpenAIInvoke).toHaveBeenCalledTimes(2);
+    });
+
+    it('still skips extraction quietly when both providers fail', async () => {
+      mockInvoke.mockRejectedValue(new Error('anthropic down'));
+      mockOpenAIInvoke.mockRejectedValue(new Error('openai down too'));
+
+      await expect(
+        service.extractAndSaveMemories('user-1', 'I live in Paris.'),
+      ).resolves.toBeUndefined();
+
+      // Today's behaviour exactly — but no longer silent.
+      expect(mockRepo.upsertMemory).not.toHaveBeenCalled();
+      expect(console.error).toHaveBeenCalled();
     });
   });
 

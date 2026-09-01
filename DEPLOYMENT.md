@@ -75,7 +75,10 @@ once the container is up.
 | `ANTHROPIC_API_KEY` | your key |
 | `TAVILY_API_KEY` | required |
 | `OPENWEATHER_API_KEY` | required |
-| `OPENAI_API_KEY` | required for voice message transcription (`/api/transcribe`) — without it the endpoint returns `503`. This is the only copy: the web mic button and Telegram voice notes both go through this route, so the bot needs no key of its own |
+| `OPENAI_API_KEY` | **load-bearing twice over — do not prune it as "the Whisper key".** (a) Voice message transcription (`/api/transcribe`): without it the endpoint returns `503`. This is the only copy — the web mic button and Telegram voice notes both go through this route, so the bot needs no key of its own. (b) It is the standby the automatic provider fallback answers from. Removing it does not fail loudly: chat keeps working, and the next Anthropic outage takes it down exactly as 2026-08-31 did |
+| `LLM_FALLBACK_ENABLED` | optional — `true` by default. `false` is the kill switch: the active provider's error propagates unchanged, as before the feature existed. Set it only to rule the fallback out while diagnosing something else |
+| `LLM_FALLBACK_COOLDOWN_MS` | optional — `300000` (5 min) by default. How long the standby keeps answering before the primary is probed again; `0` retries the primary on every request |
+| `ANTHROPIC_REASONING_MODEL` / `ANTHROPIC_FAST_MODEL` / `OPENAI_REASONING_MODEL` / `OPENAI_FAST_MODEL` | optional — per-provider model ids, each defaulting to that provider's built-in. Pin the standby's ids here, not through `REASONING_MODEL` / `FAST_MODEL`, which mean "the model the *active* provider uses" and are read for that provider only |
 | `VOYAGE_API_KEY` | optional (random-vector fallback if unset) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | if using Google Calendar/Tasks |
 | `GOOGLE_REDIRECT_URI` | `https://<this-service-domain>/auth/google/callback` |
@@ -229,19 +232,57 @@ logs if this happens again.
 
 Connect each of the 3 app services to the same GitHub repo/branch (`main`).
 In each service's settings, set **Watch Paths** so an unrelated change
-doesn't trigger a pointless rebuild:
+doesn't trigger a pointless rebuild. The values themselves live in
+[deploy/railway-services.json](deploy/railway-services.json) — one copy, read by
+both of the checks below, rather than a table here that can drift from the
+dashboard without anyone noticing. Railway stores them with a leading slash
+(`/shared/**`); the dashboard adds it.
 
-- `travel-agent`: `backend-langgraph/**`, `shared/**`, `Dockerfile.backend-langgraph`
-- `backend-telegram`: `backend-telegram/**`, `shared/**`, `Dockerfile.backend-telegram`
-- `frontend`: `frontend/**`, `shared/**`, `Dockerfile.frontend`
+Two of the four entries are on all three lists on purpose, and for the same
+reason: both are build inputs of every image.
 
-`shared/**` is on all three lists on purpose: `shared/i18n` is compiled into
-every service, so a change there that redeployed only one of them would leave
-the other two running the old locale set.
+- `shared/**` — `shared/i18n` is compiled into every service, so a change there
+  that redeployed only one of them would leave the other two running the old
+  locale set.
+- `tsconfig.base.json` — every `COPY package.json package-lock.json
+  tsconfig.base.json ./` line pulls it into the image, and
+  `backend-langgraph/`, `backend-telegram/` and `shared/i18n/` all `extends` it.
+  Changing `target`, `strict` or `outDir` there changes what all three builds
+  emit; the frontend inherits it too, through the `shared/i18n` compile its own
+  build runs. It changes perhaps twice a year, so watching it costs nothing and
+  the alternative is three services quietly running code built under the old
+  compiler options.
 
 Note that a change to `package.json` / `package-lock.json` at the repo root
 matches none of these, so a dependency change alone will not trigger a
-rebuild — touch the relevant Dockerfile or redeploy by hand.
+rebuild — touch the relevant Dockerfile or redeploy by hand. That one is a
+deliberate trade and not the same case as `tsconfig.base.json`: the lock file
+changes constantly and usually for one workspace, and its effect on an image is
+visible in that workspace's own diff.
+
+Two checks keep that file honest, split by whether they need a credential:
+
+- `npm run test:deploy` reads the `COPY` lines of every Dockerfile and fails
+  when a build input is not covered by that service's patterns. No network and
+  no token, so it runs in the `deploy-config` CI job on every push and PR — a
+  new build input goes red in the commit that introduces it, before anything
+  deploys.
+- `npm run check:railway-drift` compares the file against the live Railway API
+  and exits non-zero on a difference. It needs a **project** token in
+  `RAILWAY_TOKEN` — project Settings → Tokens, scoped to one environment — or
+  an account/workspace token in `RAILWAY_API_TOKEN`; the two authenticate
+  through different headers, which is why they are separate variables. Locally
+  it falls back to the credential `railway login` leaves in
+  `~/.railway/config.json`, which expires within hours. It runs weekly from
+  [.github/workflows/railway-drift.yml](.github/workflows/railway-drift.yml).
+  It is read-only: it reports a difference and never repairs one, because a
+  script that writes production config turns a wrong file into a wrong
+  deployment.
+
+Both exist because on 2026-08-31 `shared/**` was missing from all three
+services for the whole day the shared package existed, and nothing in the
+repository could have said so — see
+[the spec](docs/superpowers/specs/2026-08-31-railway-deploy-config-in-the-repo.md).
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) runs tsc + full test
 suite (incl. integration tests against a real `pgvector/pgvector:pg16`

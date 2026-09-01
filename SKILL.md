@@ -115,6 +115,52 @@ Unit tests use shared mocks in `tests/helpers/`. Integration tests (`chat.test.t
 
 ---
 
+## SKILL: add-build-input
+
+**When:** A Dockerfile gains a `COPY` line — a new top-level directory, or a new
+root-level file on the `COPY package.json package-lock.json tsconfig.base.json ./`
+line. Also when a service is added to or renamed in Railway.
+
+Railway's watch paths decide which pushes rebuild which service, and they live in
+the dashboard. A build input nobody watches is a service that silently keeps
+running the old code while every health check stays green — which is exactly what
+happened to `shared/**` on 2026-08-31.
+
+```bash
+# 1. Is the new input covered? (no token, no network, ~50 ms)
+npm run test:deploy
+
+# 2. If it goes red, add the pattern to BOTH places:
+#    - deploy/railway-services.json   (the repo's copy)
+#    - the Railway dashboard          (the one that actually deploys)
+#      Settings -> Build -> Watch Paths. Leading slash: /newdir/**
+
+# 3. Confirm the dashboard agrees with the file
+npm run check:railway-drift
+```
+
+**The two are not interchangeable.** Step 1 checks the repo against itself and
+runs in CI on every push; step 3 needs a Railway token and runs weekly. Editing
+only the JSON leaves production unchanged; editing only the dashboard leaves the
+next drift run red.
+
+`npm run check:railway-drift` is **read-only** — it prints the difference and
+never repairs it, so an expectation file that is wrong cannot write itself into
+production. Exit 0 agree, 1 drift, 2 could-not-check — a missing token is 2, and
+so is an expired one (`railway login` refreshes the local credential; in CI the
+secret is `RAILWAY_TOKEN` for a project token, `RAILWAY_API_TOKEN` for an
+account or workspace token).
+
+Two rules the checker encodes, worth knowing before arguing with it:
+
+- `package.json` and `package-lock.json` are excluded **by name**, not because
+  they are single files. `tsconfig.base.json` rides the same `COPY` line and is
+  a real build input, so a fourth root-level file there is covered by default.
+- A directory counts as covered only if a pattern reaches files **inside** it —
+  `/shared/*` misses `shared/i18n/src/locale.ts`. Write `/shared/**`.
+
+---
+
 ## SKILL: test-timezone-dependent-code
 
 **When:** A change reads the local calendar or clock — `getDate()`, `getHours()`,
@@ -150,6 +196,48 @@ Cover both directions — a zone far enough east that UTC is still yesterday
 already tomorrow (`America/Los_Angeles` late in the evening) — plus a month
 boundary. Worked example:
 `backend-langgraph/tests/unit/notifier/tomorrowDateTz.test.ts`.
+
+---
+
+## SKILL: force-provider-failure
+
+**When:** Anything touching
+[providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts) or one of its
+three call sites. Every unit test mocks `@langchain/anthropic` and
+`@langchain/openai`, so none of them exercises a real socket, a real stream or a
+real 401 — this is the only way to see the feature work.
+
+`env.ts` loads `./.env` then `../.env` and `dotenv` never overrides a variable
+already in the environment — so the file has to sit at the **repo root** under
+the name `.env`, and in a worktree there is none to clash with.
+
+```bash
+# 1. Postgres up (skip if 5432 already answers), then an env with a dead key.
+sed -e 's/^ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=sk-ant-invalid/' \
+    -e 's/^PORT=.*/PORT=3010/' \
+    -e 's/^LLM_FALLBACK_COOLDOWN_MS=.*/LLM_FALLBACK_COOLDOWN_MS=120000/' \
+    /path/to/real/.env > .env
+# 2. Run it. A valid OPENAI_API_KEY must survive the copy — it is the standby.
+cd backend-langgraph && npx tsx src/index.ts 2>&1 | tee /tmp/backend.log
+```
+
+Then, against `http://127.0.0.1:3010/api/chat` with
+`{"userId":"...","message":"...","agentType":"travel"}`:
+
+| Send | Expect in the log |
+|---|---|
+| one message | a streamed answer + suggestions, and **one** error-level `[llm-fallback] reasonNode: anthropic failed, answering with openai` carrying the original error |
+| a second, inside the cooldown | `anthropic is in cooldown` and **no** `AuthenticationError` — the primary was not attempted |
+| `timeout --signal=KILL 8 curl -sN …` mid-answer | **nothing at all** — no `[llm-fallback]`, no `agent error` |
+
+**Size the cooldown against the answer latency, not against your patience.** A
+full answer takes ~20 s of tool calls, so at `LLM_FALLBACK_COOLDOWN_MS=20000`
+consecutive requests land *outside* the window and every one re-probes Anthropic
+— correct behaviour, and indistinguishable at a glance from a breaker that does
+not work.
+
+**Shred the file afterwards** (`shred -u .env`): it is a copy of real
+credentials sitting in a worktree.
 
 ---
 
@@ -332,12 +420,17 @@ layout bug tomorrow.
 2. Sweep for what slipped through:
 
 ```bash
-grep -rnoE '\b(ml|mr|pl|pr)-(auto|[0-9.]+)\b|\b(left|right)-(auto|full|[0-9.]+)\b|\btext-(left|right)\b|\bspace-x-[0-9.]+\b|\brounded-t[lr]-[a-z0-9]+\b|\bborder-(l|r)-[a-z0-9]+\b' \
+grep -rnoE '\b(ml|mr|pl|pr)-(auto|[0-9.]+)\b|\b(left|right)-(auto|full|[0-9.]+)\b|\btext-(left|right)\b|\bspace-x-[0-9.]+\b|\brounded-(t|b)?[lr](-[a-z0-9]+)?\b|\bborder-(l|r)(-[a-z0-9]+)?\b' \
   frontend/src --include='*.tsx'
 ```
 
-Expected: no output. (Write the pattern with the trailing hyphen — a looser
-`rounded-(l|r)` also matches `rounded-lg` and buries the real hits.)
+Expected: no output. Two traps pull the pattern in opposite directions, and it
+has to survive both. Make the value optional — `border-l` and `rounded-l` are
+complete classes on their own, and a pattern demanding a trailing `-value`
+reads right past them; that is exactly how the memory panel kept a physical
+`border-l` through an earlier sweep that reported clean. But anchor the end
+with `\b` and keep the value `[a-z0-9]+`, or `rounded-(l|r)` swallows
+`rounded-lg` and `border-r` swallows `border-red-500`, and the real hits drown.
 
 3. Two things logical properties do **not** cover:
    - **`translate-x-*`** has no logical form. A panel that slides off-screen

@@ -41,6 +41,9 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-langgraph/src/graph/buildGraph.ts](backend-langgraph/src/graph/buildGraph.ts) | Shared graph builder (model → tools → loop) |
 | [backend-langgraph/src/graph/history.ts](backend-langgraph/src/graph/history.ts) | Converts DB history to LangChain messages |
 | [backend-langgraph/src/agent/prompts.ts](backend-langgraph/src/agent/prompts.ts) | System prompt builders for both agents |
+| [backend-langgraph/src/llm/createModel.ts](backend-langgraph/src/llm/createModel.ts) | `createModel(size, opts, provider)` and `modelId(provider, size)` — which model id a *given* provider uses, not the active one |
+| [backend-langgraph/src/llm/providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts) | `withProviderFallback`, `standbyProvider`, `isAbort`, the cooldown breaker — the whole fallback policy, in one module; see [LLM Provider Fallback](#llm-provider-fallback) |
+| [backend-langgraph/src/llm/modelPair.ts](backend-langgraph/src/llm/modelPair.ts) | One recipe, two models: the primary built now, the standby on first use — so it cannot drift, and a process that never fails builds no second model |
 | [shared/i18n/](shared/i18n/) | `@travel-agent/i18n` — `Locale` (`en`/`he`/`ru`), `LOCALES`, `isLocale`, `dirOf`, `LOCALE_LABELS`, `LANGUAGE_NAMES`, `PluralForms`, `perLocale()`, `translate()`. The one definition all three packages import; see [Shared i18n Package](#shared-i18n-package) |
 | [shared/i18n/src/perLocale.ts](shared/i18n/src/perLocale.ts) | One `Intl` formatter per locale, built on first use — building one costs ~30× using it, and a list formats every row |
 | [shared/i18n/src/scripts.ts](shared/i18n/src/scripts.ts) | Which characters belong to which writing system — `RTL_RANGE`, `HEBREW_RANGE`, `CYRILLIC_RANGE`, `LATIN_RANGE`, `scriptRe`, `containsRtl`. The one place the ranges are written, and written as escapes |
@@ -77,7 +80,11 @@ Users chat with an agent that searches flights/hotels, manages Google Calendar t
 | [backend-telegram/src/transcribe.ts](backend-telegram/src/transcribe.ts) | A voice note goes to the backend's `/api/transcribe`, not to Whisper — that is where the language hint and the only copy of the OpenAI key live |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Railway deploy: per-service env vars, Dockerfile paths, migration/networking notes |
 | [Dockerfile.backend-langgraph](Dockerfile.backend-langgraph), [Dockerfile.backend-telegram](Dockerfile.backend-telegram), [Dockerfile.frontend](Dockerfile.frontend) | Multi-stage builds, root-context (npm workspaces) |
+| [deploy/railway-services.json](deploy/railway-services.json) | The Railway watch paths this repo expects — the one copy, read by both checks below; see [Deploy Config](#deploy-config) |
+| [deploy/coverage.mjs](deploy/coverage.mjs) | Does every `COPY` in a Dockerfile sit behind that service's watch patterns? Credential-free, so it runs in ordinary CI |
+| [deploy/check-drift.mjs](deploy/check-drift.mjs) | The same file against the live Railway API — read-only, on a schedule |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | tsc + tests (real pgvector service container) on push/PR to main |
+| [.github/workflows/railway-drift.yml](.github/workflows/railway-drift.yml) | Weekly read-only drift check against Railway; needs a `RAILWAY_TOKEN` (project token) or `RAILWAY_API_TOKEN` (account) secret — the two use different headers |
 
 ---
 
@@ -449,6 +456,51 @@ keeps an unrelated page in the user's browser from making one.
 
 ---
 
+## Deploy Config
+
+Watch paths, builder and Dockerfile path live in Railway, not in this
+repository. On 2026-08-31 `shared/**` was missing from all three services for
+the whole day the shared package existed, and nothing here could have said so;
+the day's push happened to touch all three packages, which is the only reason
+it did no damage.
+
+[deploy/railway-services.json](deploy/railway-services.json) is now the one
+written copy, and two checks keep it honest —
+[coverage.mjs](deploy/coverage.mjs) against the Dockerfiles (no token, ordinary
+CI) and [check-drift.mjs](deploy/check-drift.mjs) against the live API (token,
+weekly, read-only). The reasoning, and why Railway's own config-as-code was
+rejected, is in
+[the spec](docs/superpowers/specs/2026-08-31-railway-deploy-config-in-the-repo.md).
+
+- **A new top-level directory that becomes a build input for more than one
+  service needs an entry here.** That is the whole rule. `COPY newdir ./newdir`
+  in a Dockerfile turns `npm run test:deploy` red until some watch pattern of
+  that service covers it, so the reminder arrives in the commit that needs it.
+- **What counts as a build input is a named exclusion list, not a shape.**
+  `package.json` and `package-lock.json` are scaffolding for `npm ci`;
+  everything else copied is an input. "A single file is scaffolding" was the
+  tempting rule and it is wrong — `tsconfig.base.json` rides the same `COPY`
+  line as those two and is a real input, since three of the four workspaces
+  `extends` it. A fourth root-level file added to that line is therefore
+  covered by default and someone has to argue it out.
+- **The root manifests stay unwatched on purpose.** A dependency bump alone
+  rebuilds nothing; the lock file changes constantly and usually for one
+  workspace, and its effect is visible in that workspace's own diff. The test
+  asserts that as intended behaviour rather than letting it fail.
+- **The drift script never writes.** It reports a difference and leaves fixing
+  it to a person — a script that repaired the dashboard would turn a wrong
+  expectation file into a wrong deployment. A test asserts the absence of any
+  mutation in its source, because exercising the happy path cannot.
+- **Which variable a Railway token arrives in decides its header.** A project
+  token (`RAILWAY_TOKEN`, scoped to one environment, what CI should hold) goes
+  in `Project-Access-Token`; an account or workspace token
+  (`RAILWAY_API_TOKEN`), and the credential `railway login` leaves behind, go in
+  `Authorization: Bearer`. The tokens look alike, so nothing in the value can
+  tell them apart, and sending one as the other answers 403 — which reads as
+  "wrong project" rather than "wrong header".
+
+---
+
 ## Database Schema (key tables)
 
 ```
@@ -491,7 +543,17 @@ push_subscriptions   — user_id UUID FK → users.id, endpoint, p256dh, auth
 ```bash
 DATABASE_URL          # PostgreSQL connection string (required)
 ANTHROPIC_API_KEY     # or OPENAI_API_KEY
+OPENAI_API_KEY        # Whisper (/api/transcribe) AND the fallback standby — see
+                      # LLM Provider Fallback below before removing it
 LLM_PROVIDER          # 'anthropic' (default) | 'openai'
+REASONING_MODEL       # the model the ACTIVE provider uses for the reasoning loop
+FAST_MODEL            # the model the ACTIVE provider uses for the short calls
+ANTHROPIC_REASONING_MODEL   # per-provider ids; these win over the two above and
+ANTHROPIC_FAST_MODEL        # are what a standby provider reads. Each defaults to
+OPENAI_REASONING_MODEL      # that provider's built-in id
+OPENAI_FAST_MODEL
+LLM_FALLBACK_ENABLED       # 'true' (default) | 'false' — the kill switch
+LLM_FALLBACK_COOLDOWN_MS   # 300000 (default); 0 probes the primary every request
 TAVILY_API_KEY        # Web search (required)
 OPENWEATHER_API_KEY   # Weather tool (required)
 VOYAGE_API_KEY        # Embeddings (optional — random fallback in dev)
@@ -502,6 +564,81 @@ ENCRYPTION_KEY        # >=32 chars; iCloud credential encryption. Required when 
 ALLOWED_ORIGIN        # Browser origins allowed to read this API, comma-separated.
                       # Required when NODE_ENV=production
 ```
+
+---
+
+## LLM Provider Fallback
+
+On 2026-08-31 the Anthropic balance ran out and `/api/chat` answered
+`code: 'agent_failed'` for ~45 minutes; the repair was an env edit **plus** a
+container restart. [providerFallback.ts](backend-langgraph/src/llm/providerFallback.ts)
+is what removes the human from that loop: when the active provider errors, the
+same call is retried on the other one.
+
+The whole policy lives in that one module. The three call sites —
+[reasonNode.ts](backend-langgraph/src/graph/nodes/reasonNode.ts),
+[SuggestionService.ts](backend-langgraph/src/services/SuggestionService.ts),
+[MemoryService.ts](backend-langgraph/src/services/MemoryService.ts) — each hand
+it a `(provider) => Promise<T>` attempt and carry none of the decisions.
+`Runnable.withFallbacks()` cannot do this job: the JS implementation takes
+`{ fallbacks }` and no error predicate, so it diverts on aborts too — the one
+error that must not divert.
+
+**What diverts:** any error from the primary provider, with the original error
+attached to the log line. Distinguishing "the balance ran out" from "our tool
+schema is malformed" is not attempted, and answering the second one on the
+standby instead of surfacing it is the trade-off this design knowingly accepts.
+
+**What deliberately does not:**
+
+- **An abort.** The user has already left; a second full LLM call would be spent
+  inside a budget that has expired. `isAbort` is the one place that answers this,
+  and [chat.ts](backend-langgraph/src/routes/chat.ts) asks it too rather than
+  testing `err.name === 'AbortError'` — that check does not recognise LangChain's
+  `ModelAbortError`, which is what the signal firing *inside* a model call
+  produces, i.e. the most common shape of a real disconnect.
+- **A failure after the first token.** `reasonNode` streams and the frontend
+  *appends*, so retrying would paste a second answer onto a truncated one. The
+  per-attempt `handleLLMNewToken` spy is the veto, and it lives in the
+  per-invocation closure: the model is a singleton shared by concurrent requests,
+  so a flag anywhere outside would let one user's stream veto another's retry.
+- **Anything at all when there is no standby key.** Replacing a clear Anthropic
+  error with a confusing OpenAI one helps nobody.
+
+None of the three trips the breaker — nothing is wrong with the provider in any
+of them.
+
+**Why the breaker exists.** It is the circuit-breaker pattern, under that name.
+A hung provider's connect-and-fail time is spent inside the same 60 s budget
+`/api/chat` gives the entire request, so paying it on every message during an
+outage is how a fallback still produces timeouts. After a
+trip, the primary is skipped for `LLM_FALLBACK_COOLDOWN_MS` (default 5 min) and
+then probed again — recovery needs no human. It is module state: one process, one
+breaker. A scaled-out deployment has each instance probe on its own, which is
+duplicated work rather than a wrong answer.
+
+**`mergeConfigs`, never `ensureConfig`.** This is the one thing here that fails
+silently and invisibly. LangGraph calls the node with a real config carrying its
+callback manager; `mergeConfigs` copies that manager and *adds* our handler, so
+`streamEvents`' own handler survives. `ensureConfig` — and passing
+`{ callbacks: [spy] }` straight to `.invoke()` — assigns `callbacks` wholesale,
+which detaches the run from `streamEvents`: **text stops reaching the browser**
+while every existing test stays green, because they watch what `invoke` was
+handed, not what the user sees.
+
+**A standby is built on first use, never alongside the primary.**
+[modelPair.ts](backend-langgraph/src/llm/modelPair.ts) holds that, from one
+recipe, so the standby cannot drift from the primary in max tokens, streaming, or
+the tools it is bound to. A process whose provider never fails constructs no
+second model and reads no second key.
+
+**Model ids are per-provider.** `modelId(provider, size)` in
+[createModel.ts](backend-langgraph/src/llm/createModel.ts) is a function of the
+pair and deliberately not of the *active* provider — reading `REASONING_MODEL`
+for a standby is how a fallback ends up asking OpenAI for `claude-sonnet-4-6`.
+Defaulting happens there and nowhere else;
+[env.ts](backend-langgraph/src/config/env.ts) deliberately no longer defaults
+them.
 
 ---
 

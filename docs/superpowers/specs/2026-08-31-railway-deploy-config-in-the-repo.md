@@ -1,7 +1,12 @@
 # Getting Railway's deploy config under review
 
 **Date:** 2026-08-31
-**Status:** proposed — nothing implemented
+**Status:** implemented 2026-08-31 — `deploy/railway-services.json`, the
+coverage test and the read-only drift script are in the repo; the two watch-path
+corrections the spec was written about (`shared/**`, then `tsconfig.base.json`)
+were applied by hand in Railway before that. One acceptance criterion is left
+open on purpose: the scheduled drift run needs a `RAILWAY_TOKEN` repository
+secret that only the repo owner can add.
 **Origin:** [the 2026-08-31 watch-paths incident](#what-happened) — `shared/**` was
 missing from all three services' watch paths for the whole day the shared package
 existed, and nothing in the repository could have said so.
@@ -142,17 +147,29 @@ contents change what the image contains — and a **single-file manifest** copy,
 which is scaffolding for the package manager. Only the first kind is required to
 be covered. `COPY --from=<stage>` lines are intra-image and excluded outright.
 
+"Single file ⇒ scaffolding" is not the rule either, though, and
+`tsconfig.base.json` is why: it arrives on the same `COPY package.json
+package-lock.json tsconfig.base.json ./` line as the two manifests and is a real
+build input, because three of the four workspaces `extends` it. The honest
+version of the rule is a short named list — `package.json` and
+`package-lock.json` are the exclusions, everything else copied is covered — so a
+fourth root-level file added to that line is covered by default and someone has
+to argue it out rather than have the test wave it through.
+
 Two exclusions to encode deliberately, not by accident:
 
 - Root-level `package.json` / `package-lock.json` match no pattern **by design** —
   a dependency bump alone triggers no rebuild, which `DEPLOYMENT.md` documents.
   The test must assert that as intended behaviour rather than let it fail.
-- `tsconfig.base.json` is copied by all three and is in the same position: it
-  matches no watch pattern, so changing it rebuilds nothing while changing what
-  all three builds would produce. This looks like a real gap of the same shape as
-  the `shared/**` one, found while writing this spec and **not** fixed — deciding
-  it needs a judgement about how often that file changes. Whoever implements this
-  should settle it rather than encode today's behaviour as correct.
+- `tsconfig.base.json` was in the same position when this spec was written, and
+  is **no longer**: it is now watched by all three services. It was a real gap of
+  the same shape as the `shared/**` one — `backend-langgraph/`,
+  `backend-telegram/` and `shared/i18n/` all `extends` it, so `target`, `strict`
+  or `outDir` changing there changes what every image emits and rebuilt none of
+  them. It changes about twice a year, which is what settles the judgement the
+  earlier draft left open: the cost of watching it is a rebuild nobody will
+  notice, the cost of not watching it is three services silently built under
+  different compiler options. The test must assert it is covered, not excluded.
 
 ### 2. Drift check — needs a token, runs on a schedule
 
@@ -177,9 +194,9 @@ One machine-readable file both pieces read — proposed `deploy/railway-services
   "projectId": "2f74ec36-d058-42fd-87b0-b4bc397dddcc",
   "environment": "production",
   "services": {
-    "frontend":         { "dockerfile": "Dockerfile.frontend",         "watchPatterns": ["/frontend/**", "/shared/**", "/Dockerfile.frontend"] },
-    "backend-telegram": { "dockerfile": "Dockerfile.backend-telegram", "watchPatterns": ["/backend-telegram/**", "/shared/**", "/Dockerfile.backend-telegram"] },
-    "travel-agent":     { "dockerfile": "Dockerfile.backend-langgraph","watchPatterns": ["/backend-langgraph/**", "/shared/**", "/Dockerfile.backend-langgraph"] }
+    "frontend":         { "dockerfile": "Dockerfile.frontend",         "watchPatterns": ["/frontend/**", "/shared/**", "/Dockerfile.frontend", "/tsconfig.base.json"] },
+    "backend-telegram": { "dockerfile": "Dockerfile.backend-telegram", "watchPatterns": ["/backend-telegram/**", "/shared/**", "/Dockerfile.backend-telegram", "/tsconfig.base.json"] },
+    "travel-agent":     { "dockerfile": "Dockerfile.backend-langgraph","watchPatterns": ["/backend-langgraph/**", "/shared/**", "/Dockerfile.backend-langgraph", "/tsconfig.base.json"] }
   }
 }
 ```
@@ -196,25 +213,81 @@ there is one copy of the answer.
 
 ## Acceptance criteria
 
-- [ ] `deploy/railway-services.json` exists and matches the live configuration on
-      the day it lands (verified by piece 2, not by reading).
-- [ ] Deleting `/shared/**` from any service's entry turns the coverage test red.
-- [ ] Adding a `COPY newdir ./newdir` line to any Dockerfile turns the coverage
+- [x] `deploy/railway-services.json` exists and matches the live configuration on
+      the day it lands (verified by piece 2, not by reading) — `npm run
+      check:railway-drift` exited 0 against production on 2026-08-31.
+- [x] Deleting `/shared/**` from any service's entry turns the coverage test red.
+- [x] Adding a `COPY newdir ./newdir` line to any Dockerfile turns the coverage
       test red until `newdir` is covered by that service's patterns.
-- [ ] A cross-workspace manifest copy (`COPY backend-telegram/package.json`) in
+- [x] A cross-workspace manifest copy (`COPY backend-telegram/package.json`) in
       `Dockerfile.frontend` does **not** demand a `/backend-telegram/**` pattern.
-- [ ] The root `package.json` exclusion is asserted, not incidental.
-- [ ] `tsconfig.base.json` has been decided about, either way, in writing.
-- [ ] The drift script reports a hand-made dashboard change within one scheduled
-      run, and exits 0 when the dashboard matches the file.
-- [ ] The drift script never writes.
-- [ ] `DEPLOYMENT.md` points at the file instead of duplicating the table.
-- [ ] `AGENTS.md` gains the rule: a new top-level directory that becomes a build
+- [x] The root `package.json` exclusion is asserted, not incidental — both the
+      exclusion list and `unwatchedByDesign` are asserted by name.
+- [x] `tsconfig.base.json` has been decided about, either way, in writing —
+      decided 2026-08-31: watched by all three, see above.
+- [x] The drift script exits 0 when the dashboard matches the file — verified in
+      CI on 2026-08-31, run `33383388449`, with a real project token in the
+      `RAILWAY_TOKEN` repository secret.
+- [x] The drift script reports a hand-made dashboard change within one scheduled
+      run. The credential half is settled: the workflow authenticates and reads
+      production. The reporting half is covered by unit tests over fabricated
+      live responses rather than by a real run, because proving it end to end
+      means editing production deploy config by hand to watch the alarm fire —
+      the check is worth more than that demonstration.
+
+      Two things this closed out. A secret set from an empty stdin stores an
+      empty value and `gh` reports no error; GitHub then prints the variable
+      with nothing after the colon, where a real secret prints `***`. And the
+      first run with a real token is what confirmed the project-token header
+      fix: the same token would have answered 403 through `Authorization:
+      Bearer`. The diff itself is unit-tested against
+      fabricated live responses.
+- [x] The drift script never writes — asserted structurally, by the absence of
+      any mutation in its source with comments stripped.
+- [x] `DEPLOYMENT.md` points at the file instead of duplicating the table.
+- [x] `AGENTS.md` gains the rule: a new top-level directory that becomes a build
       input for more than one service needs an entry here.
+
+## What was built
+
+| File | What it is |
+|------|-----------|
+| `deploy/railway-services.json` | The expectation. Both checks read it; `DEPLOYMENT.md` cites it. |
+| `deploy/coverage.mjs` | Dockerfile `COPY` lines vs. watch patterns. Pure, no network. |
+| `deploy/drift.mjs` | The live query and the diff, kept separate so the diff is testable without a token. |
+| `deploy/check-drift.mjs` | The CLI. Exit 0 agree, 1 drift, 2 could-not-check. |
+| `deploy/*.test.mjs` | 23 tests on `node:test` — no jest, no new workspace, no dependency. |
+| `.github/workflows/ci.yml` | New `deploy-config` job: checkout, node, `npm run test:deploy`. No install. |
+| `.github/workflows/railway-drift.yml` | Weekly + push to `main` + manual. |
+
+Two decisions worth recording, because both were tempting the other way.
+
+**`node:test` rather than a fifth workspace.** Every test in this repo runs
+under jest inside a package, and this one belongs to no package — it is about
+the repository. A `deploy/` workspace would have meant a `package.json`, a
+`tsconfig`, a `jest.config` and a CI job to carry one file's worth of logic.
+Node 22 has a test runner built in, so the check has no dependencies at all and
+its CI job needs no `npm ci`, which is also what makes it the fastest signal in
+the pipeline.
+
+**A missing token fails the job rather than skipping it.** The alternative —
+warn and exit 0 — reproduces the exact shape of the original incident: a check
+that is not running, and nobody knowing. Exit 2 is distinct from exit 1 so the
+two states stay legible in the log, and an *expired* credential lands there too
+rather than being read as drift.
+
+**The two Railway credential kinds are told apart by which variable they arrive
+in.** The spec asked for a project token, and a project token does not
+authenticate the way the CLI's own credential does: it travels in
+`Project-Access-Token`, not `Authorization: Bearer`. The tokens look alike, so
+nothing in the value distinguishes them — `RAILWAY_TOKEN` is the project one and
+`RAILWAY_API_TOKEN` the account or workspace one, following the Railway CLI's
+own naming. The first implementation sent everything as a Bearer, which would
+have answered 403 for exactly the credential the spec named.
 
 ## Estimate
 
-Half a day. The coverage test is an afternoon's work against files already in the
+Half a day. Actual: about that. The coverage test is an afternoon's work against files already in the
 repo; the drift script is the query in this document plus a diff.
 
 ## Revisit when

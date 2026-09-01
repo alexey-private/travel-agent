@@ -15,8 +15,10 @@
     "dev:telegram": "npm run dev --workspace=backend-telegram",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspace=backend-langgraph && npm run build --workspace=backend-telegram && npm run build --workspace=frontend",
-    "test": "npm run test --workspaces --if-present",
-    "test:all": "npm run test:all --workspace=@travel-agent/i18n && npm run test:all --workspace=backend-langgraph && npm run test:all --workspace=backend-telegram && npm run test --workspace=frontend"
+    "test": "npm run test:deploy && npm run test --workspaces --if-present",
+    "test:all": "npm run test:deploy && npm run test:all --workspace=@travel-agent/i18n && npm run test:all --workspace=backend-langgraph && npm run test:all --workspace=backend-telegram && npm run test --workspace=frontend",
+    "test:deploy": "node --test deploy/*.test.mjs",
+    "check:railway-drift": "node deploy/check-drift.mjs"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0"

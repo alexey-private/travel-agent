@@ -23,8 +23,27 @@ const envSchema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'openai']).default('anthropic'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  // These two mean "the model the ACTIVE provider uses", which is all they have
+  // ever meant. Resolution lives in src/llm/createModel.ts.
   REASONING_MODEL: z.string().optional(),
   FAST_MODEL: z.string().optional(),
+  // Per-provider ids. A standby provider needs ids of its own: resolving them
+  // against the active provider is how a fallback ends up asking OpenAI for
+  // `claude-sonnet-4-6`. These win over the two generic keys above.
+  ANTHROPIC_REASONING_MODEL: z.string().optional(),
+  ANTHROPIC_FAST_MODEL: z.string().optional(),
+  OPENAI_REASONING_MODEL: z.string().optional(),
+  OPENAI_FAST_MODEL: z.string().optional(),
+
+  // Automatic provider fallback. z.coerce.boolean() cannot express the kill
+  // switch: Boolean('false') === true would make it impossible to turn off.
+  LLM_FALLBACK_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  // How long the standby is used before the primary is probed again. 0 retries
+  // the primary on every request.
+  LLM_FALLBACK_COOLDOWN_MS: z.coerce.number().int().nonnegative().default(300_000),
 
   // External tools
   TAVILY_API_KEY: z.string().min(1, 'TAVILY_API_KEY is required'),
@@ -118,18 +137,12 @@ if (!parseResult.success) {
   process.exit(1);
 }
 
-const MODEL_DEFAULTS = {
-  anthropic: { REASONING_MODEL: 'claude-sonnet-4-6', FAST_MODEL: 'claude-haiku-4-5-20251001' },
-  openai:    { REASONING_MODEL: 'gpt-4o',            FAST_MODEL: 'gpt-4o-mini' },
-};
-
-const _raw = parseResult.data;
-const _defaults = MODEL_DEFAULTS[_raw.LLM_PROVIDER];
-
-export const env = {
-  ..._raw,
-  REASONING_MODEL: _raw.REASONING_MODEL ?? _defaults.REASONING_MODEL,
-  FAST_MODEL:      _raw.FAST_MODEL      ?? _defaults.FAST_MODEL,
-};
+// Model ids are deliberately NOT defaulted here. They used to be, indexed by the
+// active provider — which is why `env.REASONING_MODEL` held a Claude id whenever
+// LLM_PROVIDER=anthropic, and why a standby reading it would have asked OpenAI
+// for a Claude model. Defaulting now happens once, in `modelId()`
+// (src/llm/createModel.ts), as a function of (provider, size). A second copy
+// here would be a second answer to the same question, free to drift.
+export const env = parseResult.data;
 
 export type Env = typeof env;

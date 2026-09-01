@@ -15,6 +15,7 @@ import { detectReplyLocale } from '../i18n/detectReplyLocale';
 import { env } from '../config/env';
 import { rateLimitKey } from '../security/rateLimitKey';
 import { hijackedCorsHeaders } from '../security/cors';
+import { isAbort } from '../llm/providerFallback';
 
 interface ChatRouteOptions {
   userService: UserService;
@@ -278,7 +279,24 @@ export async function chatRoutes(fastify: FastifyInstance, options: ChatRouteOpt
           agentSteps.push(ev);
         }
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
+        // `isAbort`, not a name check: the signal firing inside a model call
+        // surfaces as LangChain's `ModelAbortError`, which carries no
+        // `name === 'AbortError'` — so the most common way for a client to
+        // disconnect was reported as an agent failure and answered down a
+        // socket nobody was reading. The engine already has to answer this
+        // question to decide what not to divert on; a second copy here would be
+        // a second place for the next abort shape to be missed.
+        //
+        // The signal is passed deliberately, and it is checked before the
+        // error's own shape: this route is the only place that knows it aborted
+        // the graph itself, and once it has, whatever comes back is a
+        // consequence of that — a tool's fetch rejecting, a socket reset, an
+        // error of no recognisable abort shape at all. The cost is that a
+        // genuine failure landing in this catch after the client had already
+        // gone is now recorded as a disconnect. That is a log line lost for a
+        // request nobody is waiting on, against the alternative of shouting
+        // about every abort that arrives in an unfamiliar disguise.
+        if (isAbort(err, ac.signal)) {
           if (timedOut) {
             request.log.warn({ requestId }, 'graph execution timed out');
             sse({ type: 'error', code: 'request_timed_out' });

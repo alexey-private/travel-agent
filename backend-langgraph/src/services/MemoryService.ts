@@ -3,7 +3,9 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { MemoryRepository } from '../repositories/MemoryRepository';
 import { UserMemory } from '../types/memory';
-import { createModel } from '../llm/createModel';
+import { createModel, type Provider } from '../llm/createModel';
+import { createModelPair } from '../llm/modelPair';
+import { withProviderFallback } from '../llm/providerFallback';
 import { Locale, DEFAULT_LOCALE, LANGUAGE_NAMES } from '@travel-agent/i18n';
 
 const TRAVEL_EXTRACT_PROMPT_BODY = `You are a memory extraction assistant.
@@ -84,12 +86,12 @@ const EXTRACTION_EVERY_N = 3;
  */
 export class MemoryService {
   private repo: MemoryRepository;
-  private readonly model: BaseChatModel;
+  private readonly modelFor: (provider: Provider) => BaseChatModel;
   private messageCounters = new Map<string, number>();
 
   constructor(pool: Pool) {
     this.repo = new MemoryRepository(pool);
-    this.model = createModel('fast', { maxTokens: 512 });
+    this.modelFor = createModelPair(provider => createModel('fast', { maxTokens: 512 }, provider));
   }
 
   private shouldExtract(userId: string, message: string): boolean {
@@ -143,11 +145,21 @@ export class MemoryService {
 
     const systemPrompt = agentType === 'shopping' ? shoppingExtractPrompt(language) : travelExtractPrompt(language);
 
+    const messages = [
+      new SystemMessage(systemPrompt),
+      new HumanMessage(`${existingSection}User message:\n${userMessage}`),
+    ];
+
     try {
-      const response = await this.model.invoke([
-        new SystemMessage(systemPrompt),
-        new HumanMessage(`${existingSection}User message:\n${userMessage}`),
-      ]);
+      // No abort signal and no partial-output veto: extraction runs after the
+      // reply is already sent, produces nothing the user sees, and is a single
+      // short completion rather than a stream. The outer catch below stays
+      // exactly as it was — if both providers are down extraction is still
+      // skipped, just no longer near-silently.
+      const response = await withProviderFallback(
+        provider => this.modelFor(provider).invoke(messages),
+        { context: 'memory' },
+      );
 
       const text = typeof response.content === 'string' ? response.content : '';
       const match = text.match(/\{[\s\S]*\}/);
