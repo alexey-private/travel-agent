@@ -23,6 +23,35 @@
   }
 }
 
+/*
+  Preflight v3 gave every button `cursor: pointer`; v4 leaves it at the UA
+  default, which turned every control in the app back into an arrow — none of
+  them carry a cursor utility of their own. Disabled buttons are excluded so
+  the `cursor-not-allowed` they already set still wins.
+*/
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/*
+  Selects and radios are ours, not a restoration — no Preflight ever gave them
+  a pointer. They are the only other controls here a user clicks, and leaving
+  them on the arrow while every button points is the inconsistency that made
+  the missing button rule visible in the first place. Kept here rather than as
+  a utility class per element so the next select added gets it without anyone
+  remembering to, and kept in its own block so that whoever retires the compat
+  shim above after the next upgrade does not take this with it.
+*/
+@layer base {
+  select:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
